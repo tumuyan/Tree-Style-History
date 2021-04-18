@@ -1,0 +1,311 @@
+{
+  "recentHistory": {
+    "message": "Historique récent"
+  },
+  "recentlyClosedTabs": {
+    "message": "Onglets récemment fermés"
+  },
+  "mostVisited": {
+    "message": "Les plus visités"
+  },
+  "recentBookmarks": {
+    "message": "Favoris récents"
+  },
+  "pinned": {
+    "message": "Épinglé"
+  },
+  "options": {
+    "message": "Options"
+  },
+  "translations": {
+    "message": "Traductions"
+  },
+  "about": {
+    "message": "À propos"
+  },
+  "mainOptions": {
+    "message": "Paramètres principaux"
+  },
+  "styleOptions": {
+    "message": "Paramètres d'apparence"
+  },
+  "advanceOptions": {
+    "message": "Paramètres avancées"
+  },
+  "option1": {
+    "message": "Nombre d'éléments de l'historique récent"
+  },
+  "option2": {
+    "message": "Nombre d'onglets récemment fermés"
+  },
+  "option3": {
+    "message": "Nombre d'éléments les plus visités"
+  },
+  "option4": {
+    "message": "Nombre d'éléments récemment mis en favoris"
+  },
+  "option5": {
+    "message": "Ordre des éléments dans la fenêtre popup"
+  },
+  "option6": {
+    "message": "Historique"
+  },
+  "option7": {
+    "message": "Format de la date"
+  },
+  "option8": {
+    "message": "Afficher la barre de recherche dans la fenêtre popup"
+  },
+  "option9": {
+    "message": "Aperçu"
+  },
+  "option10": {
+    "message": "Afficher les URLs"
+  },
+  "option11": {
+    "message": "Afficher le separateur"
+  },
+  "option12": {
+    "message": "Afficher les informations supplémentaires"
+  },
+  "option13": {
+    "message": "Afficher les couleurs d'arrière plan"
+  },
+  "option14": {
+    "message": "Icône de la fenêtre popup"
+  },
+  "option15": {
+    "message": "Largeur de la fenêtre popup"
+  },
+  "option16": {
+    "message": "Restaurer les éléments les plus visités"
+  },
+  "option17": {
+    "message": "Filtrer les domaines de l'historique récent"
+  },
+  "option18": {
+    "message": "Action à effectuer lors du clic de la souris"
+  },
+  "option19": {
+    "message": "Thème de la fenêtre popup"
+  },
+  "option20": {
+    "message": "Format de l'heure"
+  },
+  "option21": {
+    "message": "Partages des favoris via les réseaux sociaux"
+  },
+  "help1": {
+    "message": "Le nombre d'éléments de l'historique récent s'affichant dans la fenêtre popup"
+  },
+  "help2": {
+    "message": "Le nombre d'onglets récement fermés s'affichant dans la fenêtre popup"
+  },
+  "help3": {
+    "message": "Le nombre d'éléments les plus visités s'affichant dans la fenêtre popup"
+  },
+  "help4": {
+    "message": "Le nombre de favoris récents s'affichant dans la fenêtre popup"
+  },
+  "help5": {
+    "message": "L'ordre dans lequel les éléments vont s'afficher dans la fenêtre popup"
+  },
+  "help6": {
+    "message": "Le gestionnaire d'historique que vous voulez utiliser"
+  },
+  "help7": {
+    "message": "Le format de la date utilisé dans cette extension"
+  },
+  "help8": {
+    "message": "La barre de recherche située en haut de la fenêtre popup"
+  },
+  "help10": {
+    "message": "L'URL de la page située en dessous du titre de l'élément"
+  },
+  "help11": {
+    "message": "Le séparateur situé en dessous de l'élément"
+  },
+  "help12": {
+    "message": "Les informations supplémentaires situées à côté de l'URL de la page (ex: le nombre de visites et la date)"
+  },
+  "help13": {
+    "message": "Si activé cela affichera une couleur différente pour chaque élément comme les URL favorites ou les URL épinglées. Cela dans l'historique récent ainsi que dans la liste des onglets récemment fermés"
+  },
+  "help16": {
+    "message": "Les URLs que vous avez retiré de la liste des liens les plus visités. Cliquez sur la croix à côté de l'URL pour la restaurer dans la liste"
+  },
+  "help17": {
+    "message": "Les domaines des URLs que vous ne voulez pas les voir affichées dans l'historique récent (ex: foobar.com)"
+  },
+  "help18": {
+    "message": "Ce qui doit se passer lorsque vous cliquez sur un élément de la fenêtre popup"
+  },
+  "help20": {
+    "message": "Le format de la date utilisé dans cette extension"
+  },
+  "help21": {
+    "message": "Ceci ajoute une icône de partage à côté des éléments de la fenêtre popup en mode édition"
+  },
+  "yes": {
+    "message": "Oui"
+  },
+  "no": {
+    "message": "Non"
+  },
+  "visits": {
+    "message": "Visites"
+  },
+  "saveOptions": {
+    "message": "Enregistrer les paramètres"
+  },
+  "saving": {
+    "message": "Enregistrement..."
+  },
+  "saved": {
+    "message": "Paramètres enregistrés !"
+  },
+  "click1": {
+    "message": "Ouvrir dans l'onglet"
+  },
+  "click2": {
+    "message": "Ouvrir dans un nouvel onglet"
+  },
+  "click3": {
+    "message": "Ouvrir dans un nouvel onglet d'arrière plan"
+  },
+  "translation1": {
+    "message": "S'il vous plait veuillez nous aider à rendre 'Recent History' meilleur en fournissant de nouvelles et meilleures traductions. Cette page a été créée afin de rendre plus facile la traduction de cette extension."
+  },
+  "translation2": {
+    "message": "Veuillez suivre les étapes indiquées ci-dessous afin de traduire 'Recent History' dans votre langage :"
+  },
+  "translation3": {
+    "message": "Allez en bas de cette page."
+  },
+  "translation4": {
+    "message": "Remplissez le formulaire correctement."
+  },
+  "translation5": {
+    "message": "Traduisez tous les 'messages' dans le langage choisi."
+  },
+  "translation6": {
+    "message": "Cliquez sur le bouton 'Soumettre'."
+  },
+  "translation7": {
+    "message": "Terminé !"
+  },
+  "aboutText": {
+    "message": "Cette extension affiche votre historique récent, les onglets récement fermés, les pages les plus vistées ainsi que vos favoris récents en un seul clic via une fenêtre popup."
+  },
+  "successfullyInstalled": {
+    "message": "Installation/Mise à jour réussie"
+  },
+  "whatsNew": {
+    "message": "Quoi de neuf ?"
+  },
+  "version": {
+    "message": "Version"
+  },
+  "showAllHistory": {
+    "message": "Afficher tout l'historique"
+  },
+  "noResults": {
+    "message": "Aucun résultat"
+  },
+  "currentHistory": {
+    "message": "Date du jour"
+  },
+  "allHistory": {
+    "message": "Tout l'historique"
+  },
+  "totalHistoryItems": {
+    "message": "Nombre total d'élément dans l'historique :"
+  },
+  "deleteItems": {
+    "message": "Effacer les éléments"
+  },
+  "mondayLetter": {
+    "message": "L"
+  },
+  "tuesdayLetter": {
+    "message": "M"
+  },
+  "wednesdayLetter": {
+    "message": "M"
+  },
+  "thursdayLetter": {
+    "message": "J"
+  },
+  "fridayLetter": {
+    "message": "V"
+  },
+  "saturdayLetter": {
+    "message": "S"
+  },
+  "sundayLetter": {
+    "message": "D"
+  },
+  "AM": {
+    "message": "am"
+  },
+  "PM": {
+    "message": "pm"
+  },
+  "12hour": {
+    "message": "12 Heures"
+  },
+  "24hour": {
+    "message": "24 Heures"
+  },
+  "loading": {
+    "message": "Chargement..."
+  },
+  "original": {
+    "message": "Original"
+  },
+  "classic": {
+    "message": "Classique"
+  },
+  "pink": {
+    "message": "Rose"
+  },
+  "ui1": {
+    "message": "Épingler l'élément ?"
+  },
+  "ui2": {
+    "message": "Effacer l'élément de l'historique ?"
+  },
+  "ui3": {
+    "message": "Effacer l'élément des onglets récemment fermés ?"
+  },
+  "ui4": {
+    "message": "Effacer le favori ?"
+  },
+  "ui5": {
+    "message": "Effacer l'élément des pages les plus visitées ?"
+  },
+  "ui6": {
+    "message": "Détacher ?"
+  },
+  "tips": {
+    "message": "Astuces"
+  },
+  "tip1": {
+    "message": "Fenêtre popup : Vous pouvez ouvrir un élément dans un nouvel onglet d'arrière plan via Ctrl+Clic"
+  },
+  "tip2": {
+    "message": "Fenêtre popup : En cliquant sur les engrenages à côté des nom des éléments vous pouvez les effacer, les épingler et les partager."
+  },
+  "tip3": {
+    "message": "Paramètres : Vous pouvez utiliser les flèches directionelles haut et bas afin d'agmenter ou de diminuer les valeur numériques du champ sélectionné."
+  },
+  "tip4": {
+    "message": "Paramètres : Vous pouvez appuyer sur la touche Entrée pour ajouter un domaine à la liste d'exclusion."
+  },
+  "tip5": {
+    "message": "Historique : Vous pouvez utiliser la touche Majuscule afin de sélectionner plusieurs éléments."
+  },
+  "tip6": {
+    "message": "Historique : Utilisez les boutons dans la barre d'outils bleue afin de changer la façon dont les éléments de l'historique sont affichés."
+  }
+}

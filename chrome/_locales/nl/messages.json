@@ -1,0 +1,311 @@
+{
+  "recentHistory": {
+    "message": "Recente Geschiedenis"
+  },
+  "recentlyClosedTabs": {
+    "message": "Recent Gesloten Tabs"
+  },
+  "mostVisited": {
+    "message": "Meest Bezocht"
+  },
+  "recentBookmarks": {
+    "message": "Recente Bladwijzers"
+  },
+  "pinned": {
+    "message": "Vastgemaakt"
+  },
+  "options": {
+    "message": "Opties"
+  },
+  "translations": {
+    "message": "Vertalingen"
+  },
+  "about": {
+    "message": "Over"
+  },
+  "mainOptions": {
+    "message": "Algemene Opties"
+  },
+  "styleOptions": {
+    "message": "Stijl Opties"
+  },
+  "advanceOptions": {
+    "message": "Geavanceerde Opties"
+  },
+  "option1": {
+    "message": "Aantal Recente Geschiedenis Items"
+  },
+  "option2": {
+    "message": "Aantal Recent Gesloten Tabs"
+  },
+  "option3": {
+    "message": "Aantal Meest Bezochte Items"
+  },
+  "option4": {
+    "message": "Aantal Recent Toegevoegde Bladwijzers"
+  },
+  "option5": {
+    "message": "Pop-up Volgorde"
+  },
+  "option6": {
+    "message": "Geschiedenis Pagina"
+  },
+  "option7": {
+    "message": "Datum Formaat"
+  },
+  "option8": {
+    "message": "Toon Zoekbalk in Pop-up"
+  },
+  "option9": {
+    "message": "Preview"
+  },
+  "option10": {
+    "message": "Toon URL"
+  },
+  "option11": {
+    "message": "Toon Scheidingslijn"
+  },
+  "option12": {
+    "message": "Toon Extra Informatie"
+  },
+  "option13": {
+    "message": "Toon Achtergrond Kleur"
+  },
+  "option14": {
+    "message": "Pop-up Icoon"
+  },
+  "option15": {
+    "message": "Pop-up Breedte"
+  },
+  "option16": {
+    "message": "Herstel Meest Bezochte Items"
+  },
+  "option17": {
+    "message": "Filter Domeinen van Recente Geschiedenis"
+  },
+  "option18": {
+    "message": "Linker Muisknop Handeling"
+  },
+  "option19": {
+    "message": "Pop-up Thema"
+  },
+  "option20": {
+    "message": "Tijd Formaat"
+  },
+  "option21": {
+    "message": "Social Bookmarking"
+  },
+  "help1": {
+    "message": "Aantal Items Recente Geschiedenis in Pop-up"
+  },
+  "help2": {
+    "message": "Aantal Items Recent Gesloten Tabs in Pop-up"
+  },
+  "help3": {
+    "message": "Aantal Meest Bezochte Items in Pop-up"
+  },
+  "help4": {
+    "message": "Aantal Recent Toegevoegde Bladwijzers in Pop-up"
+  },
+  "help5": {
+    "message": "Volgorde waarin de gespecificeerde items getoond worden"
+  },
+  "help6": {
+    "message": "De Geschiedenis Beheerder die u wilt gebruiken"
+  },
+  "help7": {
+    "message": "Datum Formaat die de extensie gebruikt"
+  },
+  "help8": {
+    "message": "Plaatsing van de Zoek balk bovenaan de Pop-up"
+  },
+  "help10": {
+    "message": "Plaatsing van de pagina URL onder de Item Titel"
+  },
+  "help11": {
+    "message": "Plaatsing van het Scheidingsteken onder de Item Titel"
+  },
+  "help12": {
+    "message": "Extra informatie naast de pagina URL (bv. Aantal bezoeken en Datum)"
+  },
+  "help13": {
+    "message": "Indien geactiveerd zal er in de Recente Geschiedenis en Recent Gesloten Tabs een andere kleur getoond worden voor verschillende items zoals Bladwijzers of Vastgemaakte URL's."
+  },
+  "help16": {
+    "message": "De door u verwijderde URL's uit de lijst van Meest Bezochte Items. Klik op het plusje naast de URL om deze te herstellen."
+  },
+  "help17": {
+    "message": "De URL's van de domeinnamen die u niet getoond wilt hebben in de lijst van Recente Geschiedenis, bv. foobar.com"
+  },
+  "help18": {
+    "message": "Wat er gebeurt wanneer u op een item in de Pop-Up klikt"
+  },
+  "help20": {
+    "message": "Tijd Formaat die de extensie gebruikt"
+  },
+  "help21": {
+    "message": "Bij het bewerken voegt dit een share icoon in de Pop-up toe"
+  },
+  "yes": {
+    "message": "Ja"
+  },
+  "no": {
+    "message": "Nee"
+  },
+  "visits": {
+    "message": "Bezoeken"
+  },
+  "saveOptions": {
+    "message": "Sla Opties op"
+  },
+  "saving": {
+    "message": "Aan het Opslaan..."
+  },
+  "saved": {
+    "message": "Opgeslagen!"
+  },
+  "click1": {
+    "message": "Open in huidige tab"
+  },
+  "click2": {
+    "message": "Open in nieuwe tab"
+  },
+  "click3": {
+    "message": "Open in nieuwe achtergrond tab"
+  },
+  "translation1": {
+    "message": "Helpt u alstublieft Recent History beter te maken door het verstrekken van nieuwe en betere vertalingen. Deze pagina is gemaakt om het voor u gemakkelijker te maken om deze extensie te vertalen."
+  },
+  "translation2": {
+    "message": "Volgt u alstublieft de stappen hieronder om Recent History te vertalen in uw taal:"
+  },
+  "translation3": {
+    "message": "Scroll naar het einde van deze pagina."
+  },
+  "translation4": {
+    "message": "Vul het formulier correct in."
+  },
+  "translation5": {
+    "message": "Vertaal alle 'messages' in de door jou gekozen taal."
+  },
+  "translation6": {
+    "message": "Klik op de 'Submit' knop."
+  },
+  "translation7": {
+    "message": "Klaar!"
+  },
+  "aboutText": {
+    "message": "Deze Extensie toont uw recente geschiedenis, recent gesloten tabs, meest bezochte pagina's en recente bladwijzers in een 'one click' pop-up."
+  },
+  "successfullyInstalled": {
+    "message": "Succesvol Geïnstalleerd/Geüpdatet!"
+  },
+  "whatsNew": {
+    "message": "Wat is er nieuw?"
+  },
+  "version": {
+    "message": "Versie"
+  },
+  "showAllHistory": {
+    "message": "Toon Alle Geschiedenis"
+  },
+  "noResults": {
+    "message": "Geen Resultaten Gevonden"
+  },
+  "currentHistory": {
+    "message": "Huidige Datum"
+  },
+  "allHistory": {
+    "message": "Alle Geschiedenis"
+  },
+  "totalHistoryItems": {
+    "message": "Totaal Aantal Geschiedenis Items:"
+  },
+  "deleteItems": {
+    "message": "Verwijder Items"
+  },
+  "mondayLetter": {
+    "message": "M"
+  },
+  "tuesdayLetter": {
+    "message": "T"
+  },
+  "wednesdayLetter": {
+    "message": "W"
+  },
+  "thursdayLetter": {
+    "message": "T"
+  },
+  "fridayLetter": {
+    "message": "F"
+  },
+  "saturdayLetter": {
+    "message": "S"
+  },
+  "sundayLetter": {
+    "message": "S"
+  },
+  "AM": {
+    "message": "am"
+  },
+  "PM": {
+    "message": "pm"
+  },
+  "12hour": {
+    "message": "12 Uurs"
+  },
+  "24hour": {
+    "message": "24 Uurs"
+  },
+  "loading": {
+    "message": "Laden..."
+  },
+  "original": {
+    "message": "Origineel"
+  },
+  "classic": {
+    "message": "Klassiek"
+  },
+  "pink": {
+    "message": "Roze"
+  },
+  "ui1": {
+    "message": "Item Vastmaken?"
+  },
+  "ui2": {
+    "message": "Verwijder item uit geschiedenis?"
+  },
+  "ui3": {
+    "message": "Verwijder item uit recent gesloten tabs?"
+  },
+  "ui4": {
+    "message": "Verwijder bladwijzer?"
+  },
+  "ui5": {
+    "message": "Verwijder item uit lijst van meest bezochte items?"
+  },
+  "ui6": {
+    "message": "Losmaken?"
+  },
+  "tips": {
+    "message": "Behulpzame Tips"
+  },
+  "tip1": {
+    "message": "Pop-up: U kunt een item openen in een nieuwe achtergrond tab door Ctrl. en uw linker muisknop tegelijkertijd te gebruiken."
+  },
+  "tip2": {
+    "message": "Pop-up: Door op de tandwielen naast de titels te klikken kunt u deze verwijderen, vastmaken en delen."
+  },
+  "tip3": {
+    "message": "Opties: U kunt de verticale pijltjestoetsen gebruiken om numerieke waarden te vergroten en te verkleinen wanneer het veld is geselecteerd."
+  },
+  "tip4": {
+    "message": "Opties: U kunt Enter gebruiken om een domein aan u filterlijst toe te voegen."
+  },
+  "tip5": {
+    "message": "Geschiedenis: U kunt Shift gebruiken om meerdere items te selecteren."
+  },
+  "tip6": {
+    "message": "Geschiedenis: Gebruik de knoppen in de blauwe werkbalk om de manier waarop de geschiedenis items getoond worden te bewerken."
+  }	
+}

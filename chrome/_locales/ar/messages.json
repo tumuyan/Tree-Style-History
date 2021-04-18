@@ -1,0 +1,311 @@
+{
+  "recentHistory": {
+    "message": "تاريخ التصفح الاخير"
+  },
+  "recentlyClosedTabs": {
+    "message": "التبويبات المغلقة مؤخرا"
+  },
+  "mostVisited": {
+    "message": "الأكثر زيارة"
+  },
+  "recentBookmarks": {
+    "message": "الإشارات المرجعية الأخيرة"
+  },
+  "pinned": {
+    "message": "مثبت"
+  },
+  "options": {
+    "message": "خيارات"
+  },
+  "translations": {
+    "message": "ترجمات"
+  },
+  "about": {
+    "message": "حول"
+  },
+  "mainOptions": {
+    "message": "خيارات عامة"
+  },
+  "styleOptions": {
+    "message": "خيارات الستايل"
+  },
+  "advanceOptions": {
+    "message": "خيارات متقدمة"
+  },
+  "option1": {
+    "message": "عدد عناصر التاريخ الاخير"
+  },
+  "option2": {
+    "message": "عدد علامات التبويب المغلقة مؤخرا"
+  },
+  "option3": {
+    "message": "عدد عناصر الاكثر زيارة"
+  },
+  "option4": {
+    "message": "عدد عناصر المفضلة مؤخرا"
+  },
+  "option5": {
+    "message": "ترتيب النافذة المنبثقة"
+  },
+  "option6": {
+    "message": "صفحة التاريخ"
+  },
+  "option7": {
+    "message": "تنسيق التاريخ"
+  },
+  "option8": {
+    "message": "أظهر شريط البحث في النافذةالمنبثقة"
+  },
+  "option9": {
+    "message": "معاينة"
+  },
+  "option10": {
+    "message": "اظهار رابط"
+  },
+  "option11": {
+    "message": "اظهار فاصل"
+  },
+  "option12": {
+    "message": "اظهار معلومات إضافية"
+  },
+  "option13": {
+    "message": "اظهار ألوان الخلفية"
+  },
+  "option14": {
+    "message": "ايقونة النافذة المنبثقة"
+  },
+  "option15": {
+    "message": "عرض النافذة المنبثقة"
+  },
+  "option16": {
+    "message": "استعادة عناصر الأكثر زيارة"
+  },
+  "option17": {
+    "message": "فلتره مواقع من التاريخ الأخير"
+  },
+  "option18": {
+    "message": "عند الضغط بيسار الماوس"
+  },
+  "option19": {
+    "message": "ثيم النافذة المنبثقة"
+  },
+  "option20": {
+    "message": "تنسيق الوقت"
+  },
+  "option21": {
+    "message": "روابط المواقع الإجتماعية"
+  },
+  "help1": {
+    "message": "The number of recent history items in the pop-up"
+  },
+  "help2": {
+    "message": "The number of recently closed tabs in the pop-up"
+  },
+  "help3": {
+    "message": "The number of most visited items in the pop-up"
+  },
+  "help4": {
+    "message": "The number of recently bookmarked items in the pop-up"
+  },
+  "help5": {
+    "message": "The order in which the specified items will be shown"
+  },
+  "help6": {
+    "message": "Which history manager you would like to use"
+  },
+  "help7": {
+    "message": "The format of the date used throughout the extension"
+  },
+  "help8": {
+    "message": "The search bar situated at the top of the pop-up"
+  },
+  "help10": {
+    "message": "The page URL situated below the item title"
+  },
+  "help11": {
+    "message": "The separator situated at the bottom of the item"
+  },
+  "help12": {
+    "message": "The extra information next to the page URL (i.e. visit count and date)"
+  },
+  "help13": {
+    "message": "If activated will display a different colour for different items such as a bookmarked or pinned URL in the recent history and recently closed tabs list"
+  },
+  "help16": {
+    "message": "The URLs you have removed from the most visited list. Click on the cross next to the URL to restore it to the list."
+  },
+  "help17": {
+    "message": "The URLs from the domain names you do not wish to be displayed in the recent history list, e.g. foobar.com"
+  },
+  "help18": {
+    "message": "What should happen when you click on an item in the pop-up"
+  },
+  "help20": {
+    "message": "The format of the time used throughout the extension"
+  },
+  "help21": {
+    "message": "This adds a share icon next to items in the pop-up when editing"
+  },
+  "yes": {
+    "message": "نعم"
+  },
+  "no": {
+    "message": "لا"
+  },
+  "visits": {
+    "message": "الزيارات"
+  },
+  "saveOptions": {
+    "message": "حفظ الخيارات"
+  },
+  "saving": {
+    "message": "جاري الحفظ..."
+  },
+  "saved": {
+    "message": "تم الحفظ!"
+  },
+  "click1": {
+    "message": "فتح في علامة التبويب الحالية"
+  },
+  "click2": {
+    "message": "فتح في علامة تبويب جديدة"
+  },
+  "click3": {
+    "message": "فتح التبويب الجديد في الخلفية"
+  },
+  "translation1": {
+    "message": "Please help make Recent History better by providing new and better translations for it. This page has been created to make it easier for you to translate this extension."
+  },
+  "translation2": {
+    "message": "يرجى اتباع الخطوات التالية لترجمة إضافة التاريخ الاخير إلى لغتك:"
+  },
+  "translation3": {
+    "message": "انتقل إلى أسفل هذه الصفحة."
+  },
+  "translation4": {
+    "message": "تعبئة النموذج بشكل صحيح."
+  },
+  "translation5": {
+    "message": "ترجمة جميع 'messages' إلى اللغة التي اخترتها."
+  },
+  "translation6": {
+    "message": "انقر على زر ' أرسل'."
+  },
+  "translation7": {
+    "message": "تم!"
+  },
+  "aboutText": {
+    "message": "This extension displays your recent history, recently closed tabs, most visited pages and recent bookmarks in a one click pop-up."
+  },
+  "successfullyInstalled": {
+    "message": "بنجاح تثبيت / تحديث"
+  },
+  "whatsNew": {
+    "message": "ما هو الجديد؟"
+  },
+  "version": {
+    "message": "الإصدار"
+  },
+  "showAllHistory": {
+    "message": "عرض كل التاريخ"
+  },
+  "noResults": {
+    "message": "لا توجد نتائج"
+  },
+  "currentHistory": {
+    "message": "التاريخ الحالي"
+  },
+  "allHistory": {
+    "message": "كل التاريخ"
+  },
+  "totalHistoryItems": {
+    "message": "مجموع عناصر التاريخ:"
+  },
+  "deleteItems": {
+    "message": "حذف العناصر"
+  },
+  "mondayLetter": {
+    "message": "M"
+  },
+  "tuesdayLetter": {
+    "message": "T"
+  },
+  "wednesdayLetter": {
+    "message": "W"
+  },
+  "thursdayLetter": {
+    "message": "T"
+  },
+  "fridayLetter": {
+    "message": "F"
+  },
+  "saturdayLetter": {
+    "message": "S"
+  },
+  "sundayLetter": {
+    "message": "S"
+  },
+  "AM": {
+    "message": "am"
+  },
+  "PM": {
+    "message": "pm"
+  },
+  "12hour": {
+    "message": "12 ساعة"
+  },
+  "24hour": {
+    "message": "24 ساعة"
+  },
+  "loading": {
+    "message": "تحميل..."
+  },
+  "original": {
+    "message": "الاصلي"
+  },
+  "classic": {
+    "message": "كلاسيك"
+  },
+  "pink": {
+    "message": "وردي"
+  },
+  "ui1": {
+    "message": "ثبت عنصر?"
+  },
+  "ui2": {
+    "message": "حذف عنصر من التاريخ?"
+  },
+  "ui3": {
+    "message": "حذف عنصر من علامات التبويب المغلقة مؤخرا?"
+  },
+  "ui4": {
+    "message": "حذف المفضلة?"
+  },
+  "ui5": {
+    "message": "حذف عنصر من قائمة الأكثر زيارة؟"
+  },
+  "ui6": {
+    "message": "الغاء التثبيت?"
+  },
+  "tips": {
+    "message": "نصائح مفيدة"
+  },
+  "tip1": {
+    "message": "Pop-up: You can open an item in a new background tab by left clicking the item while pressing and holding down Ctrl."
+  },
+  "tip2": {
+    "message": "Pop-up: By clicking on the cogs next to the titles you can delete, pin and share items."
+  },
+  "tip3": {
+    "message": "Options: You can press the up and down keys to increase and decrease numerical values when the field is selected."
+  },
+  "tip4": {
+    "message": "Options: You can press Enter to add a domain to the filtered list."
+  },
+  "tip5": {
+    "message": "History: You can use Shift click to select multiple items."
+  },
+  "tip6": {
+    "message": "History: Use the buttons in the blue toolbar to manipulate the way the history items are shown."
+  }
+}

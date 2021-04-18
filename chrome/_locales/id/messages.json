@@ -1,0 +1,311 @@
+{
+  "recentHistory": {
+    "message": "Riwayat Kini"
+  },
+  "recentlyClosedTabs": {
+    "message": "Tab Baru Ditutup"
+  },
+  "mostVisited": {
+    "message": "Paling Dikunjungi"
+  },
+  "recentBookmarks": {
+    "message": "Bookmark Baru"
+  },
+  "pinned": {
+    "message": "Disemat"
+  },
+  "options": {
+    "message": "Pilihan"
+  },
+  "translations": {
+    "message": "Terjemahan"
+  },
+  "about": {
+    "message": "Ikhwal"
+  },
+  "mainOptions": {
+    "message": "Pilihan Utama"
+  },
+  "styleOptions": {
+    "message": "Pilihan Gaya"
+  },
+  "advanceOptions": {
+    "message": "Pilihan Lanjut"
+  },
+  "option1": {
+    "message": "Jumlah Item Riwayat Kini"
+  },
+  "option2": {
+    "message": "Jumlah Tab Baru Ditutup"
+  },
+  "option3": {
+    "message": "Jumlah Item Paling Dikunjungi"
+  },
+  "option4": {
+    "message": "Jumlah Item Baru Dibookmark"
+  },
+  "option5": {
+    "message": "Urutan Pop-up"
+  },
+  "option6": {
+    "message": "Halaman Riwayat"
+  },
+  "option7": {
+    "message": "Format Tanggal"
+  },
+  "option8": {
+    "message": "Tampilkan Bilah Cari di Pop-up"
+  },
+  "option9": {
+    "message": "Pratinjau"
+  },
+  "option10": {
+    "message": "Tampilkan URL"
+  },
+  "option11": {
+    "message": "Tampilkan Pemisah"
+  },
+  "option12": {
+    "message": "Tampilkan Info Ekstra"
+  },
+  "option13": {
+    "message": "Tampilkan Warna Latar"
+  },
+  "option14": {
+    "message": "Ikon Pop-up"
+  },
+  "option15": {
+    "message": "Lebar Pop-up"
+  },
+  "option16": {
+    "message": "Pulihkan Item ke Paling Dikunjungi"
+  },
+  "option17": {
+    "message": "Saring Domain dari Riwayat Kini"
+  },
+  "option18": {
+    "message": "Aksi Klik Kiri Mouse"
+  },
+  "option19": {
+    "message": "Tema Pop-up"
+  },
+  "option20": {
+    "message": "Format Waktu"
+  },
+  "option21": {
+    "message": "Bookmark Sosial"
+  },
+  "help1": {
+    "message": "Jumlah item riwayat kini di pop-up"
+  },
+  "help2": {
+    "message": "Jumlah tab yang terakhir ditutup di pop-up"
+  },
+  "help3": {
+    "message": "Jumlah item yang paling sering dikunjungi di the pop-up"
+  },
+  "help4": {
+    "message": "Jumlah item yang terakhir dibookmark di pop-up"
+  },
+  "help5": {
+    "message": "Urutan item yang ditentukan ditampilkan"
+  },
+  "help6": {
+    "message": "Manajer riwayat mana yang anda ingin gunakan"
+  },
+  "help7": {
+    "message": "Format tanggal yang digunakan di seluruh ekstensi"
+  },
+  "help8": {
+    "message": "Bilah cari yang terletak di bagian atas pop-up"
+  },
+  "help10": {
+    "message": "URL halaman yang terletak d bawah judul item"
+  },
+  "help11": {
+    "message": "Pemisah yang terletak di bagian bawah item"
+  },
+  "help12": {
+    "message": "Informasi tambahan sebelah URL halaman (yaitu jumlah dan tanggal kunjungan)"
+  },
+  "help13": {
+    "message": "Jika diaktifkan akan menampilkan warna yang berbeda untuk item yang berbeda seperti URL yang dibookmark atau didisemat dalam riwayat kini dan daftar tab yang baru ditutup."
+  },
+  "help16": {
+    "message": "URL yang telah Anda hapus dari daftar yang paling banyak dikunjungi. Klik pada silang sebelah URL untuk mengembalikannya ke dalam daftar."
+  },
+  "help17": {
+    "message": "URL dari nama domain yang Anda tidak ingin tampilkan dalam daftar riwayat kini, misalnya foobar.com"
+  },
+  "help18": {
+    "message": "Apa yang harus terjadi ketika Anda mengklik item di pop-up"
+  },
+  "help20": {
+    "message": "Format waktu yang digunakan di seluruh ekstensi"
+  },
+  "help21": {
+    "message": "Ini menambahkan ikon berbagi di samping item dalam pop-up saat mengedit"
+  },
+  "yes": {
+    "message": "Ya"
+  },
+  "no": {
+    "message": "Tidak"
+  },
+  "visits": {
+    "message": "Kunjungan"
+  },
+  "saveOptions": {
+    "message": "Simpan Pilihan"
+  },
+  "saving": {
+    "message": "Menyimpan..."
+  },
+  "saved": {
+    "message": "Tersimpan!"
+  },
+  "click1": {
+    "message": "Buka di tab saat ini"
+  },
+  "click2": {
+    "message": "Buka di tab baru"
+  },
+  "click3": {
+    "message": "Buka di tab baru latar"
+  },
+  "translation1": {
+    "message": "Tolong bantu membuat Recent History lebih baik dengan menyediakan terjemahan baru yang lebih baik. Halaman ini telah dibuat untuk memudahkan Anda menerjemahkan ekstensi ini."
+  },
+  "translation2": {
+    "message": "Ikuti langkah-langkah di bawah ini untuk menerjemahkan Recent History ke bahasa Anda:"
+  },
+  "translation3": {
+    "message": "Gulir ke bagian bawah halaman ini."
+  },
+  "translation4": {
+    "message": "Isi formulir dengan benar."
+  },
+  "translation5": {
+    "message": "Terjemahkan semua 'message' ke dalam bahasa yang Anda pilih"
+  },
+  "translation6": {
+    "message": "Klik tombol 'Kirim'."
+  },
+  "translation7": {
+    "message": "Selesai!"
+  },
+  "aboutText": {
+    "message": "Ekstensi ini menampilkan riwayat terakhir, tab yang baru ditutup, halaman yang paling sering dikunjungi dan bookmark terbaru Anda dengan pop-up sekali klik."
+  },
+  "successfullyInstalled": {
+    "message": "Berhasil Dipasang/Diperbaru"
+  },
+  "whatsNew": {
+    "message": "What's New?"
+  },
+  "version": {
+    "message": "Versi"
+  },
+  "showAllHistory": {
+    "message": "Tampilkan Seluruh Riwayat"
+  },
+  "noResults": {
+    "message": "Tak menemukan hasil"
+  },
+  "currentHistory": {
+    "message": "Tanggal saat ini"
+  },
+  "allHistory": {
+    "message": "Seluruh Riwayat"
+  },
+  "totalHistoryItems": {
+    "message": "Item Riwayat Total:"
+  },
+  "deleteItems": {
+    "message": "Hapus Item-item"
+  },
+  "mondayLetter": {
+    "message": "S"
+  },
+  "tuesdayLetter": {
+    "message": "S"
+  },
+  "wednesdayLetter": {
+    "message": "R"
+  },
+  "thursdayLetter": {
+    "message": "K"
+  },
+  "fridayLetter": {
+    "message": "J"
+  },
+  "saturdayLetter": {
+    "message": "S"
+  },
+  "sundayLetter": {
+    "message": "M"
+  },
+  "AM": {
+    "message": "pagi"
+  },
+  "PM": {
+    "message": "sore"
+  },
+  "12hour": {
+    "message": "12 Jam"
+  },
+  "24hour": {
+    "message": "24 Jam"
+  },
+  "loading": {
+    "message": "Memuat..."
+  },
+  "original": {
+    "message": "Asali"
+  },
+  "classic": {
+    "message": "Klasik"
+  },
+  "pink": {
+    "message": "Pink"
+  },
+  "ui1": {
+    "message": "Semat item?"
+  },
+  "ui2": {
+    "message": "Hapus item dari riwayat?"
+  },
+  "ui3": {
+    "message": "Hapus item dari tab baru ditutup?"
+  },
+  "ui4": {
+    "message": "Hapus bookmark?"
+  },
+  "ui5": {
+    "message": "Hapus item dari daftar paling dikunjungai?"
+  },
+  "ui6": {
+    "message": "Lepas?"
+  },
+  "tips": {
+    "message": "Tips Berguna"
+  },
+  "tip1": {
+    "message": "Pop-up: Anda dapat membuka item di tab baru latar dengan mengklik kiri item sambil menekan dan menahan tombol Ctrl."
+  },
+  "tip2": {
+    "message": "Pop-up: Dengan mengklik roda di sebelah judul Anda dapat menghapus, menyemat dan berbagi item."
+  },
+  "tip3": {
+    "message": "Pilihan: Anda dapat menekan tombol atas dan bawah untuk meningkatkan dan menurunkan nilai numerik saat field dipilih."
+  },
+  "tip4": {
+    "message": "Pilihan: Anda dapat menekan Enter untuk menambahkan domain ke daftar saring."
+  },
+  "tip5": {
+    "message": "Riwayat: Anda dapat menggunakan Shift klik untuk memilih beberapa item."
+  },
+  "tip6": {
+    "message": "Riwayat: Gunakan tombol-tombol pada toolbar biru untuk mengubah cara item riwayat ditampilkan."
+  }
+}

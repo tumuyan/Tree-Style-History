@@ -1,0 +1,311 @@
+{
+  "recentHistory": {
+    "message": "Historial Reciente"
+  },
+  "recentlyClosedTabs": {
+    "message": "Pestañas cerradas recientemente"
+  },
+  "mostVisited": {
+    "message": "Los más visitado"
+  },
+  "recentBookmarks": {
+    "message": "Marcadores recientes"
+  },
+  "pinned": {
+    "message": "Pinned"
+  },
+  "options": {
+    "message": "Opciones"
+  },
+  "translations": {
+    "message": "Traducciones"
+  },
+  "about": {
+    "message": "Sobre Esto"
+  },
+  "mainOptions": {
+    "message": "Opciones Principales"
+  },
+  "styleOptions": {
+    "message": "Opciones de Estilo"
+  },
+  "advanceOptions": {
+    "message": "Opciones Avanzadas"
+  },
+  "option1": {
+    "message": "Numero de artículos del Historial Reciente"
+  },
+  "option2": {
+    "message": "Numero de Pestañas Cerradas Recientemente"
+  },
+  "option3": {
+    "message": "Numero de Los artículos Más Visitados"
+  },
+  "option4": {
+    "message": "Numero de  of Recently Bookmarked Items"
+  },
+  "option5": {
+    "message": "Pop-up Order"
+  },
+  "option6": {
+    "message": "Pagina de Historial"
+  },
+  "option7": {
+    "message": "Date Format"
+  },
+  "option8": {
+    "message": "Show Search Barra in Pop-up"
+  },
+  "option9": {
+    "message": "Preview"
+  },
+  "option10": {
+    "message": "Mostrar URL (Enlace)"
+  },
+  "option11": {
+    "message": "Mostrar Separadores"
+  },
+  "option12": {
+    "message": "Mostrar Info Extra"
+  },
+  "option13": {
+    "message": "Mostrar Colores de Fondo"
+  },
+  "option14": {
+    "message": "Pop-up Icon"
+  },
+  "option15": {
+    "message": "Pop-up Width"
+  },
+  "option16": {
+    "message": "Restaurar Articulo to Los más visitados"
+  },
+  "option17": {
+    "message": "Filter Domains from Recent History"
+  },
+  "option18": {
+    "message": "Left Mouse Click Action"
+  },
+  "option19": {
+    "message": "Tema del Pop-up"
+  },
+  "option20": {
+    "message": "Formato Del Tiempo"
+  },
+  "option21": {
+    "message": "Social Bookmarking"
+  },
+  "help1": {
+    "message": "El número de artículos historial reciente in the pop-up"
+  },
+  "help2": {
+    "message": "El número de Pestañas cerradas recientemente in the pop-up"
+  },
+  "help3": {
+    "message": "El número of most visited items in the pop-up"
+  },
+  "help4": {
+    "message": "El número of recently bookmarked items in the pop-up"
+  },
+  "help5": {
+    "message": "The order in which the specified items will be shown"
+  },
+  "help6": {
+    "message": "Which history manager you would like to use"
+  },
+  "help7": {
+    "message": "The format of the date used throughout the extension"
+  },
+  "help8": {
+    "message": "The search bar situated at the top of the pop-up"
+  },
+  "help10": {
+    "message": "The page URL situated below the item title"
+  },
+  "help11": {
+    "message": "The separator situated at the bottom of the item"
+  },
+  "help12": {
+    "message": "The extra information next to the page URL (i.e. visit count and date)"
+  },
+  "help13": {
+    "message": "If activated will display a different colour for different items such as a bookmarked or pinned URL in the recent history and recently closed tabs list"
+  },
+  "help16": {
+    "message": "The URLs you have removed from the most visited list. Click on the cross next to the URL to restore it to the list."
+  },
+  "help17": {
+    "message": "The URLs from the domain names you do not wish to be displayed in the recent history list, e.g. foobar.com"
+  },
+  "help18": {
+    "message": "What should happen when you click on an item in the pop-up"
+  },
+  "help20": {
+    "message": "The format of the time used throughout the extension"
+  },
+  "help21": {
+    "message": "This adds a share icon next to items in the pop-up when editing"
+  },
+  "yes": {
+    "message": "Sí"
+  },
+  "no": {
+    "message": "No"
+  },
+  "visits": {
+    "message": "Visitas"
+  },
+  "saveOptions": {
+    "message": "Guardar Opciones"
+  },
+  "saving": {
+    "message": "Guardando..."
+  },
+  "saved": {
+    "message": "Guardado!"
+  },
+  "click1": {
+    "message": "Abrir pestaña reciente"
+  },
+  "click2": {
+    "message": "Abrir nueva pestaña"
+  },
+  "click3": {
+    "message": "Open in new background tab"
+  },
+  "translation1": {
+    "message": "Por favor ayude a hacer que Historial Reciente mejore,proporcionando traducciones mejores y nueva para ello. Esta página a sido creada para que sea más fácil para usted para traducir esta extensión."
+  },
+  "translation2": {
+    "message": "Por favor siga los pasos para traducir Historial Reciente en su lenguaje:"
+  },
+  "translation3": {
+    "message": "Scroll to the bottom of this page."
+  },
+  "translation4": {
+    "message": "Fill in the form correctly."
+  },
+  "translation5": {
+    "message": "Traducir todos los 'mesajes' en su lenguaje elegido."
+  },
+  "translation6": {
+    "message": "Click on the 'Submit' button."
+  },
+  "translation7": {
+    "message": "Hecho!"
+  },
+  "aboutText": {
+    "message": "Esta extension muestra tú historial reciente, pestañas cerradas recientemente,paginas más visitadas y marcadores recientes en un solo click pop-up."
+  },
+  "successfullyInstalled": {
+    "message": "Instalado exitosamente/Actualizado"
+  },
+  "whatsNew": {
+    "message": "que hay de nuevo?"
+  },
+  "version": {
+    "message": "Version"
+  },
+  "showAllHistory": {
+    "message": "Mostrar todos los Historia"
+  },
+  "noResults": {
+    "message": "Resultados no encontrados"
+  },
+  "currentHistory": {
+    "message": "Fecha Actual"
+  },
+  "allHistory": {
+    "message": "Todo el historial"
+  },
+  "totalHistoryItems": {
+    "message": "Total de artículos del historial:"
+  },
+  "deleteItems": {
+    "message": "Artículos Borrados"
+  },
+  "mondayLetter": {
+    "message": "L"
+  },
+  "tuesdayLetter": {
+    "message": "M"
+  },
+  "wednesdayLetter": {
+    "message": "Mi"
+  },
+  "thursdayLetter": {
+    "message": "J"
+  },
+  "fridayLetter": {
+    "message": "V"
+  },
+  "saturdayLetter": {
+    "message": "S"
+  },
+  "sundayLetter": {
+    "message": "D"
+  },
+  "AM": {
+    "message": "AM"
+  },
+  "PM": {
+    "message": "PM"
+  },
+  "12hour": {
+    "message": "Hora 12"
+  },
+  "24hour": {
+    "message": "Hora 24"
+  },
+  "loading": {
+    "message": "Cargando..."
+  },
+  "original": {
+    "message": "Original"
+  },
+  "classic": {
+    "message": "Clasico"
+  },
+  "pink": {
+    "message": "Rosa"
+  },
+  "ui1": {
+    "message": "Pin item?"
+  },
+  "ui2": {
+    "message": "Borrar artículo Del Hitorial?"
+  },
+  "ui3": {
+    "message": "Borrar artículo from pestañas cerradas recientemente?"
+  },
+  "ui4": {
+    "message": "Borrar marcador?"
+  },
+  "ui5": {
+    "message": "Borrar el artículo de la lista de los más visitados?"
+  },
+  "ui6": {
+    "message": "Unpin?"
+  },
+  "tips": {
+    "message": "Helpful Tips"
+  },
+  "tip1": {
+    "message": "Pop-up: You can open an item in a new background tab by left clicking the item while pressing and holding down Ctrl."
+  },
+  "tip2": {
+    "message": "Pop-up: By clicking on the cogs next to the titles you can delete, pin and share items."
+  },
+  "tip3": {
+    "message": "Opciones: You can press the up and down keys to increase and decrease numerical values when the field is selected."
+  },
+  "tip4": {
+    "message": "Opciones: You can press Enter to add a domain to the filtered list."
+  },
+  "tip5": {
+    "message": "Historial: You can use Shift click to select multiple items."
+  },
+  "tip6": {
+    "message": "Historial: Use the buttons in the blue toolbar to manipulate the way the history items are shown."
+  }
+}

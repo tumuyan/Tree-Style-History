@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+<meta content="text/html; charset=utf-8" http-equiv="Content-Type">
+<title>History | Recent History</title>
+<link rel="stylesheet" href="css/history.css">
+<script type="text/javascript" src="scripts/history-rtl.js"></script>
+<script type="text/javascript" src="scripts/moo.js"></script>
+<script type="text/javascript" src="scripts/func.js"></script>
+<script type="text/javascript" src="scripts/history.js"></script>
+
+
+</head>
+
+<body>
+<div id="navigation-menu">
+  <h1 class="lang" data-lang-string="recentHistory"></h1>
+  <ul>
+    <li><a href="history2.html" class="lang" data-lang-string="treeOptions"></a></li>
+    <li><a href="history.html" class="lang selected" data-lang-string="allHistory"></a></li>
+    <li><a href="options.html" class="lang" data-lang-string="options"></a></li>
+  </ul>
+</div>
+
+<div id="history-container">
+  <table id="main-table">
+  	<tr>
+      <td><h1 class="lang" data-lang-string="allHistory"></h1></td>
+  		<td id="search">
+        <form id="rh-search-form" action="#">
+          <span id="rh-clear-search">&times;</span>
+          <input id="rh-search" type="text" value="">
+          <select class="select" id="rh-what">
+            <option value="all" class="lang" data-lang-string="allHistory"></option>
+            <option value="recent" class="lang" data-lang-string="recentHistory"></option>
+            <option value="current" class="lang" data-lang-string="currentHistory"></option>
+          </select>
+        </form>
+  		</td>
+  	</tr>
+  	<tr>
+  		<td colspan="2">
+        <div id="rh-bar">
+          <label id="rh-bar-uione"><input id="master-check-all" type="checkbox" name="checkall" value="false"></label>
+          <a id="rh-bar-group" href="#"></a>
+          <a id="rh-bar-orderby" href="#"></a>
+          <a id="rh-bar-order" href="#"></a>
+          &nbsp;
+        </div>
+        <div id="rh-views">
+          <div id="rh-views-tube">
+            <div id="rh-views-insert"></div>
+            <div id="rh-views-search-insert"></div>
+          </div>
+        </div>
+  		</td>
+  	</tr>
+  </table>
+  <div id="calendar">
+    <a id="delete-range-toggle-button" href="#"></a>
+    <table id="calendar-table">
+      <tr>
+        <td id="calendar-left">
+          <input type="text" id="delete-range-one" name="delete-range-one" value=""><br>
+          <input type="text" id="delete-range-two" name="delete-range-two" value=""><br>
+          <input id="delete-range-button" class="button" type="button" value="">
+        </td>
+        <td id="calendar-right">
+          <div id="calendar-nav">
+            <span id="dsdi"></span>
+            <span id="dsmi"></span>
+            <span id="dsyi"></span>
+          </div>
+          <div id="calendar-week">
+            <span class="day lang" data-lang-string="sundayLetter"></span>
+            <span class="day lang" data-lang-string="mondayLetter"></span>
+            <span class="day lang" data-lang-string="tuesdayLetter"></span>
+            <span class="day lang" data-lang-string="wednesdayLetter"></span>
+            <span class="day lang" data-lang-string="thursdayLetter"></span>
+            <span class="day lang" data-lang-string="fridayLetter"></span>
+            <span class="day lang" data-lang-string="saturdayLetter"></span>
+          </div>
+          <div id="calendar-days"></div>
+          <div id="calendar-freq"><img class="non-retina" alt="Frequency" src="images/legend.gif"><img class="retina" alt="Frequency" src="images/legend-@2x.gif"></div>
+          <div id="calendar-total"><span class="lang" data-lang-string="totalHistoryItems"></span> <span id="calendar-total-value">0</span></div>
+          <div id="calendar-delete"><input id="delete-button" class="button" type="button" value=""></div>
+        </td>
+      </tr>
+    </table>
+  </div>
+</div>
+<div id="alert-holder">
+  <img id="alert-holder-loading" alt="Loading" src="images/loading.gif">
+</div>
+</body>
+
+</html>

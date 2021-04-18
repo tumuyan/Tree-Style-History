@@ -1,0 +1,22 @@
+
+body {
+  text-align: right;
+}
+
+#popup-search-input {
+  background-position: 3px 3px;
+}
+
+.popup-title span {
+  padding: 0 0 0 5px;
+}
+
+.popup-title a {
+  left: -5px;
+  right: auto;
+}
+
+.item {
+  text-align: left;
+  direction: ltr;
+}

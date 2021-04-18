@@ -1,0 +1,37 @@
+{
+  "name": "Tree Style History",
+  "short_name": "Tree History",
+  "author": "tumuyan",
+  "version": "3.1.0",
+  "manifest_version": 2,
+  "minimum_chrome_version": "22.0",
+  "default_locale": "en",
+  "description": "__MSG_aboutText__",
+  "options_page": "options.html",
+  "background": {
+    "page": "background.html"
+  },
+  "permissions": [
+    "tabs",
+    "history",
+    "bookmarks",
+    "chrome://favicon/"
+  ],
+  "icons": {
+    "16": "images/tree-16.png",
+    "32": "images/tree-32.png",
+    "48": "images/tree-48.png",
+    "128": "images/tree-128.png"
+  },
+  "browser_action": {
+    "default_icon": {
+      "19": "images/tree-19.png",
+      "38": "images/tree-38.png",
+      "32": "images/tree-32.png",
+      "48": "images/tree-48.png",
+      "128": "images/tree-128.png"
+    },
+    "default_popup": "popup.html"
+  }
+ 
+}

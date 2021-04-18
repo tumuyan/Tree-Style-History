@@ -1,0 +1,311 @@
+{
+  "recentHistory": {
+    "message": "최근 방문목록"
+  },
+  "recentlyClosedTabs": {
+    "message": "최근 닫힌 탭"
+  },
+  "mostVisited": {
+    "message": "자주 방문한 목록"
+  },
+  "recentBookmarks": {
+    "message": "최근 즐겨찾기"
+  },
+  "pinned": {
+    "message": "고정"
+  },
+  "options": {
+    "message": "옵션"
+  },
+  "translations": {
+    "message": "번역"
+  },
+  "about": {
+    "message": "확장기능 정보"
+  },
+  "mainOptions": {
+    "message": "메인 옵션"
+  },
+  "styleOptions": {
+    "message": "스타일 옵션"
+  },
+  "advanceOptions": {
+    "message": "고급 옵션"
+  },
+  "option1": {
+    "message": "최근 방문목록 개수"
+  },
+  "option2": {
+    "message": "최근 닫힌 탭 개수"
+  },
+  "option3": {
+    "message": "자주 방문한 목록 개수"
+  },
+  "option4": {
+    "message": "최근 즐겨찾기 개수"
+  },
+  "option5": {
+    "message": "팝업 우선순위"
+  },
+  "option6": {
+    "message": "방문목록"
+  },
+  "option7": {
+    "message": "날짜 형식"
+  },
+  "option8": {
+    "message": "팝업 검색바 보기"
+  },
+  "option9": {
+    "message": "미리보기"
+  },
+  "option10": {
+    "message": "URL 보이기"
+  },
+  "option11": {
+    "message": "분리선 보이기"
+  },
+  "option12": {
+    "message": "부가정보 보이기"
+  },
+  "option13": {
+    "message": "배경색 보이기"
+  },
+  "option14": {
+    "message": "팝업 아이콘"
+  },
+  "option15": {
+    "message": "팝업 가로폭"
+  },
+  "option16": {
+    "message": "자주 방문한 목록으로 복구"
+  },
+  "option17": {
+    "message": "최근 방문목록에서 해당 도메인 필터링"
+  },
+  "option18": {
+    "message": "왼쪽 마우스 클릭시 동작"
+  },
+  "option19": {
+    "message": "팝업 테마"
+  },
+  "option20": {
+    "message": "시간 형식"
+  },
+  "option21": {
+    "message": "소셜 즐겨찾기"
+  },
+  "help1": {
+    "message": "팝업 할 최근 방문목록 개수"
+  },
+  "help2": {
+    "message": "팝업 할 최근 닫힌 탭 개수"
+  },
+  "help3": {
+    "message": "팝업 할 자주 방문한 목록 개수"
+  },
+  "help4": {
+    "message": "팝업 할 최근 즐겨찾기 개수"
+  },
+  "help5": {
+    "message": "열거된 아이템들이 보여질 우선순위"
+  },
+  "help6": {
+    "message": "방문목록 관리자 선택"
+  },
+  "help7": {
+    "message": "확장기능 내에서 사용될 날짜 형식"
+  },
+  "help8": {
+    "message": "검색바는 팝업창 상단에 위치"
+  },
+  "help10": {
+    "message": "페이지 URL은 각 아이템 제목 아래쪽에 위치"
+  },
+  "help11": {
+    "message": "분리선은 아이템 제목 아래쪽에 위치"
+  },
+  "help12": {
+    "message": "부가 정보는 페이지 URL 옆쪽에 위치(예시: 방문횟수, 날짜)"
+  },
+  "help13": {
+    "message": "활성화 할 경우 즐겨찾기되거나, 고정된 URL이 최근 방문 목록, 최근 닫혀진 탭 목록 내에 표시될때 다른 컬러로 표시해 강조함"
+  },
+  "help16": {
+    "message": "자주 방문한 목록으로부터 제거 설정된 URL들. 플러스 버튼을 클릭하면 해당 URL이 기존목록으로 복구됨"
+  },
+  "help17": {
+    "message": "도메인 주소들중 최근 방문목록에 표시되지 않도록 할 URL 목록 (예시:foobar.com)"
+  },
+  "help18": {
+    "message": "팝업창 아이템 클릭시 탭의 활성 방식 선택"
+  },
+  "help20": {
+    "message": "확장기능 내에서 사용될 시간 형식"
+  },
+  "help21": {
+    "message": "편집시 공유 아이콘을 해당 팝업 아이템 옆쪽에 추가함"
+  },
+  "yes": {
+    "message": "예"
+  },
+  "no": {
+    "message": "아니오"
+  },
+  "visits": {
+    "message": "방문"
+  },
+  "saveOptions": {
+    "message": "옵션 저장"
+  },
+  "saving": {
+    "message": "저장중..."
+  },
+  "saved": {
+    "message": "저장완료!"
+  },
+  "click1": {
+    "message": "현재 탭으로 열기"
+  },
+  "click2": {
+    "message": "새 탭으로 열기"
+  },
+  "click3": {
+    "message": "비활성 새 탭으로 열기"
+  },
+  "translation1": {
+    "message": "더 나은 번역을 보내주시면 Recent History 성능 개선에 많은 도움이 됩니다. 해당 페이지는 확장기능 번역의 편의를 돕기위해 만들어졌습니다"
+  },
+  "translation2": {
+    "message": "Recent History를 번역하시려면 아래의 절차를 따라주시기 바랍니다:"
+  },
+  "translation3": {
+    "message": "해당 페이지의 최하단까지 스크롤을 내려주세요."
+  },
+  "translation4": {
+    "message": "양식 기입을 정확히 해주시기 바랍니다."
+  },
+  "translation5": {
+    "message": "메시지 부분을 당신의 모국어로 번역해 바꿔주시기 바랍니다."
+  },
+  "translation6": {
+    "message": "'제출' 버튼을 눌러 주십시오"
+  },
+  "translation7": {
+    "message": "완료!"
+  },
+  "aboutText": {
+    "message": "해당 확장기능은 당신의 최근 방문목록, 최근 닫힌 탭, 자주 방문한 페이지, 최근 즐겨찾기등의 목록을 손쉬운 클릭 한번으로 표시하도록 해줍니다."
+  },
+  "successfullyInstalled": {
+    "message": "인스톨/업데이트가 성공적으로 완료"
+  },
+  "whatsNew": {
+    "message": "개선 사항"
+  },
+  "version": {
+    "message": "버전"
+  },
+  "showAllHistory": {
+    "message": "모든 방문목록 표시"
+  },
+  "noResults": {
+    "message": "검색 결과 없음"
+  },
+  "currentHistory": {
+    "message": "현재 날짜"
+  },
+  "allHistory": {
+    "message": "모든 방문목록"
+  },
+  "totalHistoryItems": {
+    "message": "총 방문목록 아이템:"
+  },
+  "deleteItems": {
+    "message": "아이템 삭제"
+  },
+  "mondayLetter": {
+    "message": "월"
+  },
+  "tuesdayLetter": {
+    "message": "화"
+  },
+  "wednesdayLetter": {
+    "message": "수"
+  },
+  "thursdayLetter": {
+    "message": "목"
+  },
+  "fridayLetter": {
+    "message": "금"
+  },
+  "saturdayLetter": {
+    "message": "토"
+  },
+  "sundayLetter": {
+    "message": "일"
+  },
+  "AM": {
+    "message": "오전"
+  },
+  "PM": {
+    "message": "오후"
+  },
+  "12hour": {
+    "message": "12 시간"
+  },
+  "24hour": {
+    "message": "24 시간"
+  },
+  "loading": {
+    "message": "로딩중..."
+  },
+  "original": {
+    "message": "기본"
+  },
+  "classic": {
+    "message": "고전"
+  },
+  "pink": {
+    "message": "핑크"
+  },
+  "ui1": {
+    "message": "고정 합니까?"
+  },
+  "ui2": {
+    "message": "방문목록에서 제거합니까?"
+  },
+  "ui3": {
+    "message": "최근 닫힌 탭 목록에서 제거합니까?"
+  },
+  "ui4": {
+    "message": "즐겨찾기를 해제합니까?"
+  },
+  "ui5": {
+    "message": "자주 방문한 목록에서 제거합니까?"
+  },
+  "ui6": {
+    "message": "고정을 해제합니까?"
+  },
+  "tips": {
+    "message": "활용 팁"
+  },
+  "tip1": {
+    "message": "팝업: 해당 아이템을 Ctrl키를 누른 상태에서 클릭하면 비활성 새탭으로 열립니다."
+  },
+  "tip2": {
+    "message": "톱니바퀴 아이콘을 클릭하시면 목록 아이템들의 삭제, 고정, 공유가 가능합니다."
+  },
+  "tip3": {
+    "message": "옵션: 입력란 선택시 방향키 위, 아래를 눌러 숫자 조정이 가능합니다."
+  },
+  "tip4": {
+    "message": "옵션: Enter키를 눌러 필터링 리스트에 추가가 가능합니다."
+  },
+  "tip5": {
+    "message": "방문목록: Shift키를 눌러 다수의 아이템 선택이 가능합니다."
+  },
+  "tip6": {
+    "message": "방문목록: 파란색 툴바의 버튼들을 사용하면 방문목록 아이템들의 표현 방식을 정할 수 있습니다."
+  }
+}

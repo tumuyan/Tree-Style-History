@@ -1,0 +1,39 @@
+
+#navigation-menu {
+	left: auto;
+	right: 0;
+}
+
+#navigation-menu h1 {
+  text-align: right;
+  direction: rtl;
+  margin-left: 0;
+  margin-right: 23px;
+}
+
+#history-container {
+	margin-left: 10px;
+	margin-right: 180px;
+}
+
+#calendar {
+	right: 190px;
+}
+
+#navigation-menu ul li a {
+  border-right: 6px solid #FFF;
+  border-left: 0 none;
+  padding-left: 0;
+  padding-right: 18px;
+}
+
+#rh-search {
+  background-position: 3px 3px;
+  text-align: right;
+  direction: rtl;
+}
+
+.tip-holder, #navigation-menu ul li {
+  text-align: right;
+  direction: rtl;
+}

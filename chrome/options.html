@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+<meta content="text/html; charset=utf-8" http-equiv="Content-Type">
+<title>Options | Recent History</title>
+<link rel="stylesheet" href="css/options.css">
+<script type="text/javascript" src="scripts/options-rtl.js"></script>
+<script type="text/javascript" src="scripts/moo.js"></script>
+<script type="text/javascript" src="scripts/func.js"></script>
+<script type="text/javascript" src="scripts/options.js"></script>
+</head>
+
+<body>
+  <div id="navigation-menu">
+    <h1 class="lang" data-lang-string="recentHistory"></h1>
+    <ul>
+      <li><a href="history2.html" class="lang" data-lang-string="treeOptions"></a></li>
+      <li><a href="history.html" class="lang" data-lang-string="allHistory"></a></li>
+      <li><a href="options.html" class="lang selected" data-lang-string="options"></a></li>
+    </ul>
+  </div>
+  <div id="options">
+    <div id="options-tabs">
+      <a id="tab-options" class="tab" href="#"><span class="lang" data-lang-string="options"></span></a>
+      <!-- <a id="tab-changelog" class="tab" href="#"><span>Changelog</span></a> -->
+      <a id="tab-about" class="tab" href="#"><span class="lang" data-lang-string="about"></span></a>
+    </div>
+    <div class="tab-content" id="tab-options-content">
+
+      <form id="main-options" action="#">
+        <h2 class="lang" data-lang-string="treeOptions"></h2>
+        <div class="tab-content" data-lang-string="treeOptionsDetail"></div>
+        <table>
+            <tr>
+              <td class="cell-left"><label for="loadrange" class="lang" data-lang-string="optionloadrange"></label></td>
+              <td class="cell-right"><input style="width:36px;" type="text" id="loadrange" name="loadrange" value=""><div id="loadrange-slider" class="slider"><div id="loadrange-slider-handle" class="handle"></div></div></td>
+            </tr>
+            <tr>
+              <td class="cell-left"><label for="loadrange2" class="lang" data-lang-string="optionloadrange2"></label></td>
+              <td class="cell-right"><input style="width:36px;" type="text" id="loadrange2" name="loadrange2" value=""><div id="loadrange2-slider" class="slider"><div id="loadrange2-slider-handle" class="handle"></div></div></td>
+            </tr>
+            <tr>
+              <td class="cell-left"><label for="loadrange3" class="lang" data-lang-string="optionloadrange3"></label></td>
+              <td class="cell-right"><input style="width:36px;" type="text" id="loadrange3" name="loadrange3" value=""><div id="loadrange3-slider" class="slider"><div id="loadrange3-slider-handle" class="handle"></div></div></td>
+            </tr>
+          </table>
+          <hr>
+          <h2 style="margin-top:0;" class="lang" data-lang-string="mainOptions"></h2>
+        <table>
+          <tr>
+            <td class="cell-left"><label for="rhitemsno" class="lang" data-lang-string="option1"></label><span id="help1" title="" class="help-tip" alt="Help"></span></td>
+            <td class="cell-right"><input style="width:36px;" type="text" id="rhitemsno" name="rhitemsno" value=""><div id="rhitemsno-slider" class="slider"><div id="rhitemsno-slider-handle" class="handle"></div></div></td>
+          </tr>
+          <tr>
+            <td class="cell-left"><label for="rctitemsno" class="lang" data-lang-string="option2"></label><span id="help2" title="" class="help-tip" alt="Help"></span></td>
+            <td class="cell-right"><input style="width:36px;" type="text" id="rctitemsno" name="rctitemsno" value=""><div id="rctitemsno-slider" class="slider"><div id="rctitemsno-slider-handle" class="handle"></div></div></td>
+          </tr>
+          <tr>
+            <td class="cell-left"><label for="mvitemsno" class="lang" data-lang-string="option3"></label><span id="help3" title="" class="help-tip" alt="Help"></span></td>
+            <td class="cell-right"><input style="width:36px;" type="text" id="mvitemsno" name="mvitemsno" value=""><div id="mvitemsno-slider" class="slider"><div id="mvitemsno-slider-handle" class="handle"></div></div></td>
+          </tr>
+          <tr>
+            <td class="cell-left"><label for="rbitemsno" class="lang" data-lang-string="option4"></label><span id="help4" title="" class="help-tip" alt="Help"></span></td>
+            <td class="cell-right"><input style="width:36px;" type="text" id="rbitemsno" name="rbitemsno" value=""><div id="rbitemsno-slider" class="slider"><div id="rbitemsno-slider-handle" class="handle"></div></div></td>
+          </tr>
+        </table>
+        <hr>
+        <table>
+          <tr>
+            <td class="cell-left"><label class="lang" data-lang-string="option5"></label><span id="help5" title="" class="help-tip" alt="Help"></span></td>
+            <td class="cell-right">
+              <ul id="rhlistorder"></ul>
+            </td>
+          </tr>
+        </table>
+        <hr>
+        <table>
+          <tr>
+            <td class="cell-left"><label for="rhhistorypage" class="lang" data-lang-string="option6"></label><span id="help6" title="" class="help-tip" alt="Help"></span></td>
+            <td class="cell-right">
+              <select name="rhhistorypage" id="rhhistorypage">
+                <option value="no">chrome://history/</option>
+                <option value="yes">chrome-extension://history/</option>
+              </select>
+            </td>
+          </tr>
+          <tr>
+            <td class="cell-left"><label for="rhdate" class="lang" data-lang-string="option7"></label><span id="help7" title="" class="help-tip" alt="Help"></span></td>
+            <td class="cell-right">
+              <select name="rhdate" id="rhdate">
+                <option value="mm/dd/yyyy">mm/dd/yyyy</option>
+                <option value="dd/mm/yyyy">dd/mm/yyyy</option>
+                <option value="yyyy/mm/dd">yyyy/mm/dd</option>
+              </select>
+            </td>
+          </tr>
+          <tr>
+            <td class="cell-left"><label for="rhtime" class="lang" data-lang-string="option20"></label><span id="help20" title="" class="help-tip" alt="Help"></span></td>
+            <td class="cell-right">
+              <select name="rhtime" id="rhtime">
+                <option value="12" class="lang" data-lang-string="12hour"></option>
+                <option value="24" class="lang" data-lang-string="24hour"></option>
+              </select>
+            </td>
+          </tr>
+          <tr>
+            <td class="cell-left"><label for="rhsearch" class="lang" data-lang-string="option8"></label><span id="help8" title="" class="help-tip" alt="Help"></span></td>
+            <td class="cell-right">
+              <select name="rhsearch" id="rhsearch">
+                <option value="yes" class="lang" data-lang-string="yes"></option>
+                <option value="no" class="lang" data-lang-string="no"></option>
+              </select>
+            </td>
+          </tr>
+        </table>
+      </form>
+      <h2 class="lang" data-lang-string="styleOptions"></h2>
+      <form id="style-options" action="#">
+        <table>
+          <tr>
+            <td class="cell-left"><label class="lang" data-lang-string="option9"></label></td>
+            <td class="cell-right">
+              <a href="#" id="rhitemstyle">
+                <img id="rhitemstyle-icon" alt="Favicon" src="images/preview-icon.gif">
+                <span id="rhitemstyle-title" title="Recent History - Google Chrome extension gallery">Recent History - Google Chrome extension gallery</span>
+                <span id="rhitemstyle-infourl"><span id="rhitemstyle-info"><span class="lang" data-lang-string="visits"></span>: 3<span id="rhitemstyle-sep"> | </span></span><span id="rhitemstyle-url">chrome.google.com/extensions/detail/fbmkfdfomhhlonpbnpiibloacemdhjjm</span></span>
+              </a>
+              <br>
+            </td>
+          </tr>
+          <tr>
+            <td class="cell-left"><label for="rhsshowurl" class="lang" data-lang-string="option10"></label><span id="help10" title="" class="help-tip" alt="Help"></span></td>
+            <td class="cell-right">
+              <select name="rhsshowurl" id="rhsshowurl">
+                <option value="yes" class="lang" data-lang-string="yes"></option>
+                <option value="no" class="lang" data-lang-string="no"></option>
+              </select>
+            </td>
+          </tr>
+          <tr>
+            <td class="cell-left"><label for="rhsshowsep" class="lang" data-lang-string="option11"></label><span id="help11" title="" class="help-tip" alt="Help"></span></td>
+            <td class="cell-right">
+              <select name="rhsshowsep" id="rhsshowsep">
+                <option value="yes" class="lang" data-lang-string="yes"></option>
+                <option value="no" class="lang" data-lang-string="no"></option>
+              </select>
+            </td>
+          </tr>
+          <tr>
+            <td class="cell-left"><label for="rhsshowext" class="lang" data-lang-string="option12"></label><span id="help12" title="" class="help-tip" alt="Help"></span></td>
+            <td class="cell-right">
+              <select name="rhsshowext" id="rhsshowext">
+                <option value="yes" class="lang" data-lang-string="yes"></option>
+                <option value="no" class="lang" data-lang-string="no"></option>
+              </select>
+            </td>
+          </tr>
+        </table>
+        <hr>
+        <table>
+          <tr>
+            <td class="cell-left"><label for="rhwidth" class="lang" data-lang-string="option15"></label></td>
+            <td class="cell-right"><input style="width:36px;" type="text" id="rhwidth" name="rhwidth" value=""><div id="rhwidth-slider" class="slider"><div id="rhwidth-slider-handle" class="handle"></div></div></td>
+          </tr>
+        </table>
+
+      </form>
+      <h2 class="lang" data-lang-string="advanceOptions"></h2>
+      <form id="advance-options" action="#">
+        <table>
+          <tr>
+            <td class="cell-left"><label class="lang" data-lang-string="option17"></label><span id="help17" title="" class="help-tip" alt="Help"></span></td>
+            <td class="cell-right"><div id="flist"><table id="flist-table"></table></div><input id="flist-add-i" style="width:200px;" type="text" value=""><input id="flist-add-b" type="button" value=" + "></td>
+          </tr>
+        </table>
+        <hr>
+        <table>
+          <tr>
+            <td class="cell-left"><label for="rhclick" class="lang" data-lang-string="option18"></label><span id="help18" title="" class="help-tip" alt="Help"></span></td>
+            <td class="cell-right">
+              <select name="rhclick" id="rhclick">
+                <option value="current" class="lang" data-lang-string="click1"></option>
+                <option value="newtab" class="lang" data-lang-string="click2"></option>
+                <option value="newbgtab" class="lang" data-lang-string="click3"></option>
+              </select>
+            </td>
+          </tr>
+        </table>
+      </form>
+      <h2>&nbsp;</h2>
+      <div id="save-holder"><input id="save" type="button" value=""></div>
+    </div>
+    <div class="tab-content" id="tab-translations-content">
+    <span class="lang" data-lang-string="translation1"></span>
+    <br><br>
+    <span class="lang" data-lang-string="translation2"></span>
+    <ol>
+      <li class="lang" data-lang-string="translation3"></li>
+      <li class="lang" data-lang-string="translation4"></li>
+      <li class="lang" data-lang-string="translation5"></li>
+      <li class="lang" data-lang-string="translation6"></li>
+      <li class="lang" data-lang-string="translation7"></li>
+    </ol>
+    <div id="translations-iframe"></div>
+    </div>
+<!--     <div class="tab-content" id="tab-changelog-content">
+      You can view the latest and past changes of Recent History below:
+      <p><b>3.0.5 (2019/12/17)</b> - Fixing browser action bug.</p>
+      <p><b>3.0.4 (2019/12/17)</b> - Fixed bug that prevented the extension's history page to be seen when clicking on "Show All History". Fixed a few styling issues.</p>
+      <p><b>3.0.3 (2015/03/20)</b> - Fixed styling issues on PCs.</p>
+      <p><b>3.0.2 (2015/03/16)</b> - The style of the history and options page have been tweaked.</p>
+      <p><b>3.0.1 (2015/03/12)</b> - The calendar history page has been enabled again.</p>
+      <p><b>3.0 (2015/03/10)</b> - Recent History is back and updated for the current version of Chrome. A few features have been removed/disabled for various reasons but the main popup feature still remains.</p>
+      <p><b>2.1.4.1 (2012/05/24)</b> - Fixed a few bugs. Added portuguese translation (Edgar Pinto).</p>
+      <p><b>2.1.4 (2012/01/02)</b> - Fixed 'hanging' issue when opening up the extension's history page (Ctrl+H).</p>
+      <p><b>2.1.3.1 (2011/08/06)</b> - Fixed bug in popup window for RTL languages. Thanks to al9ub7y for finding this bug.</p>
+      <p><b>2.1.3 (2011/07/29)</b> - Fixed a few bugs and issues with the extension. Added new translations, Italian (Corelita), Arabic (Omar Al9ub7y) and Dutch (Tijmen).</p>
+      <p><b>2.1.2 (2011/05/14)</b> - Fixed delay of popup scrollbar alignment and fixed issue of bookmark stars and tips not showing on the history page. A loading screen has been added for loading history items on the history page so that all the items and functions load up properly.</p>
+      <p><b>2.1.1 (2011/05/09)</b> - Added new translations, Portuguese (JÃºnior Messias), Indonesian (Sahya), French (DARÃ‰ Mathieu) and Spanish (Leo DÃ­az/Darkson). Fixed issue of vertical scrollbar hiding icons in the pop-up window. Fixed issue of long unresponsive loading times of the history page.</p>
+      <p><b>2.1 (2011/04/25)</b> - Added new translations, Russian (The DimoK), Korean (-SuNYouNgSaRaNg-) and Chinese (jason_jiang). Better support for languages which read from right to left has been added. You can now delete history from a specific date range by opening the calendar. Dates have been added to the changelog. More sorting options have been added to the history page. A custom share pop-up has been created for better usability. You can now middle click items in the pop-up. The date format (yyyy/mm/dd) has been added. The UI of the history page has been tweaked a little to give you a better experience. Finally an fun Easter Egg has been added, can you find it?</p>
+      <p>
+        <b>2.0 (2011/04/14)</b>
+        - Majority of the extension’s code has been rewritten making it far better than previous versions. Every aspect of Recent History has been improved in some way. Please read the list below for all changes made to Recent History.
+        <br><br>
+        <b>Pop-up:</b><br>
+        -	Tweaked layout and added a bit of colour.<br>
+        -	You can now change the theme of the pop-up.<br>
+        -	The search has been upgraded to instant search.<br>
+        -	Time has been removed as it is irrelevant.<br>
+        -	Items can be pinned, deleted and shared.<br>
+        -	You can change the style of the items.<br>
+        -	More icons have been added.<br>
+        -	You can now filter domains you do not want to see in the recent history list.<br>
+        -	The left click function can now be changed.
+        <br><br>
+        <b>Options Page:</b><br>
+        -	The options page has been overhauled with a new design and UI.<br>
+        -	Added a twitter page so you can keep up to date with what’s going on.<br>
+        -	Added a translations page so you can easily send new or better translations directly.
+        <br><br>
+        <b>History Page:</b><br>
+        -	The history page now also has instant search.<br>
+        -	You can choose what you would like to search.<br>
+        -	A Google web history styled calendar has been added for easier navigation.<br>
+        -	You can now shift select items for deleting.<br>
+        - Items can now be grouped according to domain names.
+      </p>
+      <p><b>1.9.6 (2011/02/04)</b> - Fixed issue of the middle-click function not working in the new stable release of chrome (9.0.597.84).</p>
+      <p><b>1.9.4 (2011/01/17)</b> - Fixed issue of the most visited list not being displayed. If this release is an upgrade for you then please restart Chrome for the fix to be applied.</p>
+      <p><b>1.9.3 (2010/12/29)</b> - Fixed a few bugs and cleaned up the code a little.</p>
+      <p><b>1.9.2 (2010/12/22)</b> - You can choose what icon you would like in the address bar for Recent History in the options page. Items which have been bookmarked will show a star next them in the history page. The middle-click function has been changed back so when you middle-click an item in the popup window the item opens in a new tab in the background and leaves the popup open.</p>
+      <p><b>1.9.1 (2010/12/20)</b> - Fixed a few bugs with the most visited list. The new history page is the default history manager but this can be changed in options. The new history page shows more search items from the past and not just from your recent history. A few things from the options page have been changed.</p>
+      <p><b>1.9 (2010/12/16)</b> - A brand new history page has been made which can be accessed by clicking on the "Show All History" link. Polish translation has been added, thanks to the person who commented. When you left click an item in the popup menu it opens in the current tab and if you middle click the item, it will open up in a new tab. When the popup or the history page is opened the search bar is focused so you search without clicking on the search field. The recently closed tabs history isn't deleted upon new browser session any more. When you hover over a recent history or most visited item you will be able to see the visit count for that URL. The most visited history items are now gathered from the past 4 weeks which should give you an accurate list of most visited URLs. You can also remove the URLs you do not want to show up in the most visited list in the options page. The popup should open up slightly quicker after you open it the first time. Lastly a few minor changes have been made here and there.</p>
+      <p><b>1.8.2 (2010/06/11)</b> - Fixed issue of the extension causing a high cpu load on some systems like Mac OS and Linux. Please make sure your using the latest stable version of Chrome.</p>
+      <p><b>1.8.1 (2010/06/06)</b> - Fixed issue of time being displayed even if the option is switched off.</p>
+      <p><b>1.8 (2010/06/06)</b> - Added new history API so the recent history you see is from chrome's actual history. This extension still needs to track your history for recently closed tabs however. I've added a recent bookmarks section also. Some options had to be removed due to either it not being allowed, better efficient coding and mainly due to the addition of chrome 5 APIs. Languages are still supported, however the only way you can use them is to install the locale version of chrome. This is the official way to support localization in chrome extensions. The history manager has been removed for now however I'm working on another new one which will act as your default history page.</p>
+      <p><b>1.7.4 (2010/05/25)</b> - Fixed issue of no favicons and titles showing up.</p>
+      <p><b>1.7.3 (2010/05/22)</b> - Added Portuguese translation (thanks to Maicon), the option to remove the time in the popup menu and increased limit for history items from 20 to 30.</p>
+      <p><b>1.7.2 (2010/05/09)</b> - Fixed issue of popup menu not showing up and recent history items being repeated. Added Arabic translation and corrected the Russian translation thanks to the guys who commented.</p>
+      <p><b>1.7.1 (2010/04/27)</b> - Fixed clear extension cache button on the popup menu.</p>
+      <p><b>1.7 (2010/04/25)</b> - Added most visited links, option to order the sections for the popup menu, option to remove the search box and a button on the menu to clear extension cache. You can now also input your own values in the options page. Fixed the search clear button being hidden by the scroll bar and fixed issue of repeated history items in the recently closed tabs section. Lastly the extension is now able to record your browsing history item before the page is fully loaded.</p>
+      <p><b>1.6 (2010/03/09)</b> - Added a search feature in the popup menu and you can now view a maximum of 100 history items in the history manager. Also fixed the issue of popup menu not showing up due to favicon url being in a restricted area (i.e. you have to be logged in).</p>
+      <p><b>1.5.4 (2010/02/28)</b> - Added "right click copy url" function when you right click on a history item in the popup menu. Increased maximum number of history items from 50 to 100. You can now show more recently closed tabs in the popup menu. Tips now show both title and url. Fixed "Recently closed tabs" section displaying wrong title/url.</p>
+      <p><b>1.5.3 (2010/02/26)</b> - Added Russian translation thanks to the person who commented.</p>
+      <p><b>1.5.2 (2010/02/25)</b> - Fixed issue of page going to the top after deleting history item and missing "Icon Size" translation text.</p>
+      <p><b>1.5.1 (2010/02/25)</b> - Fixed issue of not being able to delete history items with blank favicons.</p>
+      <p><b>1.5 (2010/02/24)</b> - Added a Recent History Manager which allows you to delete history items and search through them, buttons to the popup menu, Czech translation, option to change your icon and option to change width. Fixed utf-8 issue for some of the files.</p>
+      <p><b>1.4.1 (2010/02/18)</b> - Changed icon, thanks to the user who sent it to me and gave me the idea. Added German translation and updated the French translation, thanks to the guys who commented below.</p>
+      <p><b>1.4 (2010/02/11)</b> - Changed logo. Moved icon into the omnibar and you can choose what size icon you want to use. Added different language support and a blue background colour when hovering over a history item.</p>
+      <p><b>1.3.3 (2010/02/08)</b> - Added a new size icon, 19px x 19px (which is the size most extensions are using).</p>
+      <p><b>1.3.2 (2010/02/08)</b> - Fixed recently closed tabs cache for new users.</p>
+      <p><b>1.3.1 (2010/02/08)</b> - Fixed clear history on startup error.</p>
+      <p><b>1.3 (2010/02/08)</b> - Added option to clear history on startup. Fixed large favicons issue.</p>
+      <p><b>1.2.4 (2010/02/03)</b> - Fixed "Clear History" issue and added recent history title when recently closed tabs are disabled.</p>
+      <p><b>1.2.3 (2010/02/03)</b> - Fixed recently closed tabs cache from previous use of chrome.</p>
+      <p><b>1.2.2 (2010/02/03)</b> - Fixed recently closed tabs. It will reset every time you open up chrome.</p>
+      <p><b>1.2.1 (2010/02/03)</b> - Added 128px icon.</p>
+      <p><b>1.2 (2010/02/03)</b> - Fixed text padding on right hand side. Added "Recently Closed Tabs" section with the option to change the items number for it and disable it altogether. Fixed a few bugs and issues here and there.</p>
+      <p><b>1.1 (2010/02/02)</b> - No more duplicate history items.</p>
+      </div>
+     -->
+    <div class="tab-content" id="tab-about-content">
+      <h2 style="margin-top:0;" class="lang" data-lang-string="about"></h2>
+      <p><img class="non-retina" src="images/tree-128.png"><img class="retina" src="images/tree.png"></p>
+      <p id="rh-about-extension" class="lang" data-lang-string="aboutText"></p>
+      <p id="rh-about-policy" class="lang" data-lang-string="treePolicy"></p>
+      <hr/>
+      <p>
+        <b>Tree Style History: </b>3.1.0<br>
+        <b>Author: </b>Tumuyan<br><br>
+        <h2>License</h2>
+        <p>Tree Style History, Tree Style History (Toolbar Icon)</p>
+        <p>Copyright (c) 2021 Tumuyan &lt;tumuyan@gmail.com&gt;</p>
+        <p>This Work is based on Recent History and has get the 
+            permission to modify and publish the code as a new exttension. </p>
+        <p>THE EXTENSION IS PROVIDED IN THE HOPE THAT IT WILL BE USEFUL,
+        BUT WITHOUT ANY WARRANTY. IT IS PROVIDED "AS IS" WITHOUT
+        WARRANTY OF ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING,
+        BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+        AND FITNESS FOR A PARTICULAR PURPOSE.</p>
+        <p>IN NO EVENT UNLESS REQUIRED BY APPLICABLE LAW THE AUTHOR WILL
+        BE LIABLE TO YOU FOR DAMAGES, INCLUDING ANY GENERAL, SPECIAL,
+        INCIDENTAL OR CONSEQUENTIAL DAMAGES ARISING OUT OF THE USE OR
+        INABILITY TO USE THE PROGRAM (INCLUDING BUT NOT LIMITED TO LOSS
+        OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES SUSTAINED
+        BY YOU OR THIRD PARTIES OR A FAILURE OF THE PROGRAM TO OPERATE
+        WITH ANY OTHER PROGRAMS), EVEN IF THE AUTHOR HAS BEEN ADVISED
+        OF THE POSSIBILITY OF SUCH DAMAGES.</p>
+        <p>Attribution-Noncommercial-No Derivative Works 3.0 Unported<br>
+        http://creativecommons.org/licenses/by-nc-nd/3.0/</p>
+
+      <hr/>
+      <p>
+        <b>Recent History</b><br>
+        <b>Author: </b>Umar Sheikh<br>
+        <b>Author URI: </b><a target="_blank" href="http://umarsheikh.co.uk/">http://umarsheikh.co.uk/</a>
+      </p>
+      <h2>License</h2>
+			<p>Recent History, Recent History (Toolbar Icon)</p>
+			<p>Copyright (c) 2011-2015 Umar Sheikh &lt;hello@umarsheikh.co.uk&gt;</p>
+			<p>THE EXTENSION IS PROVIDED IN THE HOPE THAT IT WILL BE USEFUL,
+			BUT WITHOUT ANY WARRANTY. IT IS PROVIDED "AS IS" WITHOUT
+			WARRANTY OF ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING,
+			BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+			AND FITNESS FOR A PARTICULAR PURPOSE.</p>
+			<p>IN NO EVENT UNLESS REQUIRED BY APPLICABLE LAW THE AUTHOR WILL
+			BE LIABLE TO YOU FOR DAMAGES, INCLUDING ANY GENERAL, SPECIAL,
+			INCIDENTAL OR CONSEQUENTIAL DAMAGES ARISING OUT OF THE USE OR
+			INABILITY TO USE THE PROGRAM (INCLUDING BUT NOT LIMITED TO LOSS
+			OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES SUSTAINED
+			BY YOU OR THIRD PARTIES OR A FAILURE OF THE PROGRAM TO OPERATE
+			WITH ANY OTHER PROGRAMS), EVEN IF THE AUTHOR HAS BEEN ADVISED
+			OF THE POSSIBILITY OF SUCH DAMAGES.</p>
+			<p>Attribution-Noncommercial-No Derivative Works 3.0 Unported<br>
+			http://creativecommons.org/licenses/by-nc-nd/3.0/</p>
+    </div>
+  </div>
+</body>
+
+</html>

@@ -1,0 +1,311 @@
+{
+  "recentHistory": {
+    "message": "Hist\u00F3rico Recente"
+  },
+  "recentlyClosedTabs": {
+    "message": "Separadores Fechados Recentemente"
+  },
+  "mostVisited": {
+    "message": "Mais Visitados"
+  },
+  "recentBookmarks": {
+    "message": "Marcadores Recentes"
+  },
+  "pinned": {
+    "message": "Fixados"
+  },
+  "options": {
+    "message": "Op\u00E7\u00F5es"
+  },
+  "translations": {
+    "message": "Idiomas"
+  },
+  "about": {
+    "message": "Acerca"
+  },
+  "mainOptions": {
+    "message": "Op\u00E7\u00F5es Principais"
+  },
+  "styleOptions": {
+    "message": "Op\u00E7\u00F5es de Estilo"
+  },
+  "advanceOptions": {
+    "message": "Op\u00E7\u00F5es Avan\u00E7adas"
+  },
+  "option1": {
+    "message": "N\u00FAmero de Itens no Hist\u00F3rico Recente"
+  },
+  "option2": {
+    "message": "N\u00FAmero de Separadores Fechados Recentemente"
+  },
+  "option3": {
+    "message": "N\u00FAmero de Itens Mais Visitados"
+  },
+  "option4": {
+    "message": "N\u00FAmero de Itens Marcados Recentemente"
+  },
+  "option5": {
+    "message": "Ordem de Pop-up"
+  },
+  "option6": {
+    "message": "P\u00E1gina de Hist\u00F3rico"
+  },
+  "option7": {
+    "message": "Formato da Data"
+  },
+  "option8": {
+    "message": "Mostrar Barra de Pesquisa no Pop-up"
+  },
+  "option9": {
+    "message": "Pr\u00E9-visualizar"
+  },
+  "option10": {
+    "message": "Mostrar URL"
+  },
+  "option11": {
+    "message": "Mostrar Separador"
+  },
+  "option12": {
+    "message": "Mostrar Informa\u00E7\u00E3o Extra"
+  },
+  "option13": {
+    "message": "Mostrar Cores de Fundo"
+  },
+  "option14": {
+    "message": "\u00CDcone do Pop-up"
+  },
+  "option15": {
+    "message": "Largura do Pop-up"
+  },
+  "option16": {
+    "message": "Restaurar Itens para Mais Visitados"
+  },
+  "option17": {
+    "message": "Filtrar Dom\u00EDnios do Hist\u00F3rico Recente"
+  },
+  "option18": {
+    "message": "Ac\u00E7\u00E3o do Clique Esquerdo do Rato"
+  },
+  "option19": {
+    "message": "Tema do Pop-up"
+  },
+  "option20": {
+    "message": "Formato da Hora"
+  },
+  "option21": {
+    "message": "Marca\u00E7\u00E3o Redes Sociais"
+  },
+  "help1": {
+    "message": "O n\u00FAmero de itens do hist\u00F3rico recente no pop-up"
+  },
+  "help2": {
+    "message": "O n\u00FAmero de separadores fechados recentemente no pop-up"
+  },
+  "help3": {
+    "message": "O n\u00FAmero de itens mais visitados no pop-up"
+  },
+  "help4": {
+    "message": "O n\u00FAmero de itens marcados recentemente no pop-up"
+  },
+  "help5": {
+    "message": "A ordem na qual os itens especificados ser\u00E3o mostrados"
+  },
+  "help6": {
+    "message": "Qual o gestor de hist\u00F3rico que gostaria de utilizar"
+  },
+  "help7": {
+    "message": "O formato da data utilizado em toda a extens\u00E3o"
+  },
+  "help8": {
+    "message": "A barra de pesquisa situada no topo do pop-up"
+  },
+  "help10": {
+    "message": "O URL da p\u00E1gina situado abaixo do t\u00EDtulo do item"
+  },
+  "help11": {
+    "message": "O separador situado no fundo do item"
+  },
+  "help12": {
+    "message": "A informa\u00E7\u00E3o extra junto ao URL da p\u00E1gina (ex.: contagem de visitas e a data)"
+  },
+  "help13": {
+    "message": "Se activado ir\u00E1 exibir uma cor diferente para diferentes itens, como um URL marcado ou fixado no hist\u00F3rico recente e na lista de separadores fechados recentemente"
+  },
+  "help16": {
+    "message": "Os URLs que tenha removido da lista de mais visitados. Clique na cruz junto ao URL para restaur\u00E1-lo \u00E0 lista."
+  },
+  "help17": {
+    "message": "Os URLs a partir dos nomes de dom\u00EDnio que deseja que n\u00E3o sejam exibidos na lista de hist\u00F3rico recente, ex.: foobar.com"
+  },
+  "help18": {
+    "message": "O que deve acontecer quando clica num item no pop-up"
+  },
+  "help20": {
+    "message": "O formato da hora utilizado em toda a extens\u00E3o"
+  },
+  "help21": {
+    "message": "Isto adiciona um \u00EDcone de partilha pr\u00F3ximo aos itens no menu pop-up ao editar"
+  },
+  "yes": {
+    "message": "Sim"
+  },
+  "no": {
+    "message": "N\u00E3o"
+  },
+  "visits": {
+    "message": "Visitas"
+  },
+  "saveOptions": {
+    "message": "Guardar Op\u00E7\u00F5es"
+  },
+  "saving": {
+    "message": "A Guardar..."
+  },
+  "saved": {
+    "message": "Guardado!"
+  },
+  "click1": {
+    "message": "Abrir no separador actual"
+  },
+  "click2": {
+    "message": "Abrir num novo separador"
+  },
+  "click3": {
+    "message": "Abrir num novo separador no fundo"
+  },
+  "translation1": {
+    "message": "Por favor, ajude a melhorar o Recent History fornecendo-lhe novas e melhores tradu\u00E7\u00F5es. Esta p\u00E1gina foi criada para tornar mais f\u00E1cil a tradu\u00E7\u00E3o desta extens\u00E3o."
+  },
+  "translation2": {
+    "message": "Por favor, siga os passo abaixo, para traduzir o Recent History para o seu idioma:"
+  },
+  "translation3": {
+    "message": "V\u00E1 at\u00E9 o final desta p\u00E1gina."
+  },
+  "translation4": {
+    "message": "Preencha o formul\u00E1rio correctamente."
+  },
+  "translation5": {
+    "message": "Traduza todas as 'mensagens' para o seu idioma escolhido."
+  },
+  "translation6": {
+    "message": "Clique no bot\u00E3o 'Submit'."
+  },
+  "translation7": {
+    "message": "Conclu\u00EDdo!"
+  },
+  "aboutText": {
+    "message": "Esta extens\u00E3o exibe o seu hist\u00F3rico recente, separadores fechados recentemente, p\u00E1ginas mais visitadas e marcadores recentes num pop-up."
+  },
+  "successfullyInstalled": {
+    "message": "Instalado com Sucesso/Actualizado"
+  },
+  "whatsNew": {
+    "message": "O que h\u00E1 de novo?"
+  },
+  "version": {
+    "message": "Vers\u00E3o"
+  },
+  "showAllHistory": {
+    "message": "Mostrar Todo o Hist\u00F3rico"
+  },
+  "noResults": {
+    "message": "N\u00E3o foram encontrados resultados"
+  },
+  "currentHistory": {
+    "message": "Data Actual"
+  },
+  "allHistory": {
+    "message": "Todo o Hist\u00F3rico"
+  },
+  "totalHistoryItems": {
+    "message": "Total de Itens no Hist\u00F3rico:"
+  },
+  "deleteItems": {
+    "message": "Eliminar Itens"
+  },
+  "mondayLetter": {
+    "message": "S"
+  },
+  "tuesdayLetter": {
+    "message": "T"
+  },
+  "wednesdayLetter": {
+    "message": "Q"
+  },
+  "thursdayLetter": {
+    "message": "Q"
+  },
+  "fridayLetter": {
+    "message": "S"
+  },
+  "saturdayLetter": {
+    "message": "S"
+  },
+  "sundayLetter": {
+    "message": "D"
+  },
+  "AM": {
+    "message": "am"
+  },
+  "PM": {
+    "message": "pm"
+  },
+  "12hour": {
+    "message": "12 Horas"
+  },
+  "24hour": {
+    "message": "24 Horas"
+  },
+  "loading": {
+    "message": "A Carregar..."
+  },
+  "original": {
+    "message": "Original"
+  },
+  "classic": {
+    "message": "Cl\u00E1ssico"
+  },
+  "pink": {
+    "message": "Rosa"
+  },
+  "ui1": {
+    "message": "Fixar item?"
+  },
+  "ui2": {
+    "message": "Eliminar item do hist\u00F3rico?"
+  },
+  "ui3": {
+    "message": "Eliminar item dos separadores fechados recentemente?"
+  },
+  "ui4": {
+    "message": "Eliminar marcador?"
+  },
+  "ui5": {
+    "message": "Eliminar item da lista de mais visitados?"
+  },
+  "ui6": {
+    "message": "Desprender?"
+  },
+  "tips": {
+    "message": "Dicas \u00DAteis"
+  },
+  "tip1": {
+    "message": "Pop-up: Pode abrir um item num novo separador de fundo clicando sobre o item com o bot\u00E3o esquerdo enquanto pressiona e segura a tecla Ctrl."
+  },
+  "tip2": {
+    "message": "Pop-up: Ao clicar sobre as engrenagens junto ao t\u00EDtulo pode eliminar, fixar e partilhar itens."
+  },
+  "tip3": {
+    "message": "Op\u00E7\u00F5es: Pode premir as teclas de seta para cima e seta para baixo para aumentar e diminuir valores num\u00E9ricos quando o campo \u00E9 seleccionado."
+  },
+  "tip4": {
+    "message": "Op\u00E7\u00F5es: Pode premir Enter para adicionar um dom\u00EDnio para a lista filtrada."
+  },
+  "tip5": {
+    "message": "Hist\u00F3rico: Pode utilizar o Shift e clique para seleccionar v\u00E1rios itens."
+  },
+  "tip6": {
+    "message": "Hist\u00F3rico: Use os bot\u00F5es na barra de ferramentas azul para manipular a forma como os itens do hist\u00F3rico s\u00E3o mostrados."
+  }
+}

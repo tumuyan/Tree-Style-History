@@ -1,0 +1,311 @@
+{
+  "recentHistory": {
+    "message": "Ostatnio odwiedzone strony"
+  },
+  "recentlyClosedTabs": {
+    "message": "Ostatnio zamknięte karty"
+  },
+  "mostVisited": {
+    "message": "Najczęściej odwiedzane"
+  },
+  "recentBookmarks": {
+    "message": "Ostatnio otwarte zakładki"
+  },
+  "pinned": {
+    "message": "Ogłoszenie"
+  },
+  "options": {
+    "message": "Options"
+  },
+  "translations": {
+    "message": "Translations"
+  },
+  "about": {
+    "message": "About"
+  },
+  "mainOptions": {
+    "message": "Main Options"
+  },
+  "styleOptions": {
+    "message": "Style Options"
+  },
+  "advanceOptions": {
+    "message": "Advance Options"
+  },
+  "option1": {
+    "message": "Number of Recent History Items"
+  },
+  "option2": {
+    "message": "Number of Recently Closed Tabs"
+  },
+  "option3": {
+    "message": "Number of Most Visited Items"
+  },
+  "option4": {
+    "message": "Number of Recently Bookmarked Items"
+  },
+  "option5": {
+    "message": "Pop-up Order"
+  },
+  "option6": {
+    "message": "History Page"
+  },
+  "option7": {
+    "message": "Date Format"
+  },
+  "option8": {
+    "message": "Show Search Bar in Pop-up"
+  },
+  "option9": {
+    "message": "Preview"
+  },
+  "option10": {
+    "message": "Show URL"
+  },
+  "option11": {
+    "message": "Show Separator"
+  },
+  "option12": {
+    "message": "Show Extra Info"
+  },
+  "option13": {
+    "message": "Show Background Colours"
+  },
+  "option14": {
+    "message": "Pop-up Icon"
+  },
+  "option15": {
+    "message": "Pop-up Width"
+  },
+  "option16": {
+    "message": "Restore Items to Most Visited"
+  },
+  "option17": {
+    "message": "Filter Domains from Recent History"
+  },
+  "option18": {
+    "message": "Left Mouse Click Action"
+  },
+  "option19": {
+    "message": "Pop-up Theme"
+  },
+  "option20": {
+    "message": "Time Format"
+  },
+  "option21": {
+    "message": "Social Bookmarking"
+  },
+  "help1": {
+    "message": "The number of recent history items in the pop-up"
+  },
+  "help2": {
+    "message": "The number of recently closed tabs in the pop-up"
+  },
+  "help3": {
+    "message": "The number of most visited items in the pop-up"
+  },
+  "help4": {
+    "message": "The number of recently bookmarked items in the pop-up"
+  },
+  "help5": {
+    "message": "The order in which the specified items will be shown"
+  },
+  "help6": {
+    "message": "Which history manager you would like to use"
+  },
+  "help7": {
+    "message": "The format of the date used throughout the extension"
+  },
+  "help8": {
+    "message": "The search bar situated at the top of the pop-up"
+  },
+  "help10": {
+    "message": "The page URL situated below the item title"
+  },
+  "help11": {
+    "message": "The separator situated at the bottom of the item"
+  },
+  "help12": {
+    "message": "The extra information next to the page URL (i.e. visit count and date)"
+  },
+  "help13": {
+    "message": "If activated will display a different colour for different items such as a bookmarked or pinned URL in the recent history and recently closed tabs list"
+  },
+  "help16": {
+    "message": "The URLs you have removed from the most visited list. Click on the cross next to the URL to restore it to the list."
+  },
+  "help17": {
+    "message": "The URLs from the domain names you do not wish to be displayed in the recent history list, e.g. foobar.com"
+  },
+  "help18": {
+    "message": "What should happen when you click on an item in the pop-up"
+  },
+  "help20": {
+    "message": "The format of the time used throughout the extension"
+  },
+  "help21": {
+    "message": "This adds a share icon next to items in the pop-up when editing"
+  },
+  "yes": {
+    "message": "Yes"
+  },
+  "no": {
+    "message": "No"
+  },
+  "visits": {
+    "message": "Visits"
+  },
+  "saveOptions": {
+    "message": "Save Options"
+  },
+  "saving": {
+    "message": "Saving..."
+  },
+  "saved": {
+    "message": "Saved!"
+  },
+  "click1": {
+    "message": "Open in current tab"
+  },
+  "click2": {
+    "message": "Open in new tab"
+  },
+  "click3": {
+    "message": "Open in new background tab"
+  },
+  "translation1": {
+    "message": "Please help make Recent History better by providing new and better translations for it. This page has been created to make it easier for you to translate this extension."
+  },
+  "translation2": {
+    "message": "Please follow the steps below to translate Recent History into your language:"
+  },
+  "translation3": {
+    "message": "Scroll to the bottom of this page."
+  },
+  "translation4": {
+    "message": "Fill in the form correctly."
+  },
+  "translation5": {
+    "message": "Translate all the 'messages' into your chosen language."
+  },
+  "translation6": {
+    "message": "Click on the 'Submit' button."
+  },
+  "translation7": {
+    "message": "Done!"
+  },
+  "aboutText": {
+    "message": "This extension displays your recent history, recently closed tabs, most visited pages and recent bookmarks in a one click pop-up."
+  },
+  "successfullyInstalled": {
+    "message": "Successfully Installed/Updated"
+  },
+  "whatsNew": {
+    "message": "What's New?"
+  },
+  "version": {
+    "message": "Version"
+  },
+  "showAllHistory": {
+    "message": "Pokaż całą historię"
+  },
+  "noResults": {
+    "message": "No results found"
+  },
+  "currentHistory": {
+    "message": "Current Date"
+  },
+  "allHistory": {
+    "message": "All History"
+  },
+  "totalHistoryItems": {
+    "message": "Total History Items:"
+  },
+  "deleteItems": {
+    "message": "Delete Items"
+  },
+  "mondayLetter": {
+    "message": "M"
+  },
+  "tuesdayLetter": {
+    "message": "T"
+  },
+  "wednesdayLetter": {
+    "message": "W"
+  },
+  "thursdayLetter": {
+    "message": "T"
+  },
+  "fridayLetter": {
+    "message": "F"
+  },
+  "saturdayLetter": {
+    "message": "S"
+  },
+  "sundayLetter": {
+    "message": "S"
+  },
+  "AM": {
+    "message": "am"
+  },
+  "PM": {
+    "message": "pm"
+  },
+  "12hour": {
+    "message": "12 Hour"
+  },
+  "24hour": {
+    "message": "24 Hour"
+  },
+  "loading": {
+    "message": "Loading..."
+  },
+  "original": {
+    "message": "Original"
+  },
+  "classic": {
+    "message": "Classic"
+  },
+  "pink": {
+    "message": "Pink"
+  },
+  "ui1": {
+    "message": "Pin item?"
+  },
+  "ui2": {
+    "message": "Delete item from history?"
+  },
+  "ui3": {
+    "message": "Delete item from recently closed tabs?"
+  },
+  "ui4": {
+    "message": "Delete bookmark?"
+  },
+  "ui5": {
+    "message": "Delete item from the most visited list?"
+  },
+  "ui6": {
+    "message": "Unpin?"
+  },
+  "tips": {
+    "message": "Helpful Tips"
+  },
+  "tip1": {
+    "message": "Pop-up: You can open an item in a new background tab by left clicking the item while pressing and holding down Ctrl."
+  },
+  "tip2": {
+    "message": "Pop-up: By clicking on the cogs next to the titles you can delete, pin and share items."
+  },
+  "tip3": {
+    "message": "Options: You can press the up and down keys to increase and decrease numerical values when the field is selected."
+  },
+  "tip4": {
+    "message": "Options: You can press Enter to add a domain to the filtered list."
+  },
+  "tip5": {
+    "message": "History: You can use Shift click to select multiple items."
+  },
+  "tip6": {
+    "message": "History: Use the buttons in the blue toolbar to manipulate the way the history items are shown."
+  }
+}

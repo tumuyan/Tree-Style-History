@@ -1,0 +1,311 @@
+{
+  "recentHistory": {
+    "message": "Histórico Recente"
+  },
+  "recentlyClosedTabs": {
+    "message": "Tabs Fechadas Recentemente"
+  },
+  "mostVisited": {
+    "message": "Mais visitadas"
+  },
+  "recentBookmarks": {
+    "message": "Favoritos Recentes"
+  },
+  "pinned": {
+    "message": "Fixos"
+  },
+  "options": {
+    "message": "Opções"
+  },
+  "translations": {
+    "message": "Idiomas"
+  },
+  "about": {
+    "message": "Sobre"
+  },
+  "mainOptions": {
+    "message": "Opções principais"
+  },
+  "styleOptions": {
+    "message": "Opções de estilo"
+  },
+  "advanceOptions": {
+    "message": "Opções avançadas"
+  },
+  "option1": {
+    "message": "Quantidades de Itens Recentes no Histórico"
+  },
+  "option2": {
+    "message": "Quantidade de Tabs Fechadas Recentemente"
+  },
+  "option3": {
+    "message": "Quantidade de Itens Mais Vistos"
+  },
+  "option4": {
+    "message": "Quantidade de Itens Favoritos Recentes"
+  },
+  "option5": {
+    "message": "Ordem de Pop-up"
+  },
+  "option6": {
+    "message": "Página de Histórico"
+  },
+  "option7": {
+    "message": "Formato de Data"
+  },
+  "option8": {
+    "message": "Exibir Barra de Pesquisa no Pop-up"
+  },
+  "option9": {
+    "message": "Pré-visualizar"
+  },
+  "option10": {
+    "message": "Exibir URL"
+  },
+  "option11": {
+    "message": "Exibir Separador"
+  },
+  "option12": {
+    "message": "Exibir Informação Extra"
+  },
+  "option13": {
+    "message": "Exibir Cores de Fundo"
+  },
+  "option14": {
+    "message": "Ícone do Pop-up"
+  },
+  "option15": {
+    "message": "Largura do Pop-up"
+  },
+  "option16": {
+    "message": "Restaurar Itens Mais Vistos"
+  },
+  "option17": {
+    "message": "Filtrar Domínios do Histórico Recente"
+  },
+  "option18": {
+    "message": "Ação do Clique Esquerdo do Mouse"
+  },
+  "option19": {
+    "message": "Tema do Pop-up"
+  },
+  "option20": {
+    "message": "Formato de Hora"
+  },
+  "option21": {
+    "message": "Favoritando Social"
+  },
+  "help1": {
+    "message": "Quantidade de itens histórico recente do pop-up"
+  },
+  "help2": {
+    "message": "Quantidade de tabs fechadas recentemente no pop-up"
+  },
+  "help3": {
+    "message": "Quantidade de itens mais vistos no pop-up"
+  },
+  "help4": {
+    "message": "Quantidade de itens favoritados recentemente no pop-up"
+  },
+  "help5": {
+    "message": "Ordem que os itens serão exibidos"
+  },
+  "help6": {
+    "message": "Gerenciador de histórico a ser usado"
+  },
+  "help7": {
+    "message": "Formato de data a ser utilizado na extensão"
+  },
+  "help8": {
+    "message": "Barra de pesquisa situada no topo do pop-up"
+  },
+  "help10": {
+    "message": "URL da página situada abaixo do título do item"
+  },
+  "help11": {
+    "message": "Separador situado no final dos itens"
+  },
+  "help12": {
+    "message": "Informação extra próxmo a URL da página (ex.: contador de visita e data)"
+  },
+  "help13": {
+    "message": "Se ativado irá mostrar uma cor diferente para cada item, como uma URL marcado ou fixado no histórico recente e, recentemente, lista fechada guiasSe ativado irá exibir cores diferentes para diferentes itens como URL favoritas ou fixas no histórico recente e lista de tabs fechadas recentemente"
+  },
+  "help16": {
+    "message": "As URLs que foram removirdas da lista de mais vistiadas. Clique na crus próximo a URL para restaurar a lista."
+  },
+  "help17": {
+    "message": "As ULs de domínio que não serão exibidas no histórico recente, ex.: foobar.com"
+  },
+  "help18": {
+    "message": "O que irá acontecer quando houver clique em um item no menu pop-up"
+  },
+  "help20": {
+    "message": "Formato de Hora utilizado na extensão"
+  },
+  "help21": {
+    "message": "Adicionar um ícone de compartilhamento ao lado dos itens no menu pop-up durante a edição"
+  },
+  "yes": {
+    "message": "Sim"
+  },
+  "no": {
+    "message": "Não"
+  },
+  "visits": {
+    "message": "Visitas"
+  },
+  "saveOptions": {
+    "message": "Salvar opções"
+  },
+  "saving": {
+    "message": "Salvando..."
+  },
+  "saved": {
+    "message": "Salvo!"
+  },
+  "click1": {
+    "message": "Abrir na tab atual"
+  },
+  "click2": {
+    "message": "Abir em nova tab"
+  },
+  "click3": {
+    "message": "Abrir em tab de fundo"
+  },
+  "translation1": {
+    "message": "Por favor, ajude a melhorar o Recente Hostory melhorando e fornecendo novas traduções. Esta página foi criada para tornar mais fácil a tradução desta extensão."
+  },
+  "translation2": {
+    "message": "Por favor, siga os passo abaixo para traduzir o Recent History para seu idioma:"
+  },
+  "translation3": {
+    "message": "Vá para o final desta página."
+  },
+  "translation4": {
+    "message": "Preencha o formulário correntamente."
+  },
+  "translation5": {
+    "message": "Traduza todas as 'mensagens' para seu idioma."
+  },
+  "translation6": {
+    "message": "Clique no botão 'Enviar'."
+  },
+  "translation7": {
+    "message": "Feito!"
+  },
+  "aboutText": {
+    "message": "Esta extensão exibe seu histórico recente, tabs fechadas recentemente, páginas mais visitadas e favoritos recentes em um pop-up."
+  },
+  "successfullyInstalled": {
+    "message": "Sucesso ao Instalar/Atualizar"
+  },
+  "whatsNew": {
+    "message": "O que há de novo?"
+  },
+  "version": {
+    "message": "Versão"
+  },
+  "showAllHistory": {
+    "message": "Exibir todo histórico"
+  },
+  "noResults": {
+    "message": "Não foram encontrados resultados"
+  },
+  "currentHistory": {
+    "message": "Data atual"
+  },
+  "allHistory": {
+    "message": "Todo histórico"
+  },
+  "totalHistoryItems": {
+    "message": "Total de itens no histórico:"
+  },
+  "deleteItems": {
+    "message": "Apagar itens"
+  },
+  "mondayLetter": {
+    "message": "S"
+  },
+  "tuesdayLetter": {
+    "message": "T"
+  },
+  "wednesdayLetter": {
+    "message": "Q"
+  },
+  "thursdayLetter": {
+    "message": "Q"
+  },
+  "fridayLetter": {
+    "message": "S"
+  },
+  "saturdayLetter": {
+    "message": "S"
+  },
+  "sundayLetter": {
+    "message": "S"
+  },
+  "AM": {
+    "message": "am"
+  },
+  "PM": {
+    "message": "pm"
+  },
+  "12hour": {
+    "message": "12 Horas"
+  },
+  "24hour": {
+    "message": "24 Horas"
+  },
+  "loading": {
+    "message": "Carregando..."
+  },
+  "original": {
+    "message": "Original"
+  },
+  "classic": {
+    "message": "Clássico"
+  },
+  "pink": {
+    "message": "Pink"
+  },
+  "ui1": {
+    "message": "Fixar item?"
+  },
+  "ui2": {
+    "message": "Apagar item do histórico?"
+  },
+  "ui3": {
+    "message": "Apagar item das tabs fechadas recentemente?"
+  },
+  "ui4": {
+    "message": "Apagar favorito?"
+  },
+  "ui5": {
+    "message": "Apagar item da lista de mais visitados?"
+  },
+  "ui6": {
+    "message": "Desfixar?"
+  },
+  "tips": {
+    "message": "Dicas de ajuda"
+  },
+  "tip1": {
+    "message": "Pop-up: Pode-se abrir o item em uma tab de fundo clicando no item enquanto estiver pressionando ou segurando a tecla Ctrl."
+  },
+  "tip2": {
+    "message": "Pop-up: Ao clicar sobre as engrenagens ao lado do título você pode excluir, fixar e compartilhar itens."
+  },
+  "tip3": {
+    "message": "Opções: Pressione seta para cima ou para baixo para aumentar ou diminuir os valores do campo selecionado."
+  },
+  "tip4": {
+    "message": "Opções: Pressione Enter para adicionar o domínio no filtro."
+  },
+  "tip5": {
+    "message": "Histórico: Pode ser utilizado Shift para selecionar múltiplos itens."
+  },
+  "tip6": {
+    "message": "Histórico: Use os botões na barra azul para manipular os itens exibidos no histórico."
+  }
+}
