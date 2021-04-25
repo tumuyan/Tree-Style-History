@@ -1,7 +1,7 @@
 // Version
 
 function getVersion(){
-    return '3.0.5';
+    return '3.1.1';
   }
   
   
@@ -222,7 +222,9 @@ function getVersion(){
     $$('.help-tip').each(function(el){
       el.set('title', returnLang(el.get('id')));
     });
-    new Tips('.help-tip');
+    new Tips('.help-tip',{
+        className: 'custom_tip'
+        });
   }
   
   
@@ -292,6 +294,7 @@ function getVersion(){
     $('loadrange').set('value', localStorage['load-range'].toInt());
     $('loadrange2').set('value', localStorage['load-range2'].toInt());
     $('loadrange3').set('value', localStorage['load-range3'].toInt());
+    $('loadrange4').set('value', localStorage['load-range4'].toInt());
 
     mostVisitedBlocklist();
     filteredDomainsList();
@@ -383,6 +386,7 @@ function getVersion(){
     so['load-range'] = $('loadrange').get('value');
     so['load-range2'] = $('loadrange2').get('value');
     so['load-range3'] = $('loadrange3').get('value');
+    so['load-range4'] = $('loadrange4').get('value');
     so['mv-blocklist'] = mlil;
     so['rh-filtered'] = flil;
     so['rh-click'] = $('rhclick').getSelected().get('value');
@@ -1119,6 +1123,14 @@ function getVersion(){
     }
   }
   
+  function alertLoadingHistory(pm){
+    if(pm){
+      $('alert-holder').setStyle('display', 'none');
+      $('alert-holder-loading').setStyle('margin-top', '-15px');
+    }else if($('alert-holder').getStyle('display') == 'none'){
+      $('alert-holder').setStyle('display', 'block');
+    }
+  }
   
   // Date picker
   

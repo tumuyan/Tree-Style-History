@@ -414,3 +414,96 @@ input[type="button"]:active {
     background-size: 100%;
   }
 }
+
+
+
+
+@media (prefers-color-scheme: dark) {
+    body {
+        background:none;
+        background-color: rgb(74, 74, 74);
+        color:#fafafa;
+      }
+
+    img {
+        filter: brightness(0.8);
+    }
+
+    #main-table .ztree li a{
+        color: #e9e9e9;
+        padding: 3px 0px ;
+    }
+    h2,#navigation-menu h1, #main-table h1{
+        color: #fff;
+        border-bottom: 1px solid #999;
+    }
+    #navigation-menu ul li a {
+        border-left: 6px solid rgb(74, 74, 74);
+        color: #aaa;
+    }
+    #navigation-menu ul li a.selected {
+        border-color: #999;
+        color: #fff;
+    }
+
+    #options,#options-tabs .tab, #calendar {
+        background-color: #666;
+        border-top: 1px solid #999;
+        border: 1px solid #aaa;
+        color: #fff;
+      }
+
+     
+      #tab-options-content label,a , .group-title-host,#popup-footer-right a {
+        color: burlywood;
+      }
+
+      hr{
+
+          background-color: #999;
+      }
+    .custom_tip .tip-title {
+
+        background: none;
+        background-image: none;
+        background-color: #333;
+        -webkit-box-shadow: 0 0 4px #666;
+     }
+
+     #popup input, #options input,#history-container input,.slider,select,#calendar select,#main-table select,#rhlistorder li,  .dp_cal{
+        background-color: rgb(128, 128, 128);
+        background-image:none;
+        color: #fff;
+      }
+
+    #rh-bar {
+        border-top: 1px solid #666;
+        border-bottom: 1px solid #666;
+    }
+
+    #rh-views-insert .item-holder {
+        background-color: rgb(74, 74, 74) !important;
+    }
+
+    .item .title{
+        color: #fff  !important;
+    }
+
+    .group-title-toggle {
+        background: url(../images/toggle2.png) no-repeat left center;
+    }
+
+    #calendar #selected{
+        color: #fff;
+    }
+
+    #alert-holder {
+        background: #222;
+    }
+
+    .item:hover {
+        background-color: #666 !important;
+      }
+      
+    }
+

@@ -180,13 +180,13 @@ document.addEvent('domready', function(){
     
     $('rh-what').addEvent('change', function(){
       var sv = $('rh-search').get('value');
-      if(sv.length > 2){
+      if(sv.length + sv.replace(/[0-9a-zA-Z]+/g,'').length >= 2){
         history('search', sv);
       }
     });
     $('rh-search').addEvent('keyup', function(){
       var sv = this.get('value');
-      if(sv.length > 2){
+      if(sv.length + sv.replace(/[0-9a-zA-Z]+/g,'').length >= 2){
         history('search', sv);
         $('rh-views-insert').setStyle('display', 'none');
         $('rh-views-search-insert').setStyle('display', 'block');
@@ -217,5 +217,17 @@ document.addEvent('domready', function(){
     $('master-check-all').addEvent('click', function(){ selectHistoryItem(this, 'all'); });
     $('delete-range-button').addEvent('click', function(){ deleteHistoryItem('range'); });
     $('delete-button').addEvent('click', function(){ deleteHistoryItem('selected'); });
+
+
+        //获取Location对象的search属性值
+        var searchStr = location.search;
+
+        if(searchStr.length>1){
+            //由于searchStr属性值包括“?”，所以除去该字符
+            console.log("searchStr"+searchStr);
+            let site=new URI(searchStr.substr(1)).get('host');
+            $("rh-search").set('value',site);
+            history('search', site);
+        }
 
 });

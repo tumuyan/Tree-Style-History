@@ -79,6 +79,7 @@ request.onsuccess = function (event) {
     console.log("Success opening DB");
     db = event.target.result;
 
+    // only for debug
     if (db != undefined)
         loadDate(date.getTime(), 0);
 }
@@ -152,17 +153,18 @@ var mostVisitedInit = function () {
 // Default values
 
 var defaultValues = {
-    "rh-itemsno": 20,
-    "rct-itemsno": 0,
+    "rh-itemsno": 16,
+    "rct-itemsno": 4,
     "mv-itemsno": 0,
-    "rb-itemsno": 0,
+    "rb-itemsno": 3,
     "mv-blocklist": "false",
     "rh-historypage": "yes",
     "rh-date": "mm/dd/yyyy",
     "rh-width": "275px",
-    "load-range": 30,
-    "load-range2": 7,
+    "load-range": 7,
+    "load-range2": 3,
     "load-range3": 120,
+    "load-range4": 120,
     "rh-search": "yes",
     "rh-list-order": "rh-order,rct-order,rb-order,mv-order",
     "rh-time": "yes",
@@ -217,7 +219,7 @@ chrome.tabs.onCreated.addListener(function (tab) {
 
     // visitTab(tab,tabJson[tab.openerTabId.toString()]);
     if (localStorage['rh-historypage'] == 'yes' && (tab.url == 'chrome://history/' || ('pendingUrl' in tab && tab.pendingUrl == 'chrome://history/'))) {
-        chrome.tabs.update(tab.id, { url: 'history.html', selected: true }, function () { });
+        chrome.tabs.update(tab.id, { url: 'history2.html', selected: true }, function () { });
     }
 });
 chrome.tabs.onUpdated.addListener(function (id, info, tab) {
@@ -225,7 +227,7 @@ chrome.tabs.onUpdated.addListener(function (id, info, tab) {
 
     if (tabUrlJson[id.toString()] != tab.url) {
         if (tabUrlJson[id.toString()] != undefined)
-        tabUrl0Json[id.toString()] = tabUrlJson[id.toString()];
+            tabUrl0Json[id.toString()] = tabUrlJson[id.toString()];
         tabUrlJson[id.toString()] = tab.url;
     }
 
@@ -686,8 +688,8 @@ function add_tab_history(visitItems, i, loadfrom, url_item) {
         delete openerJson[tabstr];
     }
 
-    if(refer2==undefined)
-    refer2 = 0;
+    if (refer2 == undefined)
+        refer2 = 0;
 
     if (visitItems.length > i) {
 
@@ -709,11 +711,7 @@ function add_tab_history(visitItems, i, loadfrom, url_item) {
             console.log("visitJson " + refer + "->" + visitId + " transition=" + transition + " " + url_item.url);
         }
 
-        if (transition == "typed" || transition == "auto_bookmark" || transition == "keyword" || transition == "keyword_generated") {
-            // 输入、搜索、书签产生的新标签页，不需要refer
-            console.log("change refer " + visitItems[i].referringVisitId + "->0 cause transition=" + transition);
-            refer = 0;
-        } else if (refer == undefined || refer <= 0) {
+        if (refer == undefined || refer <= 0) {
             // 当refer信息为空，且可能由
             if (refer2 == undefined || refer2 <= 0) {
                 refer = 0;
@@ -724,18 +722,24 @@ function add_tab_history(visitItems, i, loadfrom, url_item) {
         }
 
 
-        if (idUrlJson[refer.toString()] == undefined){
-            if(idUrlJson[refer2.toString()] != undefined){
+        if (idUrlJson[refer.toString()] == undefined) {
+            if (idUrlJson[refer2.toString()] != undefined) {
                 refer = refer2;
-            }else if(transition == "link" && tabUrl0Json[tabstr]!=undefined){
+            } else if (transition == "link" && tabUrl0Json[tabstr] != undefined) {
                 refer = urlIdJson[tabUrl0Json[tabstr]];
             }
         }
-     
+
         if (refer == undefined)
             refer = 0;
-        console.log("refer referringVisitId/refer2/tabUrl0/result=" + visitItems[i].referringVisitId + "/" + refer2 + "/"+ idUrlJson[tabUrl0Json[tabstr]]+"/" + refer + ", transition=" + transition
-        +" "+tabUrl0Json[tabstr] + " ->" + url_item.url    );
+        else if (transition == "typed" || transition == "auto_bookmark" || transition == "keyword" || transition == "keyword_generated") {
+            // 输入、搜索、书签产生的新标签页，不需要refer
+            console.log("change refer " + visitItems[i].referringVisitId + "->0 cause transition=" + transition);
+            refer = 0;
+        }
+
+        console.log("refer referringVisitId/refer2/tabUrl0/result=" + visitItems[i].referringVisitId + "/" + refer2 + "/" + idUrlJson[tabUrl0Json[tabstr]] + "/" + refer + ", transition=" + transition
+            + " " + tabUrl0Json[tabstr] + " ->" + url_item.url);
 
         var transaction = db.transaction(["VisitItem"], "readwrite");
         transaction.oncomplete = function (event) {
@@ -764,3 +768,30 @@ function add_tab_history(visitItems, i, loadfrom, url_item) {
 
 
 }
+
+chrome.contextMenus.removeAll(()=>{
+    const options = {
+        type: 'normal',
+        id: 'tree_style_history_'+getVersion(),
+        title:returnLang('searchSite'),
+        contexts:["link","page"],
+        visible: true,
+    }
+    chrome.contextMenus.create(options, () => {
+        console.log('select '+options.id);
+    });
+    
+    chrome.contextMenus.onClicked.addListener((info) => {
+        // console.log(JSON.stringify(info));
+    
+        let url = info.linkUrl;
+        if(url!=undefined){
+            window.open('history.html?'+url); 
+        }else {
+            url = info.pageUrl;
+            if(url!=undefined){
+                window.open('history.html?'+url); 
+            }   
+        }
+    })
+});

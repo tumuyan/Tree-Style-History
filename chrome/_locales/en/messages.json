@@ -325,5 +325,9 @@
   },
   "treePolicy":{
       "message": "Tree Style History collects your browser history, analyzes it and stores it on your computer, and displays it when needed.<br/> It does not upload data to the Internet or share it with other programs. When you uninstall the extension, all saved data will be automatically erased by the browser. <br/>This Work is based on Recent History and has get the permission to modify and publish the code as a new exttension."
-  }
+  },"more":{
+    "message":"More"
+},"searchSite":{
+    "message":"search history in this site"
+}
 }

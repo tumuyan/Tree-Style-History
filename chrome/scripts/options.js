@@ -17,6 +17,9 @@ document.addEvent('domready', function () {
     }
     optionsFx.start(oo);
 
+
+    $("version").set('text',getVersion());
+
     // URL Vars
 
     var vars = getUrlVars();
@@ -63,6 +66,7 @@ document.addEvent('domready', function () {
     loadSlider('loadrange', 3, 300, 'load-range');
     loadSlider('loadrange2', 1, 30, 'load-range2');
     loadSlider('loadrange3', 0, 900, 'load-range3');
+    loadSlider('loadrange4', 0, 9000, 'load-range4');
     // Load translations iframe
     //$('translations-iframe').set('html', '<iframe onerror="$(\'translations-iframe\').set(\'text\', \'Currently Unavailable\');" src="http://www.indezinez.com/api/recenthistory/translations.php?l='+chrome.i18n.getMessage("@@ui_locale")+'" frameborder="0" scrolling="no"></iframe>');
     //$('translations-iframe').set('html', '<a target="_blank" href="http://www.indezinez.com/api/ext/recenthistory/?l='+chrome.i18n.getMessage("@@ui_locale")+'">Click here to view form</a> (opens external link in new window)');
@@ -72,5 +76,10 @@ document.addEvent('domready', function () {
     $('flist-add-b').addEvent('click', function () { addFilteredItem(); });
     $('flist-add-i').addEvent('keyup', function (event) { if (event.keyCode == 13) { addFilteredItem(); } });
     $('advance-options').addEvent('submit', function () { return false; });
+
+    var UserAgent = navigator.userAgent.toLowerCase();
+    if(UserAgent.indexOf('edg')>0){
+        $('select_history_page').set('style','display:none');
+    }
 
 });

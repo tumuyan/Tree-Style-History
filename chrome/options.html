@@ -2,209 +2,310 @@
 <html>
 
 <head>
-<meta content="text/html; charset=utf-8" http-equiv="Content-Type">
-<title>Options | Recent History</title>
-<link rel="stylesheet" href="css/options.css">
-<script type="text/javascript" src="scripts/options-rtl.js"></script>
-<script type="text/javascript" src="scripts/moo.js"></script>
-<script type="text/javascript" src="scripts/func.js"></script>
-<script type="text/javascript" src="scripts/options.js"></script>
+    <meta content="text/html; charset=utf-8" http-equiv="Content-Type">
+    <title>Options | Recent History</title>
+    <link rel="stylesheet" href="css/options.css">
+    <script type="text/javascript" src="scripts/options-rtl.js"></script>
+    <script type="text/javascript" src="scripts/moo.js"></script>
+    <script type="text/javascript" src="scripts/func.js"></script>
+    <script type="text/javascript" src="scripts/options.js"></script>
 </head>
 
 <body>
-  <div id="navigation-menu">
-    <h1 class="lang" data-lang-string="recentHistory"></h1>
-    <ul>
-      <li><a href="history2.html" class="lang" data-lang-string="treeOptions"></a></li>
-      <li><a href="history.html" class="lang" data-lang-string="allHistory"></a></li>
-      <li><a href="options.html" class="lang selected" data-lang-string="options"></a></li>
-    </ul>
-  </div>
-  <div id="options">
-    <div id="options-tabs">
-      <a id="tab-options" class="tab" href="#"><span class="lang" data-lang-string="options"></span></a>
-      <!-- <a id="tab-changelog" class="tab" href="#"><span>Changelog</span></a> -->
-      <a id="tab-about" class="tab" href="#"><span class="lang" data-lang-string="about"></span></a>
+    <div id="navigation-menu">
+        <h1 class="lang" data-lang-string="recentHistory"></h1>
+        <ul>
+            <li><a href="history2.html" class="lang" data-lang-string="treeOptions"></a></li>
+            <li><a href="history.html" class="lang" data-lang-string="allHistory"></a></li>
+            <li><a href="options.html" class="lang selected" data-lang-string="options"></a></li>
+        </ul>
     </div>
-    <div class="tab-content" id="tab-options-content">
+    <div id="options">
+        <div id="options-tabs">
+            <a id="tab-options" class="tab" href="#"><span class="lang" data-lang-string="options"></span></a>
+            <!-- <a id="tab-changelog" class="tab" href="#"><span>Changelog</span></a> -->
+            <a id="tab-about" class="tab" href="#"><span class="lang" data-lang-string="about"></span></a>
+        </div>
+        <div class="tab-content" id="tab-options-content">
 
-      <form id="main-options" action="#">
-        <h2 class="lang" data-lang-string="treeOptions"></h2>
-        <div class="tab-content" data-lang-string="treeOptionsDetail"></div>
-        <table>
-            <tr>
-              <td class="cell-left"><label for="loadrange" class="lang" data-lang-string="optionloadrange"></label></td>
-              <td class="cell-right"><input style="width:36px;" type="text" id="loadrange" name="loadrange" value=""><div id="loadrange-slider" class="slider"><div id="loadrange-slider-handle" class="handle"></div></div></td>
-            </tr>
-            <tr>
-              <td class="cell-left"><label for="loadrange2" class="lang" data-lang-string="optionloadrange2"></label></td>
-              <td class="cell-right"><input style="width:36px;" type="text" id="loadrange2" name="loadrange2" value=""><div id="loadrange2-slider" class="slider"><div id="loadrange2-slider-handle" class="handle"></div></div></td>
-            </tr>
-            <tr>
-              <td class="cell-left"><label for="loadrange3" class="lang" data-lang-string="optionloadrange3"></label></td>
-              <td class="cell-right"><input style="width:36px;" type="text" id="loadrange3" name="loadrange3" value=""><div id="loadrange3-slider" class="slider"><div id="loadrange3-slider-handle" class="handle"></div></div></td>
-            </tr>
-          </table>
-          <hr>
-          <h2 style="margin-top:0;" class="lang" data-lang-string="mainOptions"></h2>
-        <table>
-          <tr>
-            <td class="cell-left"><label for="rhitemsno" class="lang" data-lang-string="option1"></label><span id="help1" title="" class="help-tip" alt="Help"></span></td>
-            <td class="cell-right"><input style="width:36px;" type="text" id="rhitemsno" name="rhitemsno" value=""><div id="rhitemsno-slider" class="slider"><div id="rhitemsno-slider-handle" class="handle"></div></div></td>
-          </tr>
-          <tr>
-            <td class="cell-left"><label for="rctitemsno" class="lang" data-lang-string="option2"></label><span id="help2" title="" class="help-tip" alt="Help"></span></td>
-            <td class="cell-right"><input style="width:36px;" type="text" id="rctitemsno" name="rctitemsno" value=""><div id="rctitemsno-slider" class="slider"><div id="rctitemsno-slider-handle" class="handle"></div></div></td>
-          </tr>
-          <tr>
-            <td class="cell-left"><label for="mvitemsno" class="lang" data-lang-string="option3"></label><span id="help3" title="" class="help-tip" alt="Help"></span></td>
-            <td class="cell-right"><input style="width:36px;" type="text" id="mvitemsno" name="mvitemsno" value=""><div id="mvitemsno-slider" class="slider"><div id="mvitemsno-slider-handle" class="handle"></div></div></td>
-          </tr>
-          <tr>
-            <td class="cell-left"><label for="rbitemsno" class="lang" data-lang-string="option4"></label><span id="help4" title="" class="help-tip" alt="Help"></span></td>
-            <td class="cell-right"><input style="width:36px;" type="text" id="rbitemsno" name="rbitemsno" value=""><div id="rbitemsno-slider" class="slider"><div id="rbitemsno-slider-handle" class="handle"></div></div></td>
-          </tr>
-        </table>
-        <hr>
-        <table>
-          <tr>
-            <td class="cell-left"><label class="lang" data-lang-string="option5"></label><span id="help5" title="" class="help-tip" alt="Help"></span></td>
-            <td class="cell-right">
-              <ul id="rhlistorder"></ul>
-            </td>
-          </tr>
-        </table>
-        <hr>
-        <table>
-          <tr>
-            <td class="cell-left"><label for="rhhistorypage" class="lang" data-lang-string="option6"></label><span id="help6" title="" class="help-tip" alt="Help"></span></td>
-            <td class="cell-right">
-              <select name="rhhistorypage" id="rhhistorypage">
-                <option value="no">chrome://history/</option>
-                <option value="yes">chrome-extension://history/</option>
-              </select>
-            </td>
-          </tr>
-          <tr>
-            <td class="cell-left"><label for="rhdate" class="lang" data-lang-string="option7"></label><span id="help7" title="" class="help-tip" alt="Help"></span></td>
-            <td class="cell-right">
-              <select name="rhdate" id="rhdate">
-                <option value="mm/dd/yyyy">mm/dd/yyyy</option>
-                <option value="dd/mm/yyyy">dd/mm/yyyy</option>
-                <option value="yyyy/mm/dd">yyyy/mm/dd</option>
-              </select>
-            </td>
-          </tr>
-          <tr>
-            <td class="cell-left"><label for="rhtime" class="lang" data-lang-string="option20"></label><span id="help20" title="" class="help-tip" alt="Help"></span></td>
-            <td class="cell-right">
-              <select name="rhtime" id="rhtime">
-                <option value="12" class="lang" data-lang-string="12hour"></option>
-                <option value="24" class="lang" data-lang-string="24hour"></option>
-              </select>
-            </td>
-          </tr>
-          <tr>
-            <td class="cell-left"><label for="rhsearch" class="lang" data-lang-string="option8"></label><span id="help8" title="" class="help-tip" alt="Help"></span></td>
-            <td class="cell-right">
-              <select name="rhsearch" id="rhsearch">
-                <option value="yes" class="lang" data-lang-string="yes"></option>
-                <option value="no" class="lang" data-lang-string="no"></option>
-              </select>
-            </td>
-          </tr>
-        </table>
-      </form>
-      <h2 class="lang" data-lang-string="styleOptions"></h2>
-      <form id="style-options" action="#">
-        <table>
-          <tr>
-            <td class="cell-left"><label class="lang" data-lang-string="option9"></label></td>
-            <td class="cell-right">
-              <a href="#" id="rhitemstyle">
-                <img id="rhitemstyle-icon" alt="Favicon" src="images/preview-icon.gif">
-                <span id="rhitemstyle-title" title="Recent History - Google Chrome extension gallery">Recent History - Google Chrome extension gallery</span>
-                <span id="rhitemstyle-infourl"><span id="rhitemstyle-info"><span class="lang" data-lang-string="visits"></span>: 3<span id="rhitemstyle-sep"> | </span></span><span id="rhitemstyle-url">chrome.google.com/extensions/detail/fbmkfdfomhhlonpbnpiibloacemdhjjm</span></span>
-              </a>
-              <br>
-            </td>
-          </tr>
-          <tr>
-            <td class="cell-left"><label for="rhsshowurl" class="lang" data-lang-string="option10"></label><span id="help10" title="" class="help-tip" alt="Help"></span></td>
-            <td class="cell-right">
-              <select name="rhsshowurl" id="rhsshowurl">
-                <option value="yes" class="lang" data-lang-string="yes"></option>
-                <option value="no" class="lang" data-lang-string="no"></option>
-              </select>
-            </td>
-          </tr>
-          <tr>
-            <td class="cell-left"><label for="rhsshowsep" class="lang" data-lang-string="option11"></label><span id="help11" title="" class="help-tip" alt="Help"></span></td>
-            <td class="cell-right">
-              <select name="rhsshowsep" id="rhsshowsep">
-                <option value="yes" class="lang" data-lang-string="yes"></option>
-                <option value="no" class="lang" data-lang-string="no"></option>
-              </select>
-            </td>
-          </tr>
-          <tr>
-            <td class="cell-left"><label for="rhsshowext" class="lang" data-lang-string="option12"></label><span id="help12" title="" class="help-tip" alt="Help"></span></td>
-            <td class="cell-right">
-              <select name="rhsshowext" id="rhsshowext">
-                <option value="yes" class="lang" data-lang-string="yes"></option>
-                <option value="no" class="lang" data-lang-string="no"></option>
-              </select>
-            </td>
-          </tr>
-        </table>
-        <hr>
-        <table>
-          <tr>
-            <td class="cell-left"><label for="rhwidth" class="lang" data-lang-string="option15"></label></td>
-            <td class="cell-right"><input style="width:36px;" type="text" id="rhwidth" name="rhwidth" value=""><div id="rhwidth-slider" class="slider"><div id="rhwidth-slider-handle" class="handle"></div></div></td>
-          </tr>
-        </table>
+            <form id="main-options" action="#">
+                <h2 class="lang" data-lang-string="treeOptions"></h2>
+                <div class="tab-content" data-lang-string="treeOptionsDetail"></div>
+                <table>
+                    <tr>
+                        <td class="cell-left">
+                            <label for="loadrange" class="lang" data-lang-string="optionloadrange"></label>
+                            <span id="help22" title="" class="help-tip" alt="Help"></span>
+                        </td>
+                        <td class="cell-right">
+                            <input style="width:36px;" type="text" id="loadrange" name="loadrange" value="">
+                            <div id="loadrange-slider" class="slider">
+                                <div id="loadrange-slider-handle" class="handle"></div>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="cell-left">
+                            <label for="loadrange2" class="lang" data-lang-string="optionloadrange2"></label>
+                        </td>
+                        <td class="cell-right">
+                            <input style="width:36px;" type="text" id="loadrange2" name="loadrange2" value="">
+                            <div id="loadrange2-slider" class="slider">
+                                <div id="loadrange2-slider-handle" class="handle"></div>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="cell-left">
+                            <label for="loadrange4" class="lang" data-lang-string="optionloadrange4"></label>
+                            <span id="help25" title="" class="help-tip" alt="Help"></span>
+                        </td>
+                        <td class="cell-right">
+                            <input style="width:36px;" type="text" id="loadrange4" name="loadrange4" value="">
+                            <div id="loadrange4-slider" class="slider">
+                                <div id="loadrange4-slider-handle" class="handle"></div>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="cell-left">
+                            <label for="loadrange3" class="lang" data-lang-string="optionloadrange3"></label>
+                            <span id="help24" title="" class="help-tip" alt="Help"></span>
+                        </td>
+                        <td class="cell-right">
+                            <input style="width:36px;" type="text" id="loadrange3" name="loadrange3" value="">
+                            <div id="loadrange3-slider" class="slider">
+                                <div id="loadrange3-slider-handle" class="handle"></div>
+                            </div>
+                        </td>
+                    </tr>
 
-      </form>
-      <h2 class="lang" data-lang-string="advanceOptions"></h2>
-      <form id="advance-options" action="#">
-        <table>
-          <tr>
-            <td class="cell-left"><label class="lang" data-lang-string="option17"></label><span id="help17" title="" class="help-tip" alt="Help"></span></td>
-            <td class="cell-right"><div id="flist"><table id="flist-table"></table></div><input id="flist-add-i" style="width:200px;" type="text" value=""><input id="flist-add-b" type="button" value=" + "></td>
-          </tr>
-        </table>
-        <hr>
-        <table>
-          <tr>
-            <td class="cell-left"><label for="rhclick" class="lang" data-lang-string="option18"></label><span id="help18" title="" class="help-tip" alt="Help"></span></td>
-            <td class="cell-right">
-              <select name="rhclick" id="rhclick">
-                <option value="current" class="lang" data-lang-string="click1"></option>
-                <option value="newtab" class="lang" data-lang-string="click2"></option>
-                <option value="newbgtab" class="lang" data-lang-string="click3"></option>
-              </select>
-            </td>
-          </tr>
-        </table>
-      </form>
-      <h2>&nbsp;</h2>
-      <div id="save-holder"><input id="save" type="button" value=""></div>
-    </div>
-    <div class="tab-content" id="tab-translations-content">
-    <span class="lang" data-lang-string="translation1"></span>
-    <br><br>
-    <span class="lang" data-lang-string="translation2"></span>
-    <ol>
-      <li class="lang" data-lang-string="translation3"></li>
-      <li class="lang" data-lang-string="translation4"></li>
-      <li class="lang" data-lang-string="translation5"></li>
-      <li class="lang" data-lang-string="translation6"></li>
-      <li class="lang" data-lang-string="translation7"></li>
-    </ol>
-    <div id="translations-iframe"></div>
-    </div>
-<!--     <div class="tab-content" id="tab-changelog-content">
+                    <tr id='select_history_page'>
+                        <td class="cell-left"><label for="rhhistorypage" class="lang"
+                                data-lang-string="option6"></label><span id="help6" title="" class="help-tip"
+                                alt="Help"></span></td>
+                        <td class="cell-right">
+                            <select name="rhhistorypage" id="rhhistorypage">
+                                <option value="no">chrome://history/</option>
+                                <option value="yes">Tree Style History</option>
+                            </select>
+                        </td>
+                    </tr>
+                </table>
+                <hr>
+                <h2 style="margin-top:0;" class="lang" data-lang-string="mainOptions"></h2>
+                <table>
+                    <tr>
+                        <td class="cell-left">
+                            <label for="rhitemsno" class="lang" data-lang-string="option1"></label>
+                            <span id="help1" title="" class="help-tip" alt="Help"></span>
+                        </td>
+                        <td class="cell-right">
+                            <input style="width:36px;" type="text" id="rhitemsno" name="rhitemsno" value="">
+                            <div id="rhitemsno-slider" class="slider">
+                                <div id="rhitemsno-slider-handle" class="handle"></div>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="cell-left">
+                            <label for="rctitemsno" class="lang" data-lang-string="option2"></label>
+                            <span id="help2" title="" class="help-tip" alt="Help"></span>
+                        </td>
+                        <td class="cell-right">
+                            <input style="width:36px;" type="text" id="rctitemsno" name="rctitemsno" value="">
+                            <div id="rctitemsno-slider" class="slider">
+                                <div id="rctitemsno-slider-handle" class="handle"></div>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="cell-left">
+                            <label for="mvitemsno" class="lang" data-lang-string="option3"></label>
+                            <span id="help3" title="" class="help-tip" alt="Help"></span>
+                        </td>
+                        <td class="cell-right">
+                            <input style="width:36px;" type="text" id="mvitemsno" name="mvitemsno" value="">
+                            <div id="mvitemsno-slider" class="slider">
+                                <div id="mvitemsno-slider-handle" class="handle"></div>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="cell-left">
+                            <label for="rbitemsno" class="lang" data-lang-string="option4"></label>
+                            <span id="help4" title="" class="help-tip" alt="Help"></span>
+                        </td>
+                        <td class="cell-right">
+                            <input style="width:36px;" type="text" id="rbitemsno" name="rbitemsno" value="">
+                            <div id="rbitemsno-slider" class="slider">
+                                <div id="rbitemsno-slider-handle" class="handle"></div>
+                            </div>
+                        </td>
+                    </tr>
+                </table>
+                <hr>
+                <table>
+                    <tr>
+                        <td class="cell-left"><label class="lang" data-lang-string="option5"></label><span id="help5"
+                                title="" class="help-tip" alt="Help"></span></td>
+                        <td class="cell-right">
+                            <ul id="rhlistorder"></ul>
+                        </td>
+                    </tr>
+                </table>
+                <hr>
+                <table>
+
+                    <tr>
+                        <td class="cell-left"><label for="rhdate" class="lang" data-lang-string="option7"></label><span
+                                id="help7" title="" class="help-tip" alt="Help"></span></td>
+                        <td class="cell-right">
+                            <select name="rhdate" id="rhdate">
+                                <option value="mm/dd/yyyy">mm/dd/yyyy</option>
+                                <option value="dd/mm/yyyy">dd/mm/yyyy</option>
+                                <option value="yyyy/mm/dd">yyyy/mm/dd</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="cell-left"><label for="rhtime" class="lang" data-lang-string="option20"></label><span
+                                id="help20" title="" class="help-tip" alt="Help"></span></td>
+                        <td class="cell-right">
+                            <select name="rhtime" id="rhtime">
+                                <option value="12" class="lang" data-lang-string="12hour"></option>
+                                <option value="24" class="lang" data-lang-string="24hour"></option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="cell-left"><label for="rhsearch" class="lang"
+                                data-lang-string="option8"></label><span id="help8" title="" class="help-tip"
+                                alt="Help"></span></td>
+                        <td class="cell-right">
+                            <select name="rhsearch" id="rhsearch">
+                                <option value="yes" class="lang" data-lang-string="yes"></option>
+                                <option value="no" class="lang" data-lang-string="no"></option>
+                            </select>
+                        </td>
+                    </tr>
+                </table>
+            </form>
+            <h2 class="lang" data-lang-string="styleOptions"></h2>
+            <form id="style-options" action="#">
+                <table>
+                    <tr>
+                        <td class="cell-left"><label class="lang" data-lang-string="option9"></label></td>
+                        <td class="cell-right">
+                            <a href="#" id="rhitemstyle">
+                                <img id="rhitemstyle-icon" alt="Favicon" src="images/preview-icon.gif">
+                                <span id="rhitemstyle-title"
+                                    title="Recent History - Google Chrome extension gallery">Recent History - Google
+                                    Chrome extension gallery</span>
+                                <span id="rhitemstyle-infourl"><span id="rhitemstyle-info"><span class="lang"
+                                            data-lang-string="visits"></span>: 3<span id="rhitemstyle-sep"> |
+                                        </span></span><span
+                                        id="rhitemstyle-url">chrome.google.com/extensions/detail/fbmkfdfomhhlonpbnpiibloacemdhjjm</span></span>
+                            </a>
+                            <br>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="cell-left"><label for="rhsshowurl" class="lang"
+                                data-lang-string="option10"></label><span id="help10" title="" class="help-tip"
+                                alt="Help"></span></td>
+                        <td class="cell-right">
+                            <select name="rhsshowurl" id="rhsshowurl">
+                                <option value="yes" class="lang" data-lang-string="yes"></option>
+                                <option value="no" class="lang" data-lang-string="no"></option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="cell-left"><label for="rhsshowsep" class="lang"
+                                data-lang-string="option11"></label><span id="help11" title="" class="help-tip"
+                                alt="Help"></span></td>
+                        <td class="cell-right">
+                            <select name="rhsshowsep" id="rhsshowsep">
+                                <option value="yes" class="lang" data-lang-string="yes"></option>
+                                <option value="no" class="lang" data-lang-string="no"></option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="cell-left"><label for="rhsshowext" class="lang"
+                                data-lang-string="option12"></label><span id="help12" title="" class="help-tip"
+                                alt="Help"></span></td>
+                        <td class="cell-right">
+                            <select name="rhsshowext" id="rhsshowext">
+                                <option value="yes" class="lang" data-lang-string="yes"></option>
+                                <option value="no" class="lang" data-lang-string="no"></option>
+                            </select>
+                        </td>
+                    </tr>
+                </table>
+                <hr>
+                <table>
+                    <tr>
+                        <td class="cell-left"><label for="rhwidth" class="lang" data-lang-string="option15"></label>
+                        </td>
+                        <td class="cell-right"><input style="width:36px;" type="text" id="rhwidth" name="rhwidth"
+                                value="">
+                            <div id="rhwidth-slider" class="slider">
+                                <div id="rhwidth-slider-handle" class="handle"></div>
+                            </div>
+                        </td>
+                    </tr>
+                </table>
+
+            </form>
+            <h2 class="lang" data-lang-string="advanceOptions"></h2>
+            <form id="advance-options" action="#">
+                <table>
+                    <tr>
+                        <td class="cell-left"><label class="lang" data-lang-string="option17"></label><span id="help17"
+                                title="" class="help-tip" alt="Help"></span></td>
+                        <td class="cell-right">
+                            <div id="flist">
+                                <table id="flist-table"></table>
+                            </div><input id="flist-add-i" style="width:200px;" type="text" value=""><input
+                                id="flist-add-b" type="button" value=" + ">
+                        </td>
+                    </tr>
+                </table>
+                <hr>
+                <table>
+                    <tr>
+                        <td class="cell-left"><label for="rhclick" class="lang"
+                                data-lang-string="option18"></label><span id="help18" title="" class="help-tip"
+                                alt="Help"></span></td>
+                        <td class="cell-right">
+                            <select name="rhclick" id="rhclick">
+                                <option value="current" class="lang" data-lang-string="click1"></option>
+                                <option value="newtab" class="lang" data-lang-string="click2"></option>
+                                <option value="newbgtab" class="lang" data-lang-string="click3"></option>
+                            </select>
+                        </td>
+                    </tr>
+                </table>
+            </form>
+            <h2>&nbsp;</h2>
+            <div id="save-holder"><input id="save" type="button" value=""></div>
+        </div>
+        <div class="tab-content" id="tab-translations-content">
+            <span class="lang" data-lang-string="translation1"></span>
+            <br><br>
+            <span class="lang" data-lang-string="translation2"></span>
+            <ol>
+                <li class="lang" data-lang-string="translation3"></li>
+                <li class="lang" data-lang-string="translation4"></li>
+                <li class="lang" data-lang-string="translation5"></li>
+                <li class="lang" data-lang-string="translation6"></li>
+                <li class="lang" data-lang-string="translation7"></li>
+            </ol>
+            <div id="translations-iframe"></div>
+        </div>
+        <!--     <div class="tab-content" id="tab-changelog-content">
       You can view the latest and past changes of Recent History below:
       <p><b>3.0.5 (2019/12/17)</b> - Fixing browser action bug.</p>
       <p><b>3.0.4 (2019/12/17)</b> - Fixed bug that prevented the extension's history page to be seen when clicking on "Show All History". Fixed a few styling issues.</p>
@@ -280,62 +381,62 @@
       <p><b>1.1 (2010/02/02)</b> - No more duplicate history items.</p>
       </div>
      -->
-    <div class="tab-content" id="tab-about-content">
-      <h2 style="margin-top:0;" class="lang" data-lang-string="about"></h2>
-      <p><img class="non-retina" src="images/tree-128.png"><img class="retina" src="images/tree.png"></p>
-      <p id="rh-about-extension" class="lang" data-lang-string="aboutText"></p>
-      <p id="rh-about-policy" class="lang" data-lang-string="treePolicy"></p>
-      <hr/>
-      <p>
-        <b>Tree Style History: </b>3.1.0<br>
-        <b>Author: </b>Tumuyan<br><br>
-        <h2>License</h2>
-        <p>Tree Style History, Tree Style History (Toolbar Icon)</p>
-        <p>Copyright (c) 2021 Tumuyan &lt;tumuyan@gmail.com&gt;</p>
-        <p>This Work is based on Recent History and has get the 
-            permission to modify and publish the code as a new exttension. </p>
-        <p>THE EXTENSION IS PROVIDED IN THE HOPE THAT IT WILL BE USEFUL,
-        BUT WITHOUT ANY WARRANTY. IT IS PROVIDED "AS IS" WITHOUT
-        WARRANTY OF ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING,
-        BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
-        AND FITNESS FOR A PARTICULAR PURPOSE.</p>
-        <p>IN NO EVENT UNLESS REQUIRED BY APPLICABLE LAW THE AUTHOR WILL
-        BE LIABLE TO YOU FOR DAMAGES, INCLUDING ANY GENERAL, SPECIAL,
-        INCIDENTAL OR CONSEQUENTIAL DAMAGES ARISING OUT OF THE USE OR
-        INABILITY TO USE THE PROGRAM (INCLUDING BUT NOT LIMITED TO LOSS
-        OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES SUSTAINED
-        BY YOU OR THIRD PARTIES OR A FAILURE OF THE PROGRAM TO OPERATE
-        WITH ANY OTHER PROGRAMS), EVEN IF THE AUTHOR HAS BEEN ADVISED
-        OF THE POSSIBILITY OF SUCH DAMAGES.</p>
-        <p>Attribution-Noncommercial-No Derivative Works 3.0 Unported<br>
-        http://creativecommons.org/licenses/by-nc-nd/3.0/</p>
+        <div class="tab-content" id="tab-about-content">
+            <h2 style="margin-top:0;" class="lang" data-lang-string="about"></h2>
+            <p><img class="non-retina" src="images/tree-128.png"><img class="retina" src="images/tree.png"></p>
+            <p id="rh-about-extension" class="lang" data-lang-string="aboutText"></p>
+            <p id="rh-about-policy" class="lang" data-lang-string="treePolicy"></p>
+            <hr />
+            <p>
+                <b>Tree Style History: </b><span id="version"></span><br>
+                <b>Author: </b>Tumuyan<br><br>
+            <h2>License</h2>
+            <p>Tree Style History, Tree Style History (Toolbar Icon)</p>
+            <p>Copyright (c) 2021 Tumuyan &lt;tumuyan@gmail.com&gt;</p>
+            <p>This Work is based on Recent History and has get the
+                permission to modify and publish the code as a new exttension. </p>
+            <p>THE EXTENSION IS PROVIDED IN THE HOPE THAT IT WILL BE USEFUL,
+                BUT WITHOUT ANY WARRANTY. IT IS PROVIDED "AS IS" WITHOUT
+                WARRANTY OF ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING,
+                BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+                AND FITNESS FOR A PARTICULAR PURPOSE.</p>
+            <p>IN NO EVENT UNLESS REQUIRED BY APPLICABLE LAW THE AUTHOR WILL
+                BE LIABLE TO YOU FOR DAMAGES, INCLUDING ANY GENERAL, SPECIAL,
+                INCIDENTAL OR CONSEQUENTIAL DAMAGES ARISING OUT OF THE USE OR
+                INABILITY TO USE THE PROGRAM (INCLUDING BUT NOT LIMITED TO LOSS
+                OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES SUSTAINED
+                BY YOU OR THIRD PARTIES OR A FAILURE OF THE PROGRAM TO OPERATE
+                WITH ANY OTHER PROGRAMS), EVEN IF THE AUTHOR HAS BEEN ADVISED
+                OF THE POSSIBILITY OF SUCH DAMAGES.</p>
+            <p>Attribution-Noncommercial-No Derivative Works 3.0 Unported<br>
+                http://creativecommons.org/licenses/by-nc-nd/3.0/</p>
 
-      <hr/>
-      <p>
-        <b>Recent History</b><br>
-        <b>Author: </b>Umar Sheikh<br>
-        <b>Author URI: </b><a target="_blank" href="http://umarsheikh.co.uk/">http://umarsheikh.co.uk/</a>
-      </p>
-      <h2>License</h2>
-			<p>Recent History, Recent History (Toolbar Icon)</p>
-			<p>Copyright (c) 2011-2015 Umar Sheikh &lt;hello@umarsheikh.co.uk&gt;</p>
-			<p>THE EXTENSION IS PROVIDED IN THE HOPE THAT IT WILL BE USEFUL,
-			BUT WITHOUT ANY WARRANTY. IT IS PROVIDED "AS IS" WITHOUT
-			WARRANTY OF ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING,
-			BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
-			AND FITNESS FOR A PARTICULAR PURPOSE.</p>
-			<p>IN NO EVENT UNLESS REQUIRED BY APPLICABLE LAW THE AUTHOR WILL
-			BE LIABLE TO YOU FOR DAMAGES, INCLUDING ANY GENERAL, SPECIAL,
-			INCIDENTAL OR CONSEQUENTIAL DAMAGES ARISING OUT OF THE USE OR
-			INABILITY TO USE THE PROGRAM (INCLUDING BUT NOT LIMITED TO LOSS
-			OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES SUSTAINED
-			BY YOU OR THIRD PARTIES OR A FAILURE OF THE PROGRAM TO OPERATE
-			WITH ANY OTHER PROGRAMS), EVEN IF THE AUTHOR HAS BEEN ADVISED
-			OF THE POSSIBILITY OF SUCH DAMAGES.</p>
-			<p>Attribution-Noncommercial-No Derivative Works 3.0 Unported<br>
-			http://creativecommons.org/licenses/by-nc-nd/3.0/</p>
+            <hr />
+            <p>
+                <b>Recent History</b><br>
+                <b>Author: </b>Umar Sheikh<br>
+                <b>Author URI: </b><a target="_blank" href="http://umarsheikh.co.uk/">http://umarsheikh.co.uk/</a>
+            </p>
+            <h2>License</h2>
+            <p>Recent History, Recent History (Toolbar Icon)</p>
+            <p>Copyright (c) 2011-2015 Umar Sheikh &lt;hello@umarsheikh.co.uk&gt;</p>
+            <p>THE EXTENSION IS PROVIDED IN THE HOPE THAT IT WILL BE USEFUL,
+                BUT WITHOUT ANY WARRANTY. IT IS PROVIDED "AS IS" WITHOUT
+                WARRANTY OF ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING,
+                BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+                AND FITNESS FOR A PARTICULAR PURPOSE.</p>
+            <p>IN NO EVENT UNLESS REQUIRED BY APPLICABLE LAW THE AUTHOR WILL
+                BE LIABLE TO YOU FOR DAMAGES, INCLUDING ANY GENERAL, SPECIAL,
+                INCIDENTAL OR CONSEQUENTIAL DAMAGES ARISING OUT OF THE USE OR
+                INABILITY TO USE THE PROGRAM (INCLUDING BUT NOT LIMITED TO LOSS
+                OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES SUSTAINED
+                BY YOU OR THIRD PARTIES OR A FAILURE OF THE PROGRAM TO OPERATE
+                WITH ANY OTHER PROGRAMS), EVEN IF THE AUTHOR HAS BEEN ADVISED
+                OF THE POSSIBILITY OF SUCH DAMAGES.</p>
+            <p>Attribution-Noncommercial-No Derivative Works 3.0 Unported<br>
+                http://creativecommons.org/licenses/by-nc-nd/3.0/</p>
+        </div>
     </div>
-  </div>
 </body>
 
 </html>

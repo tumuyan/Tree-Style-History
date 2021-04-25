@@ -1,17 +1,17 @@
 # Tree Style Histyle
 
-This extension shows your recent history in tree style.  
-This Work is based on [Recent History](https://github.com/umarsheikh13/recent-history) and has get the permission to modify and publish the code as a new exttension, many thanks to Umar.  
+This extension shows your recent browser history in tree style.  
+This work is based on [Recent History](https://github.com/umarsheikh13/recent-history) and has get the permission to modify and publish the code as a new exttension, many thanks to Umar.  
 Currently only Chinese and English UI are available.  
 
-以树形展示浏览器历史。  
+树状展示浏览器历史。  
 灵感来自多年以前的Firefox扩展voyage，后来ff飙版本的时候这个扩展就废了，现在连发布页都被删除了。  
 我一直没有再见到类似的扩展，所以自己就搓了一个。  
 基于Umar的扩展[Recent History](https://github.com/umarsheikh13/recent-history)修改，已经获得原作者Umar的许可可以修改并且作为一个新的扩展进行发布，非常感谢他的劳动和许可。  
 
 ## Policy  
 
-Tree Style History collects your browser history, analyzes it and stores it on your computer, and displays it when needed.   
+Tree Style History collects your browser history, analyzes it and stores it on your computer, and shows it when needed.   
 It does not upload data to the Internet or share it with other programs. When you uninstall the extension, all saved data will be automatically erased by the browser.  
 
 Tree Style History会收集您的浏览器记录，分析并存储到您的计算机内，并在需要的时候进行展示。  
@@ -19,12 +19,14 @@ Tree Style History会收集您的浏览器记录，分析并存储到您的计�
 
 
 ## Install  
-install at Edge addons
+install at Edge addons, or download - unzip - load the folder in development mode.  
 https://microsoftedge.microsoft.com/addons/detail/gfmkhnaldbgcpoddmapciblllofekbpn
 
 ![screenshot](screen.png)
 
 ## Changlog  
+
+3.1.1 (2021/04/26) - 为树状历史页增加访问类型筛选功能，为树状历史增加loading动画/加大行间距，增加对网址标题特殊符号的处理，历史数量较少时自动载入前日记录，调整默认的设置参数，调整Chrome设置默认历史页面的选项（Edge屏蔽此功能），增加设置页的提示文字，优化历史缓存记录，降低搜索字数限制，增加暗黑模式（根据浏览器设置自动切换），调整popup页面外观，增加右键菜单“搜索此网站的浏览记录”。
 
 3.1.0 (2021/04/18) - Add the basic tree style function.
 

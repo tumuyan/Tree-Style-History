@@ -192,6 +192,57 @@ document.addEvent('domready', function(){
             }
           }
         }
+
+/* 
+
+        $jq('#search-tag').empty();
+        let search= $$('input#rh-search');
+         search.set('value',search[0].get("value"));
+
+        let t = [   "🔗",  "⌨", "☆", "🧭","🏠", "⏫", "🔄", "🔍"        ];
+
+  
+
+
+        for(let j=0;j<t.length;j++){
+            {
+                new Element('a', {
+                  href: '#',
+                  text: t[j],
+                  'class': 'tag',
+                  events: {
+                    click: function(){
+                      var cel = this;
+                    //   fuzzySearchNow( '#rh-search', treeObj,cel.get('text'))
+                    //   Filter.searchNodeLazy(cel.get('text'));
+                    //   fuzzySearchNow('treeDemo','#rh-search',null,false,cel.get('text'));
+                      var search= $$('input#rh-search');
+                      if(cel.get('id')=='selected'){
+                        // $jq("#input#rh-search").value=("value",search[0].get("value").replace(cel.get('text'),''));
+                        // $jq("#input#rh-search").attr("value",search[0].get("value").replace(cel.get('text'),''));
+                          search.set('value',search[0].get("value").replace(cel.get('text'),''));
+                          $$('#search-tag a#selected').removeProperty('id');
+                        //   ztreeFilter(treeObj,"");
+               
+                        //   fuzzySearch('treeDemo','#rh-search',null,false,cel.get('text'));
+                      }else{
+                        // $jq("#input#rh-search").value=("value",search[0].get("value").replace(/[🔗⌨☆🧭🏠⏫🔄🔍]/,'')+' '+cel.get('text') );  
+               
+                        // $jq("#input#rh-search").attr("value",search[0].get("value").replace(/[🔗⌨☆🧭🏠⏫🔄🔍]/,'')+' '+cel.get('text') );  
+                        search.set('value',search[0].get("value").replace(/[🔗⌨☆🧭🏠⏫🔄🔍]/,'')+' '+cel.get('text') );  
+                        $$('#search-tag a#selected').removeProperty('id');
+                        cel.set('id', 'selected');    
+                        // ztreeFilter(treeObj,cel.get('text'));  
+                      }
+
+                      $jq("#input#rh-search").on('blur',function(){})
+
+                    }
+                  }
+                }).inject('search-tag');
+            // }).inject('calendar-days');
+              }
+        } */
       
       }
       
@@ -242,7 +293,10 @@ document.addEvent('domready', function(){
     } */
 };
 
+// 待插入的全部数据
 var zNodes =[];
+// 待插入的部分数据
+var yNodes = [];
 
 var nNodes = [
     { id:1, pId:0, name:"正在解析数据中", t:"😴", open:true},
@@ -253,22 +307,25 @@ var mNodes = [
     { id:3, pId:1, name:"没有找到浏览历史", t:"😴", open:true}
 ];
 
+var tag = {};
+
 var loadzNode=false;
 
 $jq.fn.zTree.init($jq("#treeDemo"), setting, nNodes);
 var treeObj = $jq.fn.zTree.getZTreeObj("treeDemo");
-fuzzySearch('treeDemo','#rh-search',null,true);
+fuzzySearch('treeDemo','#rh-search',null,false,'#search-tag a');
 
+// var Filter = fuzzySearchNow('treeDemo','#rh-search',null,false);
 
 var transition_value={
     link:"🔗",
     typed:"⌨",
     auto_toplevel:"☆",
     auto_bookmark:"☆",
-    auto_subframe:"[auto_subframe]",
-    manual_subframe:"[manual_subframe]",
+    auto_subframe:"🧭",
+    manual_subframe:"🧭",
     generated:"⌨",
-    start_page:"⚙️",
+    start_page:"🏠",
     form_submit:"⏫",
     reload:"🔄",
     keyword:"🔍",
@@ -326,8 +383,8 @@ request.onsuccess = function (event) {
 
 console.log("loading...");
 var DAY = 24 * 3600 * 1000;
-var date = new Date();
-date.setHours(23); date.setMinutes(59); date.setSeconds(59); date.setMilliseconds(999);
+var date_e = new Date();
+date_e.setHours(23); date_e.setMinutes(59); date_e.setSeconds(59); date_e.setMilliseconds(999);
 
 
 var date = new Date();
@@ -365,81 +422,173 @@ function timeStr(time){
 }
 
 
+function timeStr2(time){
+
+    if(time>= date)
+    return '';
+
+    if(new Date()-date>DAY)
+      date=date+DAY;
+
+      var currentTime = new Date(time);
+      var hours = currentTime.getHours();
+      var minutes = currentTime.getMinutes();
+
+      if (hours < 10) { hours = '0' + hours; }
+      if (minutes < 10) { minutes = '0' + minutes; }
+      var timeStr = hours + ':' + minutes;
+
+      if(hours==0 && minutes ==0 ){
+          timeStr="";
+      }else       if(hours==23 && minutes ==59 ){
+        timeStr="";
+    }
 
 
-function pre_History(loadfrom,loadto) {
+    var month = currentTime.getMonth()+1;
+    // if(month<10) {month='0'+month;}
 
-    alertUserHistory(false);
+    var days = currentTime.getDate();
+    // if(days<10) {days='0'+days;}
+    
+        return month+"/"+days+' '+timeStr;
+}
+
+
+function pre_History(loadfrom,loadto){
+    alertLoadingHistory(false);
 
     zNodes=[];
+    tag={};
+
+    if(loadfrom>0 && loadto >0 ){
+        console.log("loadHistory time from " + loadfrom.toString() + " to "+loadto.toString());
+        feach_History(loadfrom,loadto,0);
+    }else{
+        let time = (date).getTime() - DAY * (localStorage["load-range2"]);
+        console.log("loadHistory time from " + new Date(time).toString());
+        feach_History(time,(date_e).getTime(),0);
+    }
+
+  
+}
+
+
+
+
+function feach_History(loadfrom,loadto,t) {
 
     var transaction = db.transaction(["VisitItem"], "readwrite");
     var objectStore = transaction.objectStore("VisitItem");
     // 索引，最后的访问时间大于日期上限
     let result = objectStore.index('visitTime');
+    yNodes=[];
     let c;
 
-    if(loadfrom>0 && loadto >0){
-        console.log("loadHistory time from " + loadfrom.toString() + " to "+loadto.toString());
+    if(t==0){
+        console.log("feach_History "+t+" from " + loadfrom.toString() + " to "+loadto.toString());
         c = result.openCursor(IDBKeyRange.bound(loadfrom,loadto), "prev");	//倒序条件查询
     }else{
-        let time = (new Date()).getTime() - DAY * (localStorage["load-range2"]);
-        console.log("loadHistory time from " + new Date(time).toString());
-        // 打开游标
-        // let c = result.openCursor(IDBKeyRange.lowerBound(0));	//查询
-        c = result.openCursor(IDBKeyRange.lowerBound(time), "prev");	//倒序条件查询
+        console.log("feach_History "+t+" from " + loadfrom.toString() + " to "+loadto.toString());
+        c = result.openCursor(IDBKeyRange.bound(loadfrom-DAY*t,loadfrom-DAY*(t-1)), "prev");	//倒序条件查询
     }
     
-
     c.onsuccess = function (e) {
         var cursor = e.target.result;
         if (cursor !=undefined) {
             let v =cursor.value;
-
+            let t=transition_value[v.transition];
             // 路径太长会影响布局
             let node = {                
                  id: v.visitId,
                  pId: parseInt(v.referringVisitId),
-                name: timeStr(v.visitTime)+" - "+ v.title +' '+transition_value[v.transition] ,
+                name: timeStr(v.visitTime)+" - "+ v.title.replace(/[<>]/g,' ') +' '+t ,
                 url: v.url,
-                icon: 'chrome://favicon/' + v.url,
+                icon: 'chrome://favicon/' + v.url.replace(/(?<![\/])\/[^\/].+/,""),
                 open: true,
                 t:v.url + " "+v.referringVisitId + ">"+v.visitId
             };
 
-            zNodes.push(node);
+            tag[t]=true;
+
+            yNodes.push(node);
             cursor.continue();
         }else{
-            let nodes = treeObj.getNodes();
-            while (nodes && nodes.length>0) {
-                treeObj.removeNode(nodes[0],false);
-                // treeObj.removeNode(nodes,false);
-            }
 
+            zNodes=zNodes.concat(yNodes);
 
-            if(zNodes.length>0){
-                treeObj.addNodes(null, zNodes,  false );
-                // $('calendar-total-value').set('text',zNodes.length);
+            if(zNodes.length<localStorage['load-range4'] && loadfrom-DAY*t > date - localStorage['load-range3']*DAY ){
+                feach_History(loadfrom,loadto,t+1);
             }else{
-                treeObj.addNodes(null, mNodes,  false );
-                // $('calendar-total-value').set('text', '0');
+                let nodes = treeObj.getNodes();
+                while (nodes && nodes.length>0) {
+                    treeObj.removeNode(nodes[0],false);
+                    // treeObj.removeNode(nodes,false);
+                }
+
+                if(zNodes.length>0){
+                    treeObj.addNodes(null, zNodes,  false );
+                    // $('calendar-total-value').set('text',zNodes.length);
+                }else{
+                    treeObj.addNodes(null, mNodes,  false );
+                    // $('search-tag').set('text','');
+                    // $('calendar-total-value').set('text', '0');
+                }
+                $('calendar-total-value').set('text',zNodes.length);
+
+                // $('header-text').set('text',new Date(loadfrom-DAY*t).toLocaleString()+' - '+new Date(loadto).toLocaleString());
+                $('header-text').set('text',timeStr2(new Date(loadfrom-DAY*t))+' ~ '+timeStr2(new Date(loadto)));
+                refreshSearchTags();
+                // 
+                alertLoadingHistory(true);
+                console.log(" pre_History() finish :( ");
             }
-            $('calendar-total-value').set('text',zNodes.length);
 
-            alertUserHistory(true);
 
-            console.log(" pre_History() finish :( ");
+
         }     
 
     }
 
     c.onerror = function (event) {
         console.log(" loadHistory() Error :( " + event);
-        alertUserHistory(true);
+        alertLoadingHistory(true);
     };
 
 
 }
+
+
+function refreshSearchTags(){
+/*     for()
+
+    let 
+    name: timeStr(v.visitTime)+" - "+ v.title +' '+transition_value[v.transition] ,
+url: v.url,
+icon: 'chrome://favicon/' + v.url,
+open: true,
+t:v.url + " "+v.referringVisitId + ">"+v.visitId
+};
+
+tag[v.transition]=true;
+ */
+
+
+
+
+$$('#search-tag a').each(function(e){
+
+    if( tag[e.get('text')]){
+        e.set('style','');
+        // e1.set('style','display:show');
+    }else{
+        e.set('style','display:none');
+    }
+  });
+
+}
+
+
 
 
 
