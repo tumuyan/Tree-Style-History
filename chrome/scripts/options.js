@@ -53,8 +53,29 @@ document.addEvent('domready', function () {
     // Save options
 
     $('save').addEvent('click', function () {
-        saveOptions();
+        saveOptions(false);
     });
+
+    $('shortcuts').set('value', returnLang('shortcuts'));
+    $('shortcuts').addEvent('click',function(){
+        chromeURL('chrome://extensions/shortcuts');
+    });
+
+        $('saveUpload').set('value', returnLang('saveUpload'));
+        $('saveUpload').addEvent('click',function(){
+             saveOptions(true);
+//            chromeURL('chrome://extensions/shortcuts');
+        });
+
+            $('downloadConfig').set('value', returnLang('downloadConfig'));
+            $('downloadConfig').addEvent('click',function(){
+//                chromeURL('chrome://extensions/shortcuts');
+            });
+
+                $('downloadConfig2').set('value', returnLang('downloadConfig2'));
+                $('downloadConfig2').addEvent('click',function(){
+//                    chromeURL('chrome://extensions/shortcuts');
+                });
 
     // Sliders
 

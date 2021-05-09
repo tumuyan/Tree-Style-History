@@ -329,5 +329,25 @@
     "message":"More"
 },"searchSite":{
     "message":"search history in this site"
+},"plsInputUrl":{
+  "message":"Please input right URL"
+},"longInputUrl":{
+  "message":"The length of your input URL is too long"
+},"shortcuts": {
+  "message":"Shortcuts"
+},"name": {
+  "message":"Tree Style History"
+},"linerHistory": {
+  "message":"Liner History"
+},"saveUpload": {
+  "message":"Save & Upload (Beta)"
+},"downloadConfig": {
+  "message":"Download Config(Beta)"
+},"downloadConfig2": {
+  "message":"Download & Merge Config(Beta)"
+},"defaultConfig": {
+  "message":"Default tConfig(Beta)"
+},"saveFail": {
+  "message":"Save Fail"
 }
 }

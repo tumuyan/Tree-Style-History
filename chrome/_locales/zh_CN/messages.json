@@ -207,7 +207,7 @@
     "message": "完成！"
   },
   "aboutText": {
-    "message": "以树形展示浏览历史。"
+    "message": "以树形展示浏览器历史记录。"
   },
   "successfullyInstalled": {
     "message": "成功安装/更新"
@@ -344,5 +344,25 @@
     "message":"更多"
 },"searchSite":{
     "message":"搜索此网站的浏览记录"
+},"plsInputUrl":{
+  "message":"请输入正确的域名"
+},"longInputUrl":{
+  "message":"输入的内容太长，不是正确的域名"
+},"shortcuts": {
+  "message":"设置快捷键"
+},"name": {
+  "message":"Tree Style History - 树形历史"
+},"linerHistory": {
+  "message":"线性历史"
+},"saveUpload": {
+  "message":"保存并上传基本参数（预览功能）"
+},"downloadConfig": {
+  "message":"下载基本参数（预览功能）"
+},"downloadConfig2": {
+  "message":"下载基本参数并合并（预览功能）"
+},"defaultConfig": {
+  "message":"恢复默认（预览功能）"
+},"saveFail": {
+  "message":"保存失败"
 }
 }

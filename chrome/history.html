@@ -18,7 +18,7 @@
   <h1 class="lang" data-lang-string="recentHistory"></h1>
   <ul>
     <li><a href="history2.html" class="lang" data-lang-string="treeOptions"></a></li>
-    <li><a href="history.html" class="lang selected" data-lang-string="allHistory"></a></li>
+    <li><a href="history.html" class="lang selected" data-lang-string="linerHistory"></a></li>
     <li><a href="options.html" class="lang" data-lang-string="options"></a></li>
   </ul>
 </div>
@@ -26,15 +26,15 @@
 <div id="history-container">
   <table id="main-table">
   	<tr>
-      <td><h1 class="lang" data-lang-string="allHistory"></h1></td>
+      <td><h1 class="lang" data-lang-string="linerHistory"></h1></td>
   		<td id="search">
         <form id="rh-search-form" action="#">
           <span id="rh-clear-search">&times;</span>
           <input id="rh-search" type="text" value="">
           <select class="select" id="rh-what">
-            <option value="all" class="lang" data-lang-string="allHistory"></option>
-            <option value="recent" class="lang" data-lang-string="recentHistory"></option>
             <option value="current" class="lang" data-lang-string="currentHistory"></option>
+            <option value="all" class="lang" data-lang-string="allHistory"></option>
+            <option value="recent" class="lang" data-lang-string="recentHistory"   style="display:none"></option>
           </select>
         </form>
   		</td>

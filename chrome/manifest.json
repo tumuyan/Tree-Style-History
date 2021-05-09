@@ -1,8 +1,8 @@
 {
-  "name": "Tree Style History",
-  "short_name": "Tree History",
-  "author": "tumuyan",
-  "version": "3.1.1",
+  "name": "__MSG_name__",
+  "short_name": "Tree Style History",
+  "author": "Tumuyan",
+  "version": "3.1.2",
   "update_url": "https://edge.microsoft.com/extensionwebstorebase/v1/crx",
   "manifest_version": 2,
   "minimum_chrome_version": "22.0",
@@ -17,7 +17,8 @@
     "history",
     "bookmarks",
     "chrome://favicon/",
-    "contextMenus"
+    "contextMenus",
+    "storage"
   ],
   "icons": {
     "16": "images/tree-16.png",
@@ -34,6 +35,31 @@
       "128": "images/tree-128.png"
     },
     "default_popup": "popup.html"
+  },
+  "commands": {
+    "open_history2": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+H",
+        "windows": "Ctrl+Shift+H",
+        "mac": "Command+Shift+H"
+      },
+      "description":"__MSG_treeOpen__"
+    },
+    "open_history1": {
+      "suggested_key": {
+        "default": "Alt+Shift+H",
+        "windows": "Alt+Shift+H",
+        "mac": "Alt+Shift+H"
+      },
+      "description": "__MSG_showAllHistory__"
+    },
+    "_execute_browser_action": {
+      "suggested_key": {
+        "windows": "Ctrl+H",
+        "mac": "Command+H",
+        "linux": "Ctrl+H"
+      },
+      "description": "打开popup页"
+    }
   }
- 
 }

@@ -191,6 +191,16 @@ for (var v in defaultValues) {
 
 // Listeners
 
+
+chrome.commands.onCommand.addListener(function(command) {
+  console.log('Command:', command);
+  if(command=="open_history2"){
+    window.open("history2.html");
+    }else  if(command=="open_history1"){
+             window.open("history.html");
+             }
+});
+
 // 实时 新建tab时生成记录从哪个tab打开的，读取其url并计入缓存.使用一次后销毁
 // 实时 tab更新时更新tab的url
 // 延迟 tab载入成功后存储visitItem，并记录载入url的visitId，如果需要补充ref
@@ -321,11 +331,12 @@ function loadDate(date, dateId) {
         add_urls([], date, dateId, 0);
     } else {
         console.log("load dday=" + dday + ":" + calendar[dday] + " qday=" + qday + ":" + calendar[qday]);
-
-        chrome.history.search({ text: '', maxResults: 0, startTime: date - (24 * 3600 * 1000), endTime: date }, function (hi) {
+        let obj = { text: '', maxResults: 0, startTime: date - (24 * 3600 * 1000), endTime: date };
+        chrome.history.search(obj, function (hi) {
 
             if (hi.length > 0) {
                 hi.sort(function (a, b) { return b.visitCount - a.visitCount });
+                save_calendar_storage2(obj,hi.length,false);
             }
 
             add_urls(hi, date, dateId, 0);

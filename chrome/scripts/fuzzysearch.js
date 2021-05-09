@@ -80,8 +80,12 @@ function fuzzySearch(zTreeId, searchField, isHighLight, isExpand, tagId) {
             return false; //return false for node not matched
         }
 
+
         var nodesShow = zTreeObj.getNodesByFilter(filterFunc); //get all nodes that would be shown
         processShowNodes(nodesShow, _keywords);//nodes should be reprocessed to show correctly
+             if(_keywords.length<=0){
+                    zTreeObj.expandAll(true);
+        }
         $jq(document).scrollTop(h);
         alertLoadingHistory(true);
     }

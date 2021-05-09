@@ -1,7 +1,7 @@
 // Version
 
 function getVersion(){
-    return '3.1.1';
+    return '3.1.2';
   }
   
   
@@ -19,8 +19,55 @@ function getVersion(){
   var itemSelectedColor = '#ffcbd3';
   var selectedItem;
   var prh;
-  
-  
+
+
+
+  var _DATE = new Date();
+  _DATE.setHours(0); _DATE.setMinutes(0); _DATE.setSeconds(0); _DATE.setMilliseconds(0);
+  var DAY = 24 * 3600 * 1000;
+
+  function TimeToStr(time){
+
+      if(new Date()-_DATE>DAY)
+        _DATE=_DATE+DAY;
+
+        var currentTime = new Date(time);
+        var hours = currentTime.getHours();
+        var minutes = currentTime.getMinutes();
+        if (hours < 10) { hours = '0' + hours; }
+        if (minutes < 10) { minutes = '0' + minutes; }
+        var timeStr = hours + ':' + minutes;
+
+      if(time>_DATE.getTime()){
+          return timeStr;
+      }
+
+      var month = currentTime.getMonth()+1;
+      if(month<10){month='0'+month;}
+
+      var days = currentTime.getDate();
+      if(days<10) {days='0'+days;}
+       return month+"/"+days+' '+timeStr;
+  }
+
+
+    var calendar_storage2 = {};
+    var calendar_storage2_str = localStorage['calendar-storage2'];
+    if(calendar_storage2_str != undefined)  {
+        calendar_storage2 = JSON.parse(calendar_storage2_str);
+    }
+
+  function save_calendar_storage2(obj,n,f){
+    if(obj['text']=='' &&  obj['maxResults'] >= 9999 && obj['endTime']-86400000== obj['startTime']){
+       if((obj['startTime'] -_DATE +1) % 86400000 ==0){
+            if(f || calendar_storage2[obj['startTime']]==undefined || calendar_storage2[obj['startTime']]<1){
+                          calendar_storage2[obj['startTime']]=n;
+                          console.log('n='+n);
+                          localStorage['calendar-storage2'] = JSON.encode(calendar_storage2);
+            }
+       }
+     }
+  }
   // Popup scrollbar fix
   
   function popup_scrollbar_fix(){
@@ -250,6 +297,7 @@ function getVersion(){
         new Element('li', {'id': rhilo[lo], 'html': returnLang('recentBookmarks')}).inject('rhlistorder');
       }
     }
+
   
     var rhos = new Sortables('#rhlistorder', {
       onStart: function(el){
@@ -343,16 +391,32 @@ function getVersion(){
   
   // Save options
   
-  function saveOptions(){
+  function saveOptions(sync){
   
     var so = {};
+
+//  弹窗顺序    so['rh-list-order']
     var rhlo = $$('#rhlistorder li');
+
+// ???
     var mli = $$('#mvlist tr td:first-child');
+
+//  在最近访问历史中过滤指定域名。
+// chrome.storage.sync 提供一个 key 8K，最大512个 key，总数据量100K（即不可能512个 key 都装满）的存储。
+// 因此需要对域名分组保存。每组100个域名（平均每个域名不超过80byte，100个不超过8k),预留10组的空间（不超过80k）
     var fli = $$('#flist tr td:first-child');
     var mlil = '';
     var flil = '';
   
-    $('save').set('value', returnLang('saving'));
+    if(sync){
+        $('saveUpload').set('value', returnLang('saving'));
+    }else{
+        $('save').set('value', returnLang('saving'));
+    }
+
+    var mls=[];
+
+
   
     if(mli.length > 0){
       for(m=0;m<mli.length;m++){
@@ -395,9 +459,35 @@ function getVersion(){
       localStorage[i] = so[i];
       console.log(i+'='+so[i]);
     }
+
+
   
-    (function(){$('save').set('value', returnLang('saved'))}).delay(1500);
-    (function(){$('save').set('value', returnLang('saveOptions'))}).delay(3000);
+
+
+    if(sync){
+      let c = 0
+        for(var key in so){
+            chrome.storage.sync.set({key:  so[i]}, function() {
+              console.log('Sync set set ' + key +'='+value);
+              c++
+            });
+        }
+
+            (function(){
+
+            if(c.length==so.length)
+              $('saveUpload').set('value', returnLang('saved'))
+            else
+              $('saveUpload').set('value', returnLang('saveFail'))
+            }).delay(1500);
+
+            (function(){$('saveUpload').set('value', returnLang('saveUpload'))}).delay(3000);
+    }else{
+        (function(){$('save').set('value', returnLang('saved'))}).delay(1500);
+        (function(){$('save').set('value', returnLang('saveOptions'))}).delay(3000);
+    }
+
+
   
   }
   
@@ -479,19 +569,26 @@ function getVersion(){
     var fliv = $('flist-add-i').get('value').replace(' ', '');
     var flic = 'test';
     if(fliv.length > 0){
-      $$('#flist-table tr td:first-child').each(function(el){
-        if(el.get('text') == fliv){
-          flic = el.get('text');
+        var rel = /^(https?|ftp|file)?[-A-Za-z0-9+&@#/%?=~_|!:,.;]+[-A-Za-z0-9+&@#/%=~_|]$/
+        if(!rel.test(fliv)){
+            alert(returnLang('plsInputUrl'));
+        }else if(fliv.length>140){
+            alert(returnLang('longInputUrl'));
+        }else{
+             $$('#flist-table tr td:first-child').each(function(el){
+                if(el.get('text') == fliv){
+                  flic = el.get('text');
+                }
+              });
+              if(flic == 'test'){
+                var linkid = 'link-'+Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
+                new Element('tr', {html: '<td><div title="'+fliv+'">'+fliv+'</div></td><td style="width:20px;"><a href="#" id="'+linkid+'"><img alt="Restore" src="images/remove.png"></a></td>', 'class': 'op-item'}).inject('flist-table');
+                $('flist-add-i').set('value', '');
+                $(linkid).addEvent('click', function(){
+                  this.getParent('tr').destroy();
+                });
+              }
         }
-      });
-      if(flic == 'test'){
-        var linkid = 'link-'+Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
-        new Element('tr', {html: '<td><div title="'+fliv+'">'+fliv+'</div></td><td style="width:20px;"><a href="#" id="'+linkid+'"><img alt="Restore" src="images/remove.png"></a></td>', 'class': 'op-item'}).inject('flist-table');
-        $('flist-add-i').set('value', '');
-        $(linkid).addEvent('click', function(){
-          this.getParent('tr').destroy();
-        });
-      }
     }
   }
   
@@ -1087,6 +1184,8 @@ function getVersion(){
     }
   
   }
+
+
   
   
   // Pinned
@@ -1237,10 +1336,30 @@ function getVersion(){
           }
         }).inject('calendar-days');
       }else{
+
+                let _time = new Date(ydatec, mdatec, ii, 23, 59, 59, 999).getTime() ;
+                // -86400000
+                let rhat = calendar_storage2[_time];
+                let style='';
+
+                if(rhat == undefined){
+
+                }else  if(rhat > 0 && rhat < 50){
+                    style = ('background-color:#daf3cb');
+                }else if(rhat > 49 && rhat < 100){
+                    style = ('background-color:#aade8a');
+                }else if(rhat > 99 && rhat < 150){
+                    style = ('background-color:#6dc738');
+                }else if(rhat >= 150){
+                    style = ('background-color:#4e991f');
+                }
+
+
         new Element('a', {
           href: '#',
           text: (ii+1),
           'class': 'day',
+          'style': style,
           events: {
             click: function(){
               var cel = this;
@@ -1266,6 +1385,8 @@ function getVersion(){
     }
   
   }
+
+
   
 
   // History
@@ -1336,7 +1457,7 @@ function getVersion(){
   
       if(hi.length > 0){
   
-              alertUserHistory(false);
+              alertLoadingHistory(false);
   
         for(i=0;i<=hi.length;i++){
   
@@ -1352,7 +1473,9 @@ function getVersion(){
             }
   
             if(hi[i].lastVisitTime >= obj['startTime'] && hi[i].lastVisitTime <= obj['endTime']){
-              rha.push({epoch: hi[i].lastVisitTime, url: url, host: (new URI(url).get('host')), time: timeNow(hi[i].lastVisitTime), date: formatDate(hi[i].lastVisitTime), favicon: furl, title: truncate(title_fix(title), 0, 100), visits: visits});
+//              rha.push({epoch: hi[i].lastVisitTime, url: url, host: (new URI(url).get('host')), time: timeNow(hi[i].lastVisitTime), date: formatDate(hi[i].lastVisitTime), favicon: furl, title: truncate(title_fix(title), 0, 100), visits: visits});
+               rha.push({epoch: hi[i].lastVisitTime, url: url, host: (new URI(url).get('host')), time:  TimeToStr(hi[i].lastVisitTime), date: formatDate(hi[i].lastVisitTime), favicon: furl, title: truncate(title_fix(title), 0, 100), visits: visits});
+
             }
   
           }
@@ -1378,6 +1501,9 @@ function getVersion(){
               $$('#calendar a#selected').setStyle('color', '#fff');
             }
           }
+
+
+            save_calendar_storage2(obj,rha.length, true);
   
           if(oby == 'title'){
             rha.sort(function(a, b){
@@ -1413,13 +1539,13 @@ function getVersion(){
           var ibcv = 'grey';
           var Counter = {counter: 0};
   
-          if(grp == 'yes'){
+          if(grp == 'yes'){  // 注意此处回调耗时操作
             prh = (function(){
               var thisc = this;
               if(thisc.counter == rha.length){
                 clearInterval(prh);
                 //isBookmarked('#rh-views .item .link');
-                alertUserHistory(false);
+                alertLoadingHistory(true);
                 $(document.body).getElement('#rh-bar-uione input').set('checked', false);
                 selectedItem = undefined;
                 new Tips('.title', {className: 'tip-holder'});
@@ -1468,7 +1594,7 @@ function getVersion(){
                     }
                   }
                   if(w == 'search' && (sw == 'all' || sw == 'recent')){
-                    rha[thisc.counter].time = '- - : - -';
+//                    rha[thisc.counter].time = '- - : - -';
                   }
                   var selectid = 'select-'+Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                   var item;
@@ -1500,7 +1626,7 @@ function getVersion(){
               if(thisc.counter == rha.length){
                 clearInterval(prh);
                 //isBookmarked('#rh-views .item .link');
-                alertUserHistory(false);
+                alertLoadingHistory(true);
                 $(document.body).getElement('#rh-bar-uione input').set('checked', false);
                 selectedItem = undefined;
                 new Tips('.title', {className: 'tip-holder'});
@@ -1545,13 +1671,14 @@ function getVersion(){
               thisc.counter++;
             }).periodical(5, Counter);
           }
-  
+         alertLoadingHistory(true);
         }else{
-          alertUserHistory(false);
+          alertLoadingHistory(true);
           $('calendar-total-value').set('text', '0');
           $(into).set('html', '<div class="no-results"><span>'+returnLang('noResults')+'</span></div>');
         }
-  
+
+//            alertLoadingHistory(true);
       }else{
         $('calendar-total-value').set('text', '0');
         $(into).set('html', '<div class="no-results"><span>'+returnLang('noResults')+'</span></div>');
@@ -1572,14 +1699,20 @@ function getVersion(){
     }
     var tgda = $(into).getElement('a[rel="'+host+'"]');
     var tgde = $(into).getElement('div[rel="'+host+'"]');
-    var tgdv = tgde.getStyle('display');
-    if(tgdv == 'block'){
-      tgde.setStyle('display', 'none');
-      tgda.setStyle('background-position', 'left center');
+
+    if(tgda!=undefined && tgde !=undefined){
+        var tgdv = tgde.getStyle('display');
+        if(tgdv == 'block'){
+          tgde.setStyle('display', 'none');
+          tgda.setStyle('background-position', 'left center');
+        }else{
+          tgde.setStyle('display', 'block');
+          tgda.setStyle('background-position', 'right center');
+        }
     }else{
-      tgde.setStyle('display', 'block');
-      tgda.setStyle('background-position', 'right center');
+        console.log('error: toggleGroup('+host+')');
     }
+
   }
   
   
@@ -1782,7 +1915,7 @@ function getVersion(){
       }
       if($$(into+' .checkbox input:checked').length > 0){
         $$('title').set('text', 'Deleting...');
-        alertUserHistory(true);
+        alertLoadingHistory(true);
         $$(into+' .checkbox input:checked').each(function(el){
           el.getParent('div.item-holder').destroy();
           chrome.history.deleteUrl({url: el.get('value')});
@@ -1797,7 +1930,7 @@ function getVersion(){
             });
           }
           $$('title').set('text', 'History | Recent History');
-          alertUserHistory(true);
+          alertLoadingHistory(true);
         });
       }
     }else if(w == 'range'){
