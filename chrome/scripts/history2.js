@@ -478,6 +478,8 @@ function pre_History(loadfrom,loadto){
 
 function feach_History(loadfrom,loadto,t) {
 
+    var flist = localStorage['rh-filtered'];
+
     var transaction = db.transaction(["VisitItem"], "readwrite");
     var objectStore = transaction.objectStore("VisitItem");
     // 索引，最后的访问时间大于日期上限
@@ -498,20 +500,31 @@ function feach_History(loadfrom,loadto,t) {
         if (cursor !=undefined) {
             let v =cursor.value;
             let t=transition_value[v.transition];
-            // 路径太长会影响布局
-            let node = {                
-                 id: v.visitId,
-                 pId: parseInt(v.referringVisitId),
-                name: timeStr(v.visitTime)+" - "+ v.title.replace(/[<>]/g,' ') +' '+t ,
-                url: v.url,
-                icon: 'chrome://favicon/' + v.url.replace(/(?<![\/])\/[^\/].+/,""),
-                open: true,
-                t:v.url + " "+v.referringVisitId + ">"+v.visitId
-            };
 
-            tag[t]=true;
+            var site = new URI(v.url).get('host');
 
-            yNodes.push(node);
+            if(flist!=undefined && flist!='false'){
+                if(flist.indexOf(site+'|')>=0)
+                    site='';
+            }
+
+            if(site!=''){
+                let node = {                
+                    id: v.visitId,
+                    pId: parseInt(v.referringVisitId),
+                    name: timeStr(v.visitTime)+" - "+ v.title.replace(/[<>]/g,' ') +' '+t ,
+                    url: v.url,
+                    icon: 'chrome://favicon/' + v.url.replace(/(?<![\/])\/[^\/].+/,""),
+                    // icon:'chrome://favicon/'+site,
+                    open: true,
+                    t:v.url + " "+v.referringVisitId + ">"+v.visitId
+                };
+
+                tag[t]=true;
+
+                yNodes.push(node);
+            }
+
             cursor.continue();
         }else{
 

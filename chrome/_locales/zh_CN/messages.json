@@ -81,7 +81,7 @@
     "message": "将项目恢复到最常访问列表"
   },
   "option17": {
-    "message": "在最近访问历史中过滤指定域名"
+    "message": "隐藏指定域名的访问历史"
   },
   "option18": {
     "message": "左键单击操作"
@@ -135,7 +135,7 @@
     "message": "此处显示你从最常访问列表中删除的URL。点击右边的X可以将其恢复到最常访问列表"
   },
   "help17": {
-    "message": "此处指定你不想在最近访问历史中显示的域名，如163.com"
+    "message": "此处指定你不想在访问历史中显示的域名，如163.com；注意指定顶级域名不能覆盖子域名，如指定163.com不会隐藏music.163.com的访问记录"
   },
   "help18": {
     "message": "当点击弹窗中的项目时执行什么操作"
@@ -207,7 +207,7 @@
     "message": "完成！"
   },
   "aboutText": {
-    "message": "以树形展示浏览历史。"
+    "message": "以树形展示浏览器历史记录。"
   },
   "successfullyInstalled": {
     "message": "成功安装/更新"
@@ -344,5 +344,39 @@
     "message":"更多"
 },"searchSite":{
     "message":"搜索此网站的浏览记录"
-}
+},"plsInputUrl":{
+  "message":"请输入正确的域名"
+},"longInputUrl":{
+  "message":"输入的内容太长，不是正确的域名"
+},"shortcuts": {
+  "message":"设置快捷键"
+},"name": {
+  "message":"Tree Style History - 树形历史"
+},"linerHistory": {
+  "message":"线性历史"
+},"saveUpload": {
+  "message":"保存并上传参数"
+},"downloadConfig": {
+  "message":"下载参数（不含域名过滤设置）"
+},"downloadConfig2": {
+  "message":"下载基本参数并合并（预览功能）"
+},"defaultConfig": {
+  "message":"恢复默认"
+},"saveFail": {
+  "message":"失败"
+},"deleteCache": {
+    "message":"清除缓存"
+  },"clickMe": {
+    "message":"点击这里"
+  },"done": {
+    "message":"已完成"
+  },"deleteList": {
+    "message":"清空列表"
+  },"mergeList": {
+    "message":"合并当且列表和在线列表"
+  },"filterSetting": {
+    "message":"域名过滤设置"
+  },"addItemNum": {
+    "message":"增加数量: "
+  }
 }

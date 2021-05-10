@@ -349,7 +349,7 @@ input[type="button"]:active {
   text-align: left;
 }
 
-#save {
+#save,#save-holder input {
   -webkit-border-radius: 2px;
   -webkit-box-shadow: 0px 1px 3px rgba(0, 0, 0, 0.1);
   -webkit-user-select: none;
@@ -359,16 +359,17 @@ input[type="button"]:active {
   padding: 10px 14px;
   font-size: 14px;
   cursor: pointer;
+  margin-left:3px;
 }
 
-#save:hover {
+#save:hover,,#save-holder input:hover {
   -webkit-box-shadow: 0px 1px 3px rgba(0, 0, 0, 0.2);
   background: #ebebeb -webkit-linear-gradient(#fefefe, #f8f8f8 40%, #e9e9e9);
   border-color: #999;
   color: #222;
 }
 
-#save:active {
+#save:active,,#save-holder input:active {
   -webkit-box-shadow: inset 0px 1px 3px rgba(0, 0, 0, 0.2);
   background: #ebebeb -webkit-linear-gradient(#f4f4f4, #efefef 40%, #dcdcdc);
   color: #333;
@@ -470,7 +471,7 @@ input[type="button"]:active {
         -webkit-box-shadow: 0 0 4px #666;
      }
 
-     #popup input, #options input,#history-container input,.slider,select,#calendar select,#main-table select,#rhlistorder li,  .dp_cal{
+     #popup input, #options input,#history-container input,.slider,select,#calendar select,#main-table select,#rhlistorder li,  .dp_cal,.op-item {
         background-color: rgb(128, 128, 128);
         background-image:none;
         color: #fff;

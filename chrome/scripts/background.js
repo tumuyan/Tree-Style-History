@@ -53,35 +53,60 @@ var MAX = Number.MAX_VALUE - 1;
 var urls_wait_load = new Array();
 
 var request, db;
-request = window.indexedDB.open("testDB", 2);
-request.onerror = function (event) {
-    console.log("Error opening DB", event);
+openDb();
+
+function openDb(){
+    request = window.indexedDB.open("testDB", 2);
+    request.onerror = function (event) {
+        console.log("Error opening DB", event);
+    }
+    request.onupgradeneeded = function (event) {
+        console.log("Upgrading");
+        db = event.target.result;
+        var objectStore = db.createObjectStore("VisitItem", { keyPath: "visitId" });
+        objectStore.createIndex('url', 'url', { unique: false });
+        objectStore.createIndex('visitTime', 'visitTime', { unique: false });
+        objectStore.createIndex('referringVisitId', 'referringVisitId', { unique: false });
+        objectStore.createIndex('title', 'title', { unique: false });
+        objectStore.createIndex('transition', 'transition', { unique: false });
+    
+        var objectStore2 = db.createObjectStore("urls", { keyPath: "id" });
+        objectStore2.createIndex('url', 'url', { unique: false });
+        objectStore2.createIndex('lastVisitTime', 'lastVisitTime', { unique: false });
+        // objectStore2.createIndex('visitCount', 'visitCount', { unique: false });
+        objectStore2.createIndex('title', 'title', { unique: false });
+        objectStore2.createIndex('from_to', ['loadfrom', 'loadto'], { unique: false });
+    
+    };
+    request.onsuccess = function (event) {
+        console.log("Success opening DB");
+        db = event.target.result;
+    
+        // only for debug
+        if (db != undefined)
+            loadDate(date.getTime(), 0);
+    }
 }
-request.onupgradeneeded = function (event) {
-    console.log("Upgrading");
-    db = event.target.result;
-    var objectStore = db.createObjectStore("VisitItem", { keyPath: "visitId" });
-    objectStore.createIndex('url', 'url', { unique: false });
-    objectStore.createIndex('visitTime', 'visitTime', { unique: false });
-    objectStore.createIndex('referringVisitId', 'referringVisitId', { unique: false });
-    objectStore.createIndex('title', 'title', { unique: false });
-    objectStore.createIndex('transition', 'transition', { unique: false });
 
-    var objectStore2 = db.createObjectStore("urls", { keyPath: "id" });
-    objectStore2.createIndex('url', 'url', { unique: false });
-    objectStore2.createIndex('lastVisitTime', 'lastVisitTime', { unique: false });
-    // objectStore2.createIndex('visitCount', 'visitCount', { unique: false });
-    objectStore2.createIndex('title', 'title', { unique: false });
-    objectStore2.createIndex('from_to', ['loadfrom', 'loadto'], { unique: false });
 
-};
-request.onsuccess = function (event) {
-    console.log("Success opening DB");
-    db = event.target.result;
 
-    // only for debug
-    if (db != undefined)
-        loadDate(date.getTime(), 0);
+function deleteDb(){
+    db.close();
+    localStorage['calendar-storage']='';
+    var DBDeleteRequest = window.indexedDB.deleteDatabase('testDB');
+
+    DBDeleteRequest.onerror = function (event) {
+    // console.log('Error deleteDb');
+    alert(returnLang('saveFail'));
+    
+    };
+
+    DBDeleteRequest.onsuccess = function (event) {
+    // console.log('success deleteDb');
+    alert(returnLang('done'));
+    openDb();
+    };
+
 }
 
 
@@ -152,44 +177,20 @@ var mostVisitedInit = function () {
 
 // Default values
 
-var defaultValues = {
-    "rh-itemsno": 16,
-    "rct-itemsno": 4,
-    "mv-itemsno": 0,
-    "rb-itemsno": 3,
-    "mv-blocklist": "false",
-    "rh-historypage": "yes",
-    "rh-date": "mm/dd/yyyy",
-    "rh-width": "275px",
-    "load-range": 7,
-    "load-range2": 3,
-    "load-range3": 120,
-    "load-range4": 120,
-    "rh-search": "yes",
-    "rh-list-order": "rh-order,rct-order,rb-order,mv-order",
-    "rh-time": "yes",
-    "rh-group": "yes",
-    "rh-orderby": "date",
-    "rh-order": "desc",
-    "rh-timeformat": "24",
-    "rh-click": "current",
-    "rh-share": "yes",
-    "rh-filtered": "false",
-    "rh-pinned": "false",
-    "rhs-showurl": "no",
-    "rhs-showsep": "no",
-    "rhs-showext": "no",
-    "rhs-showbg": "no"
-};
-
-for (var v in defaultValues) {
-    if (!localStorage[v] || localStorage[v] == null || localStorage[v] == '') {
-        localStorage[v] = defaultValues[v];
-    }
-}
+defaultConfig(false);
 
 
 // Listeners
+
+
+chrome.commands.onCommand.addListener(function(command) {
+  console.log('Command:', command);
+  if(command=="open_history2"){
+    window.open("history2.html");
+    }else  if(command=="open_history1"){
+             window.open("history.html");
+             }
+});
 
 // 实时 新建tab时生成记录从哪个tab打开的，读取其url并计入缓存.使用一次后销毁
 // 实时 tab更新时更新tab的url
@@ -321,11 +322,12 @@ function loadDate(date, dateId) {
         add_urls([], date, dateId, 0);
     } else {
         console.log("load dday=" + dday + ":" + calendar[dday] + " qday=" + qday + ":" + calendar[qday]);
-
-        chrome.history.search({ text: '', maxResults: 0, startTime: date - (24 * 3600 * 1000), endTime: date }, function (hi) {
+        let obj = { text: '', maxResults: 0, startTime: date - (24 * 3600 * 1000), endTime: date };
+        chrome.history.search(obj, function (hi) {
 
             if (hi.length > 0) {
                 hi.sort(function (a, b) { return b.visitCount - a.visitCount });
+                save_calendar_storage2(obj,hi.length,false);
             }
 
             add_urls(hi, date, dateId, 0);

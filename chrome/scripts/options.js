@@ -48,13 +48,50 @@ document.addEvent('domready', function () {
 
     // Load saved options
 
-    loadOptions();
+    loadOptions(true);
 
     // Save options
 
     $('save').addEvent('click', function () {
-        saveOptions();
+        saveOptions(false);
     });
+
+    $('defaultConfig').set('value', returnLang('defaultConfig'));
+    $('defaultConfig').addEvent('click', function () {
+        defaultConfig(true);
+        location.reload();
+        // loadOptions();
+        // localStorage.clear();
+        // window.open('options.html');
+    });
+
+    $('deleteCache').addEvent('click', function () {
+        var bg = chrome.extension.getBackgroundPage();
+        bg.deleteDb();
+    });
+
+
+    // $('shortcuts').set('value', returnLang('shortcuts'));
+    $('shortcuts').addEvent('click',function(){
+        chromeURL('chrome://extensions/shortcuts');
+    });
+
+        $('saveUpload').set('value', returnLang('saveUpload'));
+        $('saveUpload').addEvent('click',function(){
+             saveOptions(true);
+//            chromeURL('chrome://extensions/shortcuts');
+        });
+
+            $('downloadConfig').set('value', returnLang('downloadConfig'));
+            $('downloadConfig').addEvent('click',function(){
+                downloadOptions();
+//                chromeURL('chrome://extensions/shortcuts');
+            });
+
+                $('downloadConfig2').set('value', returnLang('downloadConfig2'));
+                $('downloadConfig2').addEvent('click',function(){
+//                    chromeURL('chrome://extensions/shortcuts');
+                });
 
     // Sliders
 
@@ -77,8 +114,15 @@ document.addEvent('domready', function () {
     $('flist-add-i').addEvent('keyup', function (event) { if (event.keyCode == 13) { addFilteredItem(); } });
     $('advance-options').addEvent('submit', function () { return false; });
 
-    var UserAgent = navigator.userAgent.toLowerCase();
-    if(UserAgent.indexOf('edg')>0){
+    $('deleteList').addEvent('click', function () { $('flist-table').set('html',''); });
+
+    $('mergeList').addEvent('click', function () {mergeList(); });
+    
+    
+
+    // var UserAgent = navigator.userAgent.toLowerCase();
+    // if(UserAgent.indexOf('edg')>0)
+    {
         $('select_history_page').set('style','display:none');
     }
 

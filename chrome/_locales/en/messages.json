@@ -81,7 +81,7 @@
     "message": "Restore Items to Most Visited"
   },
   "option17": {
-    "message": "Filter Domains from Recent History"
+    "message": "Filter Domains from History"
   },
   "option18": {
     "message": "Left Mouse Click Action"
@@ -135,7 +135,7 @@
     "message": "The URLs you have removed from the most visited list. Click on the cross next to the URL to restore it to the list."
   },
   "help17": {
-    "message": "The URLs from the domain names you do not wish to be displayed in the recent history list, e.g. foobar.com"
+    "message": "The URLs from the domain names you do not wish to be displayed in the history list, e.g. foobar.com"
   },
   "help18": {
     "message": "What should happen when you click on an item in the pop-up"
@@ -329,5 +329,41 @@
     "message":"More"
 },"searchSite":{
     "message":"search history in this site"
-}
+},"plsInputUrl":{
+  "message":"Please input right URL"
+},"longInputUrl":{
+  "message":"The length of your input URL is too long"
+},"shortcuts": {
+  "message":"Shortcuts"
+},"name": {
+  "message":"Tree Style History"
+},"linerHistory": {
+  "message":"Liner History"
+},"saveUpload": {
+  "message":"Save & Upload (Beta)"
+},"downloadConfig": {
+  "message":"Download Basic Config(Without Filter)"
+},"downloadConfig2": {
+  "message":"Download & Merge Config"
+},"defaultConfig": {
+  "message":"Default Config"
+},"saveFail": {
+  "message":"Fail"
+},"deleteCache": {
+    "message":"Delete Cache"
+  },"deleteCacheTip": {
+    "message":"Delete Cache"
+  },"clickMe": {
+    "message":"Click Me"
+  },"done": {
+    "message":"Done"
+  },"deleteList": {
+    "message":"Clear List"
+  },"mergeList": {
+    "message":"Merge list from server"
+  },"filterSetting": {
+    "message":"Filter Setting"
+  },"addItemNum": {
+    "message":"Add item: "
+  }
 }

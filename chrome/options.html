@@ -80,7 +80,7 @@
                         </td>
                     </tr>
 
-                    <tr id='select_history_page'>
+                    <tr id='select_history_page' style='display:none'>
                         <td class="cell-left"><label for="rhhistorypage" class="lang"
                                 data-lang-string="option6"></label><span id="help6" title="" class="help-tip"
                                 alt="Help"></span></td>
@@ -89,6 +89,18 @@
                                 <option value="no">chrome://history/</option>
                                 <option value="yes">Tree Style History</option>
                             </select>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td class="cell-left">
+                            <label for="deleteCache"    id="deleteCache"
+                             style="width:36px;"  class="lang" data-lang-string="deleteCache"></label>
+                            <span id="clickMe" title="" class="help-tip" alt="Help"></span>
+                        </td>
+                        <td class="cell-right">
+<!--                             <a style="width:36px;"  id="deleteCache"  class="lang"
+                            data-lang-string="clickMe"> </a> -->
                         </td>
                     </tr>
                 </table>
@@ -259,8 +271,8 @@
                 </table>
 
             </form>
-            <h2 class="lang" data-lang-string="advanceOptions"></h2>
-            <form id="advance-options" action="#">
+            <h2 class="lang" data-lang-string="filterSetting"></h2>
+            <form id="filter-options" action="#">
                 <table>
                     <tr>
                         <td class="cell-left"><label class="lang" data-lang-string="option17"></label><span id="help17"
@@ -268,12 +280,31 @@
                         <td class="cell-right">
                             <div id="flist">
                                 <table id="flist-table"></table>
-                            </div><input id="flist-add-i" style="width:200px;" type="text" value=""><input
-                                id="flist-add-b" type="button" value=" + ">
+                            </div><input id="flist-add-i" style="width:315px;" type="text" value=""><input
+                                id="flist-add-b" type="button" value=" + " style="margin-right: -3px;">
                         </td>
                     </tr>
+                    <tr>
+                        <td class="cell-left"><label for="deleteList" class="lang"  id="deleteList" 
+                                data-lang-string="deleteList"></label><span id="clickMe" title="" class="help-tip"
+                                alt="Help"></span></td>
+                        <td class="cell-right">
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="cell-left"><label for="mergeList" class="lang"  id="mergeList" 
+                                data-lang-string="mergeList"></label><span id="clickMe" title="" class="help-tip"
+                                alt="Help"></span></td>
+                        <td class="cell-right">
+                        </td>
+                    </tr>
+
+                    
                 </table>
-                <hr>
+
+            </form>
+            <h2 class="lang" data-lang-string="advanceOptions"></h2>
+            <form id="advance-options" action="#">
                 <table>
                     <tr>
                         <td class="cell-left"><label for="rhclick" class="lang"
@@ -287,10 +318,27 @@
                             </select>
                         </td>
                     </tr>
+
+                    <tr>
+                        <td class="cell-left"><label for="shortcuts" class="lang"  id="shortcuts" 
+                                data-lang-string="shortcuts"></label><span id="clickMe" title="" class="help-tip"
+                                alt="Help"></span></td>
+                        <td class="cell-right">
+                        </td>
+                    </tr>
                 </table>
             </form>
             <h2>&nbsp;</h2>
-            <div id="save-holder"><input id="save" type="button" value=""></div>
+            <div id="save-holder">
+                <input id="save" type="button" value="">
+                <input id="defaultConfig" type="button" value="">
+                
+               <!--  <input id="shortcuts" type="button" value=""> -->
+                <input id="saveUpload" type="button" value="">
+                <input id="downloadConfig" type="button" value="">
+                <input id="downloadConfig2" type="button" value="" style="display:none">
+            </div>
+
         </div>
         <div class="tab-content" id="tab-translations-content">
             <span class="lang" data-lang-string="translation1"></span>

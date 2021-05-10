@@ -19,12 +19,31 @@ Tree Style History会收集您的浏览器记录，分析并存储到您的计�
 
 
 ## Install  
-install at Edge addons, or download - unzip - load the folder in development mode.  
-https://microsoftedge.microsoft.com/addons/detail/gfmkhnaldbgcpoddmapciblllofekbpn
+I have uploaded it to Edge Add-ons
+https://microsoftedge.microsoft.com/addons/detail/gfmkhnaldbgcpoddmapciblllofekbpn  
+
+I don't have Chrome Web Store developer account, but @oXnMe uploaded it to Chrome Web Store
+https://chrome.google.com/webstore/detail/tree-style-history/khcenbpnhbeplojhaolbpldmoppicold  
+
+Or download - unzip - load the folder in developer mode.  
+https://github.com/tumuyan/Tree-Style-History/issues/1  
+
+
+已经上传到Edge外接程序商店
+https://microsoftedge.microsoft.com/addons/detail/gfmkhnaldbgcpoddmapciblllofekbpn  
+
+我没有Chrome商店的开发者帐号,但是有网友代上传了Chrome商店.
+https://chrome.google.com/webstore/detail/tree-style-history/khcenbpnhbeplojhaolbpldmoppicold  
+
+或者打开浏览器的开发者模式，[下载压缩包](https://github.com/tumuyan/Tree-Style-History/archive/refs/heads/main.zip)解压并载入  
+https://jingyan.baidu.com/article/ca2d939dfa5762ab6d31ce10.html  
+https://github.com/tumuyan/Tree-Style-History/issues/1  
 
 ![screenshot](screen.png)
 
-## Changlog  
+## Changlog
+
+3.1.2 (2021/5/11) - 优化搜索浏览记录功能，增加选项同步功能（跟随浏览器账户自动同步），增加快捷键设置（可以通过设置快捷键替换默认历史记录管理器），缓存访问历史的网址数量，优化部分UI的样式和命名，增加清除缓存功能，优化网址过滤功能。
 
 3.1.1 (2021/04/26) - 为树状历史页增加访问类型筛选功能，为树状历史增加loading动画/加大行间距，增加对网址标题特殊符号的处理，历史数量较少时自动载入前日记录，调整默认的设置参数，调整Chrome设置默认历史页面的选项（Edge屏蔽此功能），增加设置页的提示文字，优化历史缓存记录，降低搜索字数限制，增加暗黑模式（根据浏览器设置自动切换），调整popup页面外观，增加右键菜单“搜索此网站的浏览记录”。
 

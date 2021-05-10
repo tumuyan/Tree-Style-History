@@ -151,7 +151,33 @@ document.addEvent('domready', function(){
     // Calendar init
     
     calendar('current', '');
-    history('current', '');
+
+
+            //获取Location对象的search属性值
+            var searchStr = location.search;
+
+            if(searchStr.length>1){
+                //由于searchStr属性值包括“?”，所以除去该字符
+                console.log("searchStr"+searchStr);
+                let site=new URI(searchStr.substr(1)).get('host');
+                if(site != undefined ){
+                    searchStr = site.split('?')[0];
+                    if(searchStr.length>0){
+                           $('rh-what').set('value',"all");
+//                         $('rh-what').getSelected().get('value');
+//                             $jq('#rh-what').val("current");
+                                $("rh-search").set('value',searchStr);
+                                history('search', searchStr);
+                    }
+                }else{
+                 searchStr='';
+                 }
+            }else{
+                searchStr-'';
+            }
+
+            if(searchStr=='')
+                 history('current', '');
     
     // Calendar range toggle
     
@@ -187,9 +213,13 @@ document.addEvent('domready', function(){
     $('rh-search').addEvent('keyup', function(){
       var sv = this.get('value');
       if(sv.length + sv.replace(/[0-9a-zA-Z]+/g,'').length >= 2){
-        history('search', sv);
+          if(sv!=searchStr){
+            sv==searchStr;
+            history('search', sv);
+         }
         $('rh-views-insert').setStyle('display', 'none');
         $('rh-views-search-insert').setStyle('display', 'block');
+
       }else{
         $('rh-views-insert').setStyle('display', 'block');
         $('rh-views-search-insert').setStyle('display', 'none');
@@ -219,15 +249,8 @@ document.addEvent('domready', function(){
     $('delete-button').addEvent('click', function(){ deleteHistoryItem('selected'); });
 
 
-        //获取Location对象的search属性值
-        var searchStr = location.search;
 
-        if(searchStr.length>1){
-            //由于searchStr属性值包括“?”，所以除去该字符
-            console.log("searchStr"+searchStr);
-            let site=new URI(searchStr.substr(1)).get('host');
-            $("rh-search").set('value',site);
-            history('search', site);
-        }
+
+
 
 });
