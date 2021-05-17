@@ -247,13 +247,23 @@ document.addEvent('domready', function () {
     // 待插入的部分数据
     var yNodes = [];
 
+    // 节点缓存数据 (用来避免重复添加父节点)
+    // 第一层 oid
+    var LaNode = {};
+    // 第二层 异常关闭 和 连续关闭的时间分组  LbNode用于处理异常关闭
+    var LbNode = {};
+
+    var xNodes = [];
+    var L2Id = 0;
+    var L2Time = 0;
+
     var nNodes = [
         { id: 1, pId: 0, name: "正在解析数据中", t: "😴", open: true },
         { id: 2, pId: 1, name: "请稍后再试...", t: "🤣", open: true }
     ];
 
     var mNodes = [
-        { id: 3, pId: 1, name: "没有找到浏览历史", t: "😴", open: true }
+        { id: 3, pId: 1, name: "没有找到关闭页面的记录", t: "😴", open: true }
     ];
 
     var tag = {};
@@ -296,6 +306,8 @@ document.addEvent('domready', function () {
         // “keyword_generated”	相应由关键字生成的访问。请查阅keyword。
 
     };
+
+
 
     console.log("loading...");
     var DAY = 24 * 3600 * 1000;
@@ -350,11 +362,17 @@ document.addEvent('domready', function () {
     if (db != undefined)
         pre_History(0, 0);
 
+
     function pre_History(loadfrom, loadto) {
         alertLoadingHistory(false);
 
         zNodes = [];
         tag = {};
+
+        LaNode = {};
+        LbNode = {};
+        xNodes = [];
+        L2Time = 0;
 
         if (loadfrom > 0 && loadto > 0) {
             console.log("loadHistory time from " + loadfrom.toString() + " to " + loadto.toString());
@@ -375,11 +393,12 @@ document.addEvent('domready', function () {
 
         var flist = localStorage['rh-filtered'];
 
-        var transaction = db.transaction(["VisitItem"], "readwrite");
-        var objectStore = transaction.objectStore("VisitItem");
+        var transaction = db.transaction(["closed"], "readwrite");
+        var objectStore = transaction.objectStore("closed");
         // 索引，最后的访问时间大于日期上限
-        let result = objectStore.index('visitTime');
+        let result = objectStore.index('closeTime');
         yNodes = [];
+
         let c;
 
         if (t == 0) {
@@ -403,27 +422,120 @@ document.addEvent('domready', function () {
                         site = '';
                 }
 
-                if (site != '') {
+                if (site != '' && v.close >= 0) {
+
+                    if (LaNode[v.oid] != true) {
+                        LaNode[v.oid] = true;
+                        LbNode = {};
+
+                        L2Id = 0;
+                        yNodes.push({
+                            id: v.oid,
+                            pId: 0,
+                            name: '🗓️',
+                            url: '',
+                            icon: '',
+                            open: true,
+                            t:v.oid
+                        });
+                    }
+
                     let node = {
-                        id: v.visitId,
-                        pId: parseInt(v.referringVisitId),
-                        name: TimeToStr(v.visitTime, true, true) + " - " + v.title.replace(/[<>]/g, ' ') + ' ' + t,
+                        // id: 'n' + v.id,
+                        id: v.id,
+                        pId: L2Id,
+                        name: TimeToStr(v.closeTime, true, true) + " - " + v.title.replace(/[<>]/g, ' '),
                         url: v.url,
                         icon: 'chrome://favicon/' + v.url.replace(/(?<![\/])\/[^\/].+/, ""),
                         // icon:'chrome://favicon/'+site,
                         open: true,
+                        oid: v.oid,
                         t: v.url // + " "+v.referringVisitId + ">"+v.visitId
                     };
 
-                    tag[t] = true;
+                    if (v.close == 0) {
 
-                    yNodes.push(node);
+                        if (L2Time - v.closeTime > 60000 || L2Time==0) {
+
+                            if (L2Time != 0) {
+                                let x;
+                                if (xNodes.length > 4) {
+                                    x = xNodes[0];
+                                    yNodes.push({
+                                        id: x.pId,
+                                        pId: x.oid,
+                                        name: '🕓',
+                                        url: '',
+                                        icon: '',
+                                        open: true,
+                                        t:''
+                                        // t: TimeToStr(xNodes[xNodes.length-1].time,true,true)+' '+TimeToStr(x.time,true,true)
+                                    });
+                                    yNodes = yNodes.concat(xNodes);
+                                } else {
+                                    for (let n=0;n<xNodes.length; n++) {
+                                        x=xNodes[n];
+                                        x.pId = x.oid;
+                                        yNodes.push(x);
+                                    }
+                                }
+
+                            }
+
+                            xNodes = [];
+                            L2Id = 'b' + v.closeTime;
+                            node.pId = L2Id;
+                        }
+
+                        xNodes.push(node);
+                        L2Time = v.closeTime;
+
+                    } else {
+                        node.pId = 'b' + v.closeTime;
+                        yNodes.push(node);
+
+                        if (LbNode[v.closeTime] != true) {
+                            LbNode[v.closeTime] = true;
+                            yNodes.push({
+                                id: 'b' + v.closeTime,
+                                pId: v.oid,
+                                name: '⚠️',
+                                url: '',
+                                icon: '',
+                                open: true,
+                                t:returnLang('abnormalClosedTab')
+                            });
+                        }
+                    }
+
                 }
 
                 cursor.continue();
             } else {
 
                 zNodes = zNodes.concat(yNodes);
+
+                let x;
+                if (xNodes.length > 4) {
+                    x = xNodes[0];
+                    zNodes.push({
+                        id: x.pId,
+                        pId: x.oid,
+                        name: '🕓',
+                        url: '',
+                        icon: '',
+                        open: true,
+                        t:''
+                    });
+                    zNodes = zNodes.concat(xNodes);
+                } else {
+                    for (let n=0;n<xNodes.length; n++) {
+                        x=xNodes[n];
+                        x.pId = x.oid;
+                        zNodes.push(x);
+                    }
+                }
+                xNodes = [];
 
                 if (zNodes.length < localStorage['load-range4'] && loadfrom - DAY * t > date - localStorage['load-range3'] * DAY) {
                     feach_History(loadfrom, loadto, t + 1);
@@ -445,7 +557,7 @@ document.addEvent('domready', function () {
                     $('calendar-total-value').set('text', zNodes.length);
 
                     // $('header-text').set('text',new Date(loadfrom-DAY*t).toLocaleString()+' - '+new Date(loadto).toLocaleString());
-                    $('header-text').set('text', timeStr2(new Date(loadfrom - DAY * t),false) + ' ~ ' + timeStr2(new Date(loadto),true));
+                    $('header-text').set('text', timeStr2(new Date(loadfrom - DAY * t), false) + ' ~ ' + timeStr2(new Date(loadto), true));
                     refreshSearchTags();
                     // 
                     alertLoadingHistory(true);

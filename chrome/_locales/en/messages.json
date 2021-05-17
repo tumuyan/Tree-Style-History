@@ -24,7 +24,7 @@
     "message": "About"
   },
   "mainOptions": {
-    "message": "Main Options"
+    "message": "Popup Options"
   },
   "styleOptions": {
     "message": "Style Options"
@@ -365,5 +365,11 @@
     "message":"Filter Setting"
   },"addItemNum": {
     "message":"Add item: "
+  },"closeHistory": {
+    "message":"Recent Close"
+  },"OpenClosedHistory": {
+    "message":"Open recent closed Tabs"
+  },"abnormalClosedTab": {
+    "message":"Abnormal Closed Tabs"
   }
 }

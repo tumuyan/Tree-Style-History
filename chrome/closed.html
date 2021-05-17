@@ -3,12 +3,12 @@
 
 <head>
     <meta content="text/html; charset=utf-8" http-equiv="Content-Type">
-    <title>Tree Style History</title>
+    <title>Recent Close | Tree Style History</title>
     <link rel="stylesheet" href="css/history.css">
     <script type="text/javascript" src="scripts/history-rtl.js"></script>
     <script type="text/javascript" src="scripts/moo.js"></script>
     <script type="text/javascript" src="scripts/func.js"></script>
-    <script type="text/javascript" src="scripts/history2.js"></script>
+    <script type="text/javascript" src="scripts/closed.js"></script>
 
     <link rel="stylesheet" href="css/zTreeStyle.css" type="text/css">
     <script type="text/javascript" src="scripts/jquery-3.6.0.min.js"></script>
@@ -24,9 +24,9 @@
     <div id="navigation-menu">
         <h1 class="lang" data-lang-string="treeOptions"></h1>
         <ul>
-            <li><a href="history2.html" class="lang selected" data-lang-string="treeOptions"></a></li>
+            <li><a href="history2.html" class="lang" data-lang-string="treeOptions"></a></li>
             <li><a href="history.html" class="lang" data-lang-string="linerHistory"></a></li>
-            <li><a href="closed.html" class="lang" data-lang-string="closeHistory"></a></li>
+            <li><a href="closed.html" class="lang selected" data-lang-string="closeHistory"></a></li>
             <li><a href="options.html" class="lang" data-lang-string="options"></a></li>
         </ul>
 
@@ -36,7 +36,7 @@
         <table id="main-table">
             <tr>
                 <td>
-                    <h1 class="lang" id="header-text" data-lang-string="allHistory"></h1>
+                    <h1 class="lang" id="header-text" data-lang-string="closeHistory"></h1>
                 </td>
                 <td id="search">
 
@@ -47,7 +47,7 @@
 
                 <td colspan="2">
                     <div id="rh-views">
-                        <ul id="treeDemo" class="ztree"  ></ul>
+                        <ul id="treeDemo" class="ztree closed_list"  ></ul>
 <!--                         <div id='rh-views-tube'>
                            
                         </div>

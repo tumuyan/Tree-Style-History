@@ -9,6 +9,7 @@ var closedTabs = [];
 
 function openedTab(tab) {
     openedTabs[tab.id] = tab;
+    addCloseRedord(tab.id, tab.url, tab.title, 0, -1);
 }
 
 
@@ -16,24 +17,117 @@ function openedTab(tab) {
 
 function closedTab(id) {
     if (openedTabs[id] !== undefined) {
+        console.log('close ' + id + ' ' + openedTabs[id].url);
+        addCloseRedord(id, openedTabs[id].url, openedTabs[id].title, (new Date()).getTime(), 0);
         openedTabs[id].time = timeNow(0);
         closedTabs.unshift(openedTabs[id]);
     }
 }
 
 
+// 正常添加关闭页面的记录的方法。自动记录时间
+// close<0 未关闭页面  close==0 正常关闭  close >0 不正常关闭
+function addCloseRedord(tid, url, title, time, close) {
+
+    if ((/^(http|https)\:\/\/(.*)/).test(url) && url != title && title != '') {
+
+        var transaction = db.transaction(["closed"], "readwrite");
+        transaction.oncomplete = function (event) {
+
+        };
+
+        transaction.onerror = function (event) {
+
+        };
+        var objectStore = transaction.objectStore("closed");
+
+        objectStore.put({
+            id: oid + '_' + tid,
+            oid: oid - 1,
+            tid: tid,
+            url: url,
+            title: title,
+            closeTime: time,
+            close: close
+        });
+
+    }
+}
+
+
+function updateClosed() {
+
+    let time = (new Date()).getTime();
+
+    var t = db.transaction(['closed'], 'readonly');
+    var store = t.objectStore('closed');
+    var index = store.index('close');
+
+    var range = IDBKeyRange.upperBound(-1);
+
+    index.openCursor(range).onsuccess = function (e) {
+        var cursor = e.target.result;
+        if (cursor) {
+            /*         console.log(cursor.key + ':');
+                
+                    for (var field in cursor.value) {
+                      console.log(cursor.value[field]);
+                    } */
+
+            let v = cursor.value;
+            v.closeTime = time;
+            v.close = 0 - v.close;
+            {
+                var request = db.transaction(['closed'], 'readwrite')
+                    .objectStore('closed')
+                    .put(v);
+
+                request.onsuccess = function (event) {
+                    console.log('updateClosed() succeed ' + v.id);
+                };
+
+                request.onerror = function (event) {
+                    console.log('updateClosed() fail ' + v.id);
+                }
+            }
+            cursor.continue();
+        } else {
+            console.log('updateClosed() done ');
+        }
+    }
+
+}
+
 // Updated tab
 
 function updatedTab(tab) {
     if (tab.status == 'complete') {
         if (openedTabs[tab.id] !== undefined) {
+
+            if (openedTabs[tab.id].url != tab.url || openedTabs[tab.id].title != tab.title) {
+                addCloseRedord(tab.id, tab.url, tab.title, 0, -2);
+            }
             openedTabs[tab.id].title = tab.title;
             openedTabs[tab.id].url = tab.url;
         }
     }
 }
 
+
+
 console.log("loading...");
+
+// 初始化oid参数
+var oid = localStorage['oid'];
+if (oid == undefined)
+    oid = 1;
+else
+    oid++;
+localStorage['oid'] = oid;
+
+
+// 
+
 var DAY = 24 * 3600 * 1000;
 var date = new Date();
 date.setHours(23); date.setMinutes(59); date.setSeconds(59); date.setMilliseconds(999);
@@ -55,56 +149,83 @@ var urls_wait_load = new Array();
 var request, db;
 openDb();
 
-function openDb(){
-    request = window.indexedDB.open("testDB", 2);
+
+function openDb() {
+    request = window.indexedDB.open("testDB", 6);
     request.onerror = function (event) {
         console.log("Error opening DB", event);
     }
     request.onupgradeneeded = function (event) {
         console.log("Upgrading");
         db = event.target.result;
-        var objectStore = db.createObjectStore("VisitItem", { keyPath: "visitId" });
-        objectStore.createIndex('url', 'url', { unique: false });
-        objectStore.createIndex('visitTime', 'visitTime', { unique: false });
-        objectStore.createIndex('referringVisitId', 'referringVisitId', { unique: false });
-        objectStore.createIndex('title', 'title', { unique: false });
-        objectStore.createIndex('transition', 'transition', { unique: false });
-    
-        var objectStore2 = db.createObjectStore("urls", { keyPath: "id" });
-        objectStore2.createIndex('url', 'url', { unique: false });
-        objectStore2.createIndex('lastVisitTime', 'lastVisitTime', { unique: false });
-        // objectStore2.createIndex('visitCount', 'visitCount', { unique: false });
-        objectStore2.createIndex('title', 'title', { unique: false });
-        objectStore2.createIndex('from_to', ['loadfrom', 'loadto'], { unique: false });
-    
+
+        try {
+            var objectStore = db.createObjectStore("VisitItem", { keyPath: "visitId" });
+            objectStore.createIndex('url', 'url', { unique: false });
+            objectStore.createIndex('visitTime', 'visitTime', { unique: false });
+            objectStore.createIndex('referringVisitId', 'referringVisitId', { unique: false });
+            objectStore.createIndex('title', 'title', { unique: false });
+            objectStore.createIndex('transition', 'transition', { unique: false });
+        } catch {
+            console.log('Error in createObjectStore("VisitItem", { keyPath: "visitId" });');
+        }
+
+        try {
+            var objectStore2 = db.createObjectStore("urls", { keyPath: "id" });
+            objectStore2.createIndex('url', 'url', { unique: false });
+            objectStore2.createIndex('lastVisitTime', 'lastVisitTime', { unique: false });
+            // objectStore2.createIndex('visitCount', 'visitCount', { unique: false });
+            objectStore2.createIndex('title', 'title', { unique: false });
+            objectStore2.createIndex('from_to', ['loadfrom', 'loadto'], { unique: false });
+        } catch {
+            console.log('Error in createObjectStore("urls", { keyPath: "id" })');
+        }
+
+        try {
+            // closed表  记录关闭的标签页，自动递增主键
+            var objectStore3 = db.createObjectStore("closed", { keyPath: "id"/* , autoIncrement: true */ });
+            objectStore3.createIndex('url', 'url', { unique: false });
+            objectStore3.createIndex('title', 'title', { unique: false });
+            // objectStore3.createIndex('oid', 'oid', { unique: false });
+            // objectStore3.createIndex('tid', 'tid', { unique: false });
+            objectStore3.createIndex('closeTime', 'closeTime', { unique: false });
+            // objectStore3.createIndex('normalClose', 'normalClose', { unique: false });
+            objectStore3.createIndex('close', 'close', { unique: false });
+        } catch {
+            console.log('Error in createObjectStore("closed", { autoIncrement: true }');
+        }
+
     };
     request.onsuccess = function (event) {
         console.log("Success opening DB");
         db = event.target.result;
-    
+
         // only for debug
-        if (db != undefined)
+        if (db != undefined){
+            updateClosed();
             loadDate(date.getTime(), 0);
+        }
+
     }
 }
 
 
 
-function deleteDb(){
+function deleteDb() {
     db.close();
-    localStorage['calendar-storage']='';
+    localStorage['calendar-storage'] = '';
     var DBDeleteRequest = window.indexedDB.deleteDatabase('testDB');
 
     DBDeleteRequest.onerror = function (event) {
-    // console.log('Error deleteDb');
-    alert(returnLang('saveFail'));
-    
+        // console.log('Error deleteDb');
+        alert(returnLang('saveFail'));
+
     };
 
     DBDeleteRequest.onsuccess = function (event) {
-    // console.log('success deleteDb');
-    alert(returnLang('done'));
-    openDb();
+        // console.log('success deleteDb');
+        alert(returnLang('done'));
+        openDb();
     };
 
 }
@@ -183,13 +304,15 @@ defaultConfig(false);
 // Listeners
 
 
-chrome.commands.onCommand.addListener(function(command) {
-  console.log('Command:', command);
-  if(command=="open_history2"){
-    window.open("history2.html");
-    }else  if(command=="open_history1"){
-             window.open("history.html");
-             }
+chrome.commands.onCommand.addListener(function (command) {
+    console.log('Command:', command);
+    if (command == "open_history2") {
+        window.open("history2.html");
+    } else if (command == "open_history1") {
+        window.open("history.html");
+    } else if (command == "open_closed") {
+        window.open("closed.html");
+    }
 });
 
 // 实时 新建tab时生成记录从哪个tab打开的，读取其url并计入缓存.使用一次后销毁
@@ -327,7 +450,7 @@ function loadDate(date, dateId) {
 
             if (hi.length > 0) {
                 hi.sort(function (a, b) { return b.visitCount - a.visitCount });
-                save_calendar_storage2(obj,hi.length,false);
+                save_calendar_storage2(obj, hi.length, false);
             }
 
             add_urls(hi, date, dateId, 0);
@@ -771,29 +894,29 @@ function add_tab_history(visitItems, i, loadfrom, url_item) {
 
 }
 
-chrome.contextMenus.removeAll(()=>{
+chrome.contextMenus.removeAll(() => {
     const options = {
         type: 'normal',
-        id: 'tree_style_history_'+getVersion(),
-        title:returnLang('searchSite'),
-        contexts:["link","page"],
+        id: 'tree_style_history_' + getVersion(),
+        title: returnLang('searchSite'),
+        contexts: ["link", "page"],
         visible: true,
     }
     chrome.contextMenus.create(options, () => {
-        console.log('select '+options.id);
+        console.log('select ' + options.id);
     });
-    
+
     chrome.contextMenus.onClicked.addListener((info) => {
         // console.log(JSON.stringify(info));
-    
+
         let url = info.linkUrl;
-        if(url!=undefined){
-            window.open('history.html?'+url); 
-        }else {
+        if (url != undefined) {
+            window.open('history.html?' + url);
+        } else {
             url = info.pageUrl;
-            if(url!=undefined){
-                window.open('history.html?'+url); 
-            }   
+            if (url != undefined) {
+                window.open('history.html?' + url);
+            }
         }
     })
 });

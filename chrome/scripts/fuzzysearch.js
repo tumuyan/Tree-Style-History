@@ -44,7 +44,8 @@ function fuzzySearch(zTreeId, searchField, isHighLight, isExpand, tagId) {
             if (_keywords.length == 0) {
                 //return true to show all nodes if the keyword is blank
                 zTreeObj.showNode(node);
-                zTreeObj.expandNode(node, isExpand);
+                zTreeObj.expandNode(node, true);
+                // zTreeObj.expandNode(node, isExpand);
                 return true;
             }
             //transform node name and keywords to lowercase

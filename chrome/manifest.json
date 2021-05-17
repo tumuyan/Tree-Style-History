@@ -2,7 +2,7 @@
   "name": "__MSG_name__",
   "short_name": "Tree Style History",
   "author": "Tumuyan",
-  "version": "3.1.2",
+  "version": "3.1.3",
   "update_url": "https://edge.microsoft.com/extensionwebstorebase/v1/crx",
   "manifest_version": 2,
   "minimum_chrome_version": "22.0",
@@ -46,13 +46,21 @@
       "description":"__MSG_treeOpen__"
     },
     "open_history1": {
-      "suggested_key": {
-        "default": "Alt+Shift+H",
-        "windows": "Alt+Shift+H",
-        "mac": "Alt+Shift+H"
+        "suggested_key": {
+          "default": "Alt+Shift+H",
+          "windows": "Alt+Shift+H",
+          "mac": "Alt+Shift+H"
+        },
+        "description": "__MSG_showAllHistory__"
       },
-      "description": "__MSG_showAllHistory__"
-    },
+    "open_closed": {
+        "suggested_key": {
+          "default": "Alt+Shift+G",
+          "windows": "Alt+Shift+G",
+          "mac": "Alt+Shift+G"
+        },
+        "description": "__MSG_OpenClosedHistory__"
+      },
     "_execute_browser_action": {
       "suggested_key": {
         "windows": "Ctrl+H",

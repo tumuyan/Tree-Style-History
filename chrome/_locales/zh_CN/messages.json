@@ -24,7 +24,7 @@
     "message": "关于"
   },
   "mainOptions": {
-    "message": "主要设置"
+    "message": "弹窗设置"
   },
   "styleOptions": {
     "message": "样式设置"
@@ -378,5 +378,11 @@
     "message":"域名过滤设置"
   },"addItemNum": {
     "message":"增加数量: "
+  },"closeHistory": {
+    "message":"最近关闭"
+  },"OpenClosedHistory": {
+    "message":"打开最近关闭的页面的记录"
+  },"abnormalClosedTab": {
+    "message":"没能正常关闭的页面"
   }
 }

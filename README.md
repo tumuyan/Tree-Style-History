@@ -7,7 +7,7 @@ Currently only Chinese and English UI are available.
 树状展示浏览器历史。  
 灵感来自多年以前的Firefox扩展voyage，后来ff飙版本的时候这个扩展就废了，现在连发布页都被删除了。  
 我一直没有再见到类似的扩展，所以自己就搓了一个。  
-基于Umar的扩展[Recent History](https://github.com/umarsheikh13/recent-history)修改，已经获得原作者Umar的许可可以修改并且作为一个新的扩展进行发布，非常感谢他的劳动和许可。  
+基于Umar的扩展[Recent History](https://github.com/umarsheikh13/recent-history)修改，已经获得原作者Umar的许可可以修改并且作为一个新的扩展进行发布，非常感谢他的劳动和许可。 
 
 ## Policy  
 
@@ -42,6 +42,8 @@ https://github.com/tumuyan/Tree-Style-History/issues/1
 ![screenshot](screen.png)
 
 ## Changlog
+
+3.1.3 (2021/5/18) - 增加功能：树状展示最近关闭的页面；修复：令日期和时间选项对树状历史同样生效；优化：微调外观，修改设置中的默认参数。 
 
 3.1.2 (2021/5/11) - 优化搜索浏览记录功能，增加选项同步功能（跟随浏览器账户自动同步），增加快捷键设置（可以通过设置快捷键替换默认历史记录管理器），缓存访问历史的网址数量，优化部分UI的样式和命名，增加清除缓存功能，优化网址过滤功能。
 

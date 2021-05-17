@@ -1,7 +1,7 @@
 // Version
 
 function getVersion() {
-    return '3.1.2';
+    return '3.1.3';
 }
 
 
@@ -26,28 +26,63 @@ var _DATE = new Date();
 _DATE.setHours(0); _DATE.setMinutes(0); _DATE.setSeconds(0); _DATE.setMilliseconds(0);
 var DAY = 24 * 3600 * 1000;
 
-function TimeToStr(time) {
+function TimeToStr(time, skip_date, skip_year) {
 
     if (new Date() - _DATE > DAY)
         _DATE = _DATE + DAY;
 
-    var currentTime = new Date(time);
-    var hours = currentTime.getHours();
-    var minutes = currentTime.getMinutes();
-    if (hours < 10) { hours = '0' + hours; }
-    if (minutes < 10) { minutes = '0' + minutes; }
-    var timeStr = hours + ':' + minutes;
 
-    if (time > _DATE.getTime()) {
-        return timeStr;
+    var tf = localStorage['rh-timeformat'];
+
+    var currentTime = new Date(time);
+    var hours = currentTime.getHours() * 1;
+    var minutes = currentTime.getMinutes() * 1;
+    if (tf == '12') {
+        if (hours > 11) {
+            var te = ' ' + returnLang('PM');
+        } else {
+            var te = ' ' + returnLang('AM');
+        }
+        if (hours == 0) {
+            hours = 12;
+        }
+        if (hours > 12) {
+            hours = hours - 12;
+        }
+    } else if (tf == '24') {
+        var te = '';
     }
+    if (hours < 10) {
+        hours = '0' + hours;
+    }
+    if (minutes < 10) {
+        minutes = '0' + minutes;
+    }
+
+    if (time > _DATE.getTime() && skip_date) {
+        return hours + ':' + minutes + te;
+    }
+
+
+    var datestr = localStorage['rh-date'];
+    var day = currentTime.getDate();
+    var month = (currentTime.getMonth() + 1);
 
     var month = currentTime.getMonth() + 1;
     if (month < 10) { month = '0' + month; }
 
     var days = currentTime.getDate();
     if (days < 10) { days = '0' + days; }
-    return month + "/" + days + ' ' + timeStr;
+
+    datestr = datestr.replace('dd', day);
+    datestr = datestr.replace('mm', month);
+    if (skip_year) {
+        datestr = datestr.replace('yyyy/', '').replace('/yyyy', '');
+    } else {
+        datestr = datestr.replace('yyyy', currentTime.getFullYear());
+    }
+
+    return datestr + ' ' + hours + ':' + minutes + te;
 }
 
 
@@ -274,7 +309,7 @@ var defaultValues = {
     "load-range": 7,
     "load-range2": 3,
     "load-range3": 120,
-    "load-range4": 120,
+    "load-range4": 150,
     "rh-search": "yes",
     "rh-list-order": "rh-order,rct-order,rb-order,mv-order",
     "rh-time": "yes",
@@ -282,7 +317,7 @@ var defaultValues = {
     "rh-orderby": "date",
     "rh-order": "desc",
     "rh-timeformat": "24",
-    "rh-click": "current",
+    "rh-click": "newtab",
     "rh-share": "yes",
     "rh-filtered": "false",
     "rh-pinned": "false",
@@ -684,7 +719,7 @@ function addList(item) {
                 $(linkid).addEvent('click', function () {
                     this.getParent('tr').destroy();
                 });
-             return true;
+                return true;
             }
 
         }
@@ -692,6 +727,7 @@ function addList(item) {
     return false;
 }
 
+// 合并当且列表和在线列表（但是不保存）
 function mergeList() {
     chrome.storage.sync.get(null, function (result) {
 
@@ -717,20 +753,6 @@ function mergeList() {
 
         alert(returnLang('addItemNum') + c);
     });
-}
-
-
-// Get twitter updates
-
-function twitterUpdates(res) {
-    if (res.length > 0) {
-        $('twitter-insert').set('text', '');
-        for (i = 0; i < res.length; i++) {
-            var td = new Date(res[i].created_at);
-            var date = 'Tweeted on ' + td.getDate() + '/' + (td.getMonth() + 1) + '/' + td.getFullYear();
-            new Element('div', { html: '<div class="tweet-text">"' + res[i].text + '"</div><div class="tweet-date">' + date + '</div>', 'class': 'tweet' }).inject('twitter-insert');
-        }
-    }
 }
 
 
@@ -1581,7 +1603,7 @@ function history(w, q) {
     chrome.history.search(obj, function (hi) {
 
         console.log("search obj=" + obj['text']);
-        
+
         var flist = localStorage['rh-filtered'];
 
         if (hi.length > 0) {
@@ -1594,26 +1616,26 @@ function history(w, q) {
 
                     var site = new URI(hi[i].url).get('host');
 
-                    if(flist!=undefined && flist!='false'){
-                        if(flist.indexOf(site+'|')>=0)
-                            site='';
+                    if (flist != undefined && flist != 'false') {
+                        if (flist.indexOf(site + '|') >= 0)
+                            site = '';
                     }
 
-                    if(site!=''){
+                    if (site != '') {
 
                         var title = hi[i].title;
                         var url = hi[i].url;
                         var visits = hi[i].visitCount;
                         var furl = 'chrome://favicon/' + hi[i].url;
-    
+
                         if (title == '') {
                             title = url;
                         }
-    
+
                         if (hi[i].lastVisitTime >= obj['startTime'] && hi[i].lastVisitTime <= obj['endTime']) {
                             //   rha.push({epoch: hi[i].lastVisitTime, url: url, host: (new URI(url).get('host')), time: timeNow(hi[i].lastVisitTime), date: formatDate(hi[i].lastVisitTime), favicon: furl, title: truncate(title_fix(title), 0, 100), visits: visits});
-                            rha.push({ epoch: hi[i].lastVisitTime, url: url, host: (new URI(url).get('host')), time: TimeToStr(hi[i].lastVisitTime), date: formatDate(hi[i].lastVisitTime), favicon: furl, title: truncate(title_fix(title), 0, 100), visits: visits });
-    
+                            rha.push({ epoch: hi[i].lastVisitTime, url: url, host: (new URI(url).get('host')), time: TimeToStr(hi[i].lastVisitTime,true,true), date: formatDate(hi[i].lastVisitTime), favicon: furl, title: truncate(title_fix(title), 0, 100), visits: visits });
+
                         }
 
                     }
@@ -1675,7 +1697,6 @@ function history(w, q) {
 
                 $(into).set('text', '');
 
-                var ibcb = '#fafafa';
                 var ibcv = 'grey';
                 var Counter = { counter: 0 };
 
@@ -1701,10 +1722,7 @@ function history(w, q) {
                                     new Element('div', {
                                         title: rha[thisc.counter].host,
                                         rel: ibcv,
-                                        styles: {
-                                            'background-color': ibcb
-                                        },
-                                        'class': 'item-holder group-title',
+                                        'class': 'item-holder group-title ',
                                         html: '<a href="#" class="group-title-toggle" id="' + toggleid + '" data-host="' + rha[thisc.counter].host + '" rel="' + rha[thisc.counter].host + '"></a><input type="checkbox" class="group-title-checkbox" id="' + moreid + '" value="' + rha[thisc.counter].host + '"><img id="' + errorid + '" class="group-title-favicon" alt="Favicon" src="' + rha[thisc.counter].favicon + '"><span id="' + groupid + '" data-host="' + rha[thisc.counter].host + '" class="group-title-host">' + rha[thisc.counter].host.replace('www.', '') + '</span>'
                                     }).inject(into);
                                     $(toggleid).addEvent('click', function () {
@@ -1722,11 +1740,6 @@ function history(w, q) {
                                         toggleGroup(host);
                                     })
                                     new Element('div', { 'class': 'group-holder', rel: rha[thisc.counter].host, styles: { 'display': 'none' } }).inject(into);
-                                    if (ibcb == '#fff') {
-                                        ibcb = '#fafafa';
-                                    } else {
-                                        ibcb = '#fff';
-                                    }
                                     if (ibcv == 'white') {
                                         ibcv = 'grey';
                                     } else {
@@ -1775,7 +1788,7 @@ function history(w, q) {
                         } else {
                             if (rha[thisc.counter] !== undefined) {
                                 if (w == 'search' && (sw == 'all' || sw == 'recent')) {
-                                    rha[thisc.counter].time = '- - : - -';
+                                    // rha[thisc.counter].time = '- - : - -';
                                 }
                                 var selectid = 'select-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                                 var errorid = 'error-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
@@ -1789,12 +1802,8 @@ function history(w, q) {
                                 item += '<span class="title" title="' + rha[thisc.counter].url + '" rel="' + returnLang('visits') + ': ' + rha[thisc.counter].visits + ' | ' + rha[thisc.counter].time + ' ' + rha[thisc.counter].date + '">' + rha[thisc.counter].title + '</span>';
                                 item += '</a>';
                                 item += '</div>';
-                                new Element('div', { 'rel': ibcv, 'class': 'item-holder', styles: { 'background-color': ibcb } }).set('html', item + '<div class="clearitem" style="clear:both;"></div>').inject(into);
-                                if (ibcb == '#fff') {
-                                    ibcb = '#fafafa';
-                                } else {
-                                    ibcb = '#fff';
-                                }
+                                new Element('div', { 'rel': ibcv, 'class': 'item-holder ' }).set('html', item + '<div class="clearitem" style="clear:both;"></div>').inject(into);
+
                                 if (ibcv == 'white') {
                                     ibcv = 'grey';
                                 } else {
