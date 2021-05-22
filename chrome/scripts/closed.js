@@ -30,6 +30,14 @@ document.addEvent('domready', function () {
         }
     });
 
+
+    $$('#showCalendar').addEvent('click', function (e) {
+        showCalendar();
+    });
+
+
+    // updateFilter();
+
     // Date events
     var derhdf = localStorage['rh-date'];
     derhdf = derhdf.replace('dd', 'dsdi').replace('mm', 'dsmi').replace('yyyy', 'dsyi');
@@ -234,13 +242,32 @@ document.addEvent('domready', function () {
                 enable: true,
                 pIdKey: "pId"
             }
-        }
-        /*     ,
-            callback: {
-                beforeClick: beforeClick,
-                onClick: onClick
-            } */
+        },
+/*         callback: {
+            beforeRightClick: function (treeId, treeNode) {
+                //   var zTree = $.fn.zTree.getZTreeObj("tree");
+                if (treeNode == null) {
+                    // demoIframe.attr("src", treeNode.file + ".html");
+                    console.log('click R null');
+                    rightmenu('', 0, 0);
+                    return false;
+                }
+
+                if (treeNode.isParent == true) {
+                    // zTree.expandNode(treeNode);
+                    console.log('click R parent');
+                    return true;
+                } else {
+                    // demoIframe.attr("src", treeNode.file + ".html");
+                    console.log('click R');
+                    rightmenu('', 0, 0);
+                    return false;
+                }
+            },
+            onRightClick: zTreeOnRightClick
+        } */
     };
+
 
     // 待插入的全部数据
     var zNodes = [];
@@ -391,8 +418,6 @@ document.addEvent('domready', function () {
 
     function feach_History(loadfrom, loadto, t) {
 
-        var flist = localStorage['rh-filtered'];
-
         var transaction = db.transaction(["closed"], "readwrite");
         var objectStore = transaction.objectStore("closed");
         // 索引，最后的访问时间大于日期上限
@@ -415,14 +440,7 @@ document.addEvent('domready', function () {
                 let v = cursor.value;
                 let t = transition_value[v.transition];
 
-                var site = new URI(v.url).get('host');
-
-                if (flist != undefined && flist != 'false') {
-                    if (flist.indexOf(site + '|') >= 0)
-                        site = '';
-                }
-
-                if (site != '' && v.close >= 0) {
+                if (filtUrl(v.url) == false && v.close >= 0) {
 
                     if (LaNode[v.oid] != true) {
                         LaNode[v.oid] = true;
@@ -433,10 +451,10 @@ document.addEvent('domready', function () {
                             id: v.oid,
                             pId: 0,
                             name: '🗓️',
-                            url: '',
+                            url: '#',
                             icon: '',
                             open: true,
-                            t:v.oid
+                            t: returnLang('tidClosedTab') + v.oid
                         });
                     }
 
@@ -455,7 +473,7 @@ document.addEvent('domready', function () {
 
                     if (v.close == 0) {
 
-                        if (L2Time - v.closeTime > 60000 || L2Time==0) {
+                        if (L2Time - v.closeTime > 60000 || L2Time == 0) {
 
                             if (L2Time != 0) {
                                 let x;
@@ -465,16 +483,16 @@ document.addEvent('domready', function () {
                                         id: x.pId,
                                         pId: x.oid,
                                         name: '🕓',
-                                        url: '',
+                                        url: '#',
                                         icon: '',
                                         open: true,
-                                        t:''
+                                        t: returnLang('fastClosedTab')
                                         // t: TimeToStr(xNodes[xNodes.length-1].time,true,true)+' '+TimeToStr(x.time,true,true)
                                     });
                                     yNodes = yNodes.concat(xNodes);
                                 } else {
-                                    for (let n=0;n<xNodes.length; n++) {
-                                        x=xNodes[n];
+                                    for (let n = 0; n < xNodes.length; n++) {
+                                        x = xNodes[n];
                                         x.pId = x.oid;
                                         yNodes.push(x);
                                     }
@@ -500,10 +518,10 @@ document.addEvent('domready', function () {
                                 id: 'b' + v.closeTime,
                                 pId: v.oid,
                                 name: '⚠️',
-                                url: '',
+                                url: '#',
                                 icon: '',
                                 open: true,
-                                t:returnLang('abnormalClosedTab')
+                                t: returnLang('abnormalClosedTab')
                             });
                         }
                     }
@@ -522,15 +540,15 @@ document.addEvent('domready', function () {
                         id: x.pId,
                         pId: x.oid,
                         name: '🕓',
-                        url: '',
+                        url: '#',
                         icon: '',
                         open: true,
-                        t:''
+                        t: returnLang('fastClosedTab')
                     });
                     zNodes = zNodes.concat(xNodes);
                 } else {
-                    for (let n=0;n<xNodes.length; n++) {
-                        x=xNodes[n];
+                    for (let n = 0; n < xNodes.length; n++) {
+                        x = xNodes[n];
                         x.pId = x.oid;
                         zNodes.push(x);
                     }
@@ -559,6 +577,7 @@ document.addEvent('domready', function () {
                     // $('header-text').set('text',new Date(loadfrom-DAY*t).toLocaleString()+' - '+new Date(loadto).toLocaleString());
                     $('header-text').set('text', timeStr2(new Date(loadfrom - DAY * t), false) + ' ~ ' + timeStr2(new Date(loadto), true));
                     refreshSearchTags();
+                    refreshRMenu();
                     // 
                     alertLoadingHistory(true);
                     console.log(" pre_History() finish :( ");
@@ -607,6 +626,25 @@ document.addEvent('domready', function () {
         });
 
     }
+
+
+function refreshRMenu(){
+    $('treeDemo').getElements('a[href="#"').each(function (el) {
+        if (el.id != undefined) {
+
+            el.addEvent('click', function () {
+                $$('#' + this.id.replace('_a',' a')).each(function (em) {
+                    if (em.href != undefined) {
+                        if (em.href.length > 3)
+                            window.open(em.href);
+                    }
+                });
+
+            });
+        }
+    });
+
+}
 
 
 

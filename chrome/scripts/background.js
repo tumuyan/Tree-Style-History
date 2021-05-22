@@ -299,7 +299,7 @@ var mostVisitedInit = function () {
 // Default values
 
 defaultConfig(false);
-
+// updateFilter();
 
 // Listeners
 
@@ -669,7 +669,7 @@ function getVisits(urls_p) {
     chrome.history.getVisits(details, function (h) {
         let h_len = h.length;
         if (h_len < 1)
-            console.log("add_history() no data, url=" + url);
+            console.log("getVisits() no data, url=" + details.url);
         else {
             h.sort(function (a, b) { return b.visitTime - a.visitTime });
 

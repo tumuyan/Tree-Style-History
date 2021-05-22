@@ -1,7 +1,7 @@
 // Version
 
 function getVersion() {
-    return '3.1.3';
+    return '3.1.4';
 }
 
 
@@ -310,6 +310,7 @@ var defaultValues = {
     "load-range2": 3,
     "load-range3": 120,
     "load-range4": 150,
+    "less-item": "no",
     "rh-search": "yes",
     "rh-list-order": "rh-order,rct-order,rb-order,mv-order",
     "rh-time": "yes",
@@ -398,7 +399,8 @@ function loadOptions(full) {
     $$('#rhsshowsep option[value="' + localStorage['rhs-showsep'] + '"]').set('selected', 'selected');
     $$('#rhsshowext option[value="' + localStorage['rhs-showext'] + '"]').set('selected', 'selected');
     $$('#rhsshowbg option[value="' + localStorage['rhs-showbg'] + '"]').set('selected', 'selected');
-
+    $$('#lessItem option[value="' + localStorage['less-item'] + '"]').set('selected', 'selected');
+    
     previewItem();
 
     $('rhsshowurl').addEvent('change', function () {
@@ -567,6 +569,7 @@ function saveOptions(sync) {
     so['load-range2'] = $('loadrange2').get('value');
     so['load-range3'] = $('loadrange3').get('value');
     so['load-range4'] = $('loadrange4').get('value');
+    so['less-item'] = $('lessItem').getSelected().get('value');
     so['mv-blocklist'] = mlil;
     so['rh-click'] = $('rhclick').getSelected().get('value');
     so['rh-filtered'] = flil;
@@ -601,7 +604,7 @@ function saveOptions(sync) {
 
         (function () {
             console.log('c=' + c + ' mls=' + mls.length + ' so=' + so.length);
-            if (c - mls.length == 20)
+            if (c - mls.length == 21)
                 $('saveUpload').set('value', returnLang('saved'))
             else
                 $('saveUpload').set('value', returnLang('saveFail'))
@@ -613,7 +616,7 @@ function saveOptions(sync) {
         (function () { $('save').set('value', returnLang('saveOptions')) }).delay(3000);
     }
 
-
+    updateFilter();
 
 }
 
@@ -1129,7 +1132,6 @@ function recentHistory() {
     var rh = '';
     var rhin = localStorage['rh-itemsno'] * 1;
     var rhino = rhin;
-    var flist = localStorage['rh-filtered'];
     rhin = rhin * 4;
 
     if (rhin > 0) {
@@ -1154,28 +1156,10 @@ function recentHistory() {
                             title = url;
                         }
 
-                        if (flist == 'false') {
-
-                            if (!test) {
-                                formatItem({ type: 'rh', title: title, url: url, favicon: furl, visits: visits, time: timeNow(hi[i].lastVisitTime) }).inject('rh-inject', 'bottom');
-                                ir++;
-                            }
-
-                        } else {
-
-                            var uri = new URI(url);
-
-                            if (flist.indexOf(uri.get('host') + '|') == -1) {
-
-                                if (!test) {
-                                    formatItem({ type: 'rh', title: title, url: url, favicon: furl, visits: hi[i].visitCount, time: timeNow(hi[i].lastVisitTime) }).inject('rh-inject', 'bottom');
-                                    ir++;
-                                }
-
-                            }
-
+                        if (filtUrl(url) == false) {
+                            formatItem({ type: 'rh', title: title, url: url, favicon: furl, visits: visits, time: timeNow(hi[i].lastVisitTime) }).inject('rh-inject', 'bottom');
+                            ir++;
                         }
-
                     }
 
                 }
@@ -1201,7 +1185,6 @@ function recentlyClosedTabs() {
     var rhhistory = chrome.extension.getBackgroundPage().closedTabs;
 
     var itemsno = localStorage['rct-itemsno'] * 1;
-    var flist = localStorage['rh-filtered'];
     var rcti = 0;
 
     if (itemsno > 0) {
@@ -1226,15 +1209,13 @@ function recentlyClosedTabs() {
                     if (title !== undefined) {
                         if (!(/^(file|chrome|chrome-extension|chrome-devtools)\:\/\//).test(url)) {
                             if (rhhistory[(i - 1)] == undefined) {
-                                var uri = new URI(url);
-                                if (flist.indexOf(uri.get('host') + '|') == -1) {
+                                if (filtUrl(url) == false) {
                                     formatItem({ type: 'rct', title: title, url: url, favicon: furl, time: time }).inject('rct-inject', 'bottom');
                                     rcti++;
                                 }
                             } else {
                                 if (rhhistory[(i - 1)].url !== url) {
-                                    var uri = new URI(url);
-                                    if (flist.indexOf(uri.get('host') + '|') == -1) {
+                                    if (filtUrl(url) == false) {
                                         formatItem({ type: 'rct', title: title, url: url, favicon: furl, time: time }).inject('rct-inject', 'bottom');
                                         rcti++;
                                     }
@@ -1377,6 +1358,56 @@ function alertLoadingHistory(pm) {
         $('alert-holder-loading').setStyle('margin-top', '-15px');
     } else if ($('alert-holder').getStyle('display') == 'none') {
         $('alert-holder').setStyle('display', 'block');
+    }
+}
+
+
+var flist = '';
+var flist_r = /^false$/;
+var site_r = /(.+\.){3,}/;
+// var addon_url='';
+updateFilter();
+
+function updateFilter() {
+    flist = localStorage['rh-filtered'];
+    if (flist == undefined || flist == '' || flist == 'false') {
+        flist = 'false';
+        flist_r = /^false$/;
+        localStorage['rh-filtered'] = flist;
+    } else {
+        flist_r = new RegExp('[^\?=#]*(' + flist + ').*', 'i');
+    }
+
+    // addon_url=document.URL.replace('background.html','');
+    // console.log('addon_url = '+addon_url);
+}
+
+// 如果命中，返回true
+function filtUrl(url) {
+    if (flist == undefined || flist == 'false' || url == undefined || url == '')
+        return false;
+
+    var site = new URI(url).get('host');
+    if (flist.indexOf(site + '|') >= 0)
+        return true;
+
+    if (site_r.test(site)) {
+        site = site.replace(/[\.]+\./, '');
+    }
+
+    if (flist.indexOf(site) >= 0) {
+        return flist_r.test(url);
+    }
+
+    return false;
+}
+
+
+function showCalendar() {
+    if ($$('#calendar')[0].getStyle('display') == 'none') {
+        $$('#calendar').setStyle('display', 'inline');
+    } else {
+        $$('#calendar').setStyle('display', 'none');
     }
 }
 
@@ -1604,8 +1635,6 @@ function history(w, q) {
 
         console.log("search obj=" + obj['text']);
 
-        var flist = localStorage['rh-filtered'];
-
         if (hi.length > 0) {
 
             alertLoadingHistory(false);
@@ -1614,14 +1643,7 @@ function history(w, q) {
 
                 if (hi[i] !== undefined && (/^(http|https|ftp|ftps)\:\/\//).test(hi[i].url)) {
 
-                    var site = new URI(hi[i].url).get('host');
-
-                    if (flist != undefined && flist != 'false') {
-                        if (flist.indexOf(site + '|') >= 0)
-                            site = '';
-                    }
-
-                    if (site != '') {
+                    if (filtUrl(hi[i].url) == false) {
 
                         var title = hi[i].title;
                         var url = hi[i].url;
@@ -1634,7 +1656,7 @@ function history(w, q) {
 
                         if (hi[i].lastVisitTime >= obj['startTime'] && hi[i].lastVisitTime <= obj['endTime']) {
                             //   rha.push({epoch: hi[i].lastVisitTime, url: url, host: (new URI(url).get('host')), time: timeNow(hi[i].lastVisitTime), date: formatDate(hi[i].lastVisitTime), favicon: furl, title: truncate(title_fix(title), 0, 100), visits: visits});
-                            rha.push({ epoch: hi[i].lastVisitTime, url: url, host: (new URI(url).get('host')), time: TimeToStr(hi[i].lastVisitTime,true,true), date: formatDate(hi[i].lastVisitTime), favicon: furl, title: truncate(title_fix(title), 0, 100), visits: visits });
+                            rha.push({ epoch: hi[i].lastVisitTime, url: url, host: (new URI(url).get('host')), time: TimeToStr(hi[i].lastVisitTime, true, true), date: formatDate(hi[i].lastVisitTime), favicon: furl, title: truncate(title_fix(title), 0, 100), visits: visits });
 
                         }
 

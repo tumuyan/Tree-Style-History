@@ -749,3 +749,37 @@ div[rel="grey"] {
         background-color: #000;
     }
 }
+
+#showCalendar{
+    display: none;
+}
+
+@media screen and (max-width:500px)
+{
+
+    #history-container, #options{
+        margin-left: 20px !important;
+        /* margin-top: 180px;         */
+    }
+
+    #navigation-menu {
+        position: relative;
+    }
+
+    #showCalendar{
+        display: inline;
+    }
+
+    #history-container #calendar {
+/*         position: absolute  !important; */
+        top: 19px  !important;
+        /* /* left: 130px; */
+    }
+
+    ul.ztree {
+        max-width: 100%;
+    }
+
+
+
+}

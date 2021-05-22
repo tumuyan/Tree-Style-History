@@ -486,7 +486,7 @@ input[type="button"]:active {
         background-color: rgb(74, 74, 74) !important;
     }
 
-    .item .title{
+    .item .title,#rhitemstyle #rhitemstyle-title{
         color: #fff  !important;
     }
 
@@ -508,3 +508,27 @@ input[type="button"]:active {
       
     }
 
+
+    @media screen and (max-width:500px)
+    {
+    
+        #history-container, #options{
+            margin-left: 20px !important;
+            /* margin-top: 180px;         */
+        }
+    
+        #navigation-menu {
+            position: relative;
+        }
+    
+        #showCalendar{
+            display: inline;
+        }
+    
+        #history-container #calendar {
+    /*         position: absolute  !important; */
+            top: 19px  !important;
+            /* /* left: 130px; */
+        }
+    
+    }

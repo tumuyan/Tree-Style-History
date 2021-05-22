@@ -95,6 +95,12 @@
   "option21": {
     "message": "社交网络书签"
   },
+  "option22":{
+    "message":"显示较少的历史"
+  },
+  "option22tip":{
+    "message":"不显示刷新页面的历史记录、没有跳转关系的重复记录，从而减少展示的历史记录"
+  },
   "help1": {
     "message": "在弹窗中最多显示多少条最近访问历史"
   },
@@ -135,7 +141,7 @@
     "message": "此处显示你从最常访问列表中删除的URL。点击右边的X可以将其恢复到最常访问列表"
   },
   "help17": {
-    "message": "此处指定你不想在访问历史中显示的域名，如163.com；注意指定顶级域名不能覆盖子域名，如指定163.com不会隐藏music.163.com的访问记录"
+    "message": "此处指定你不想在访问历史中显示的网址。输入的内容必须包含域名，如163.com；注意指定顶级域名不能覆盖一级域名，如指定163.com不会隐藏music.163.com的访问记录，但是二级域名可以覆盖二级域名。"
   },
   "help18": {
     "message": "当点击弹窗中的项目时执行什么操作"
@@ -383,6 +389,15 @@
   },"OpenClosedHistory": {
     "message":"打开最近关闭的页面的记录"
   },"abnormalClosedTab": {
-    "message":"没能正常关闭的页面"
+    "message":"没能正常关闭的页面（点击可以批量打开分组）"
+  },"dateConfig": {
+    "message":"日期时间格式设置"
+  },"showCalendar": {
+    "message":"选择日期"
+  },"fastClosedTab": {
+    "message":"快速关闭的页面（点击可以批量打开分组）"
+  },"tidClosedTab": {
+    "message":"点击可以批量打开分组 "
   }
+  
 }

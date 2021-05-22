@@ -1,12 +1,19 @@
 # Tree Style Histyle
 
 This extension shows your recent browser history in tree style.  
+When you browser pages from internet, you always jump from one page to another by clicking hyper-text links. This extension shows such a jumping relationship through a tree structure, help you find out what you were doing, what website you visited, and whether what something has done faster.  
+
 This work is based on [Recent History](https://github.com/umarsheikh13/recent-history) and has get the permission to modify and publish the code as a new exttension, many thanks to Umar.  
 Currently only Chinese and English UI are available.  
 
-树状展示浏览器历史。  
-灵感来自多年以前的Firefox扩展voyage，后来ff飙版本的时候这个扩展就废了，现在连发布页都被删除了。  
-我一直没有再见到类似的扩展，所以自己就搓了一个。  
+树状展示浏览器历史。
+在使用浏览器访问网页时，用户往往会通过点击链接，从一个页面跳转到另一个页面。本扩展通过树状结构展示了这样的跳转关系，从而让用户能够更快地弄清楚自己当时在做什么，访问了什么网站，当时要做的事情是否已经完成。 
+除此核心功能外，还有如下特色：  
+1. 提供了右键菜单，快速搜索当前网站，或者链接指向的网站的访问历史。
+2. 树状查看最近关闭的页面。根据关闭页面的时间、是否正常关闭对页面自动分组。批量打开一个分组的全部页面。
+
+灵感来自Firefox扩展[voyage](https://docs.google.com/document/d/1oaJjS9zWGQDBzy4wE403P7V2nQukMql_sfvAURl2noI/preview)，后来ff飙版本的时候这个扩展就废了，现在连发布页都被删除。  
+我一直没有再见到类似的扩展，所以自己就搓了一个，算是完成多年夙愿。  
 基于Umar的扩展[Recent History](https://github.com/umarsheikh13/recent-history)修改，已经获得原作者Umar的许可可以修改并且作为一个新的扩展进行发布，非常感谢他的劳动和许可。 
 
 ## Policy  
@@ -39,9 +46,11 @@ https://chrome.google.com/webstore/detail/tree-style-history/khcenbpnhbeplojhaol
 https://jingyan.baidu.com/article/ca2d939dfa5762ab6d31ce10.html  
 https://github.com/tumuyan/Tree-Style-History/issues/1  
 
-![screenshot](screen.png)
+![screenshot](screen.jpg)
 
 ## Changlog
+
+3.1.4 (2021/5/20) - 增加功能：树状历史中显示较少的历史（默认关闭，需要在设置中手动打开），批量打开最近关闭的页面。优化：微调外观，一定程度上实现了窄窗口自适应(但是使用Android kiwi浏览器测试确认手机不能实现主要功能)，统一变更过滤域名的算法  
 
 3.1.3 (2021/5/18) - 增加功能：树状展示最近关闭的页面；修复：令日期和时间选项对树状历史同样生效；优化：微调外观，修改设置中的默认参数。 
 

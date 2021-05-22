@@ -125,6 +125,10 @@ document.addEvent('domready', function(){
         shiftState = 'false';
       }
     });
+
+    $$('#showCalendar').addEvent('click', function (e) {
+        showCalendar();
+    });
     
     // Date events
     

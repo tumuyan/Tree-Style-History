@@ -95,6 +95,12 @@
   "option21": {
     "message": "Social Bookmarking"
   },
+  "option22":{
+    "message":"Show less history"
+  },
+  "option22tip":{
+    "message":"Not show the record for refresh page, repeat urls without parent node and child node."
+  },
   "help1": {
     "message": "The number of recent history items in the pop-up"
   },
@@ -370,6 +376,14 @@
   },"OpenClosedHistory": {
     "message":"Open recent closed Tabs"
   },"abnormalClosedTab": {
-    "message":"Abnormal Closed Tabs"
+    "message":"Abnormal Closed Tabs (Click me to open the tab group)"
+  },"dateConfig": {
+    "message":"Date Format Config"
+  },"showCalendar": {
+    "message":"Date Picker"
+  },"fastClosedTab": {
+    "message":"Fast Closed Tabs (Click me to open the tab group)"
+  },"tidClosedTab": {
+    "message":"Click me to open the tab group "
   }
 }

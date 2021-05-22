@@ -30,6 +30,12 @@ document.addEvent('domready', function () {
         }
     });
 
+    $$('#showCalendar').addEvent('click', function (e) {
+        showCalendar();
+    });
+
+    // updateFilter();
+
     // Date events
     var derhdf = localStorage['rh-date'];
     derhdf = derhdf.replace('dd', 'dsdi').replace('mm', 'dsmi').replace('yyyy', 'dsyi');
@@ -258,6 +264,10 @@ document.addEvent('domready', function () {
 
     var tag = {};
 
+    var pIDs = {};
+
+    var showLessItem = localStorage['less-item'];
+
     var loadzNode = false;
 
     $jq.fn.zTree.init($jq("#treeDemo"), setting, nNodes);
@@ -355,6 +365,7 @@ document.addEvent('domready', function () {
 
         zNodes = [];
         tag = {};
+        pIDs = {};
 
         if (loadfrom > 0 && loadto > 0) {
             console.log("loadHistory time from " + loadfrom.toString() + " to " + loadto.toString());
@@ -372,8 +383,6 @@ document.addEvent('domready', function () {
 
 
     function feach_History(loadfrom, loadto, t) {
-
-        var flist = localStorage['rh-filtered'];
 
         var transaction = db.transaction(["VisitItem"], "readwrite");
         var objectStore = transaction.objectStore("VisitItem");
@@ -396,26 +405,21 @@ document.addEvent('domready', function () {
                 let v = cursor.value;
                 let t = transition_value[v.transition];
 
-                var site = new URI(v.url).get('host');
-
-                if (flist != undefined && flist != 'false') {
-                    if (flist.indexOf(site + '|') >= 0)
-                        site = '';
-                }
-
-                if (site != '') {
+                if (filtUrl(v.url) == false) {
                     let node = {
                         id: v.visitId,
                         pId: parseInt(v.referringVisitId),
                         name: TimeToStr(v.visitTime, true, true) + " - " + v.title.replace(/[<>]/g, ' ') + ' ' + t,
                         url: v.url,
                         icon: 'chrome://favicon/' + v.url.replace(/(?<![\/])\/[^\/].+/, ""),
-                        // icon:'chrome://favicon/'+site,
                         open: true,
-                        t: v.url // + " "+v.referringVisitId + ">"+v.visitId
+                        transition: v.transition,
+                        t: v.url //+ " "+v.referringVisitId + ">"+v.visitId
                     };
 
                     tag[t] = true;
+
+                    pIDs[v.referringVisitId] = true;
 
                     yNodes.push(node);
                 }
@@ -434,6 +438,28 @@ document.addEvent('domready', function () {
                         // treeObj.removeNode(nodes,false);
                     }
 
+                    if (zNodes.length > 0 && showLessItem == 'yes') {
+
+                        let urls = {};
+
+                        for (let s = 0; s < zNodes.length; s++) {
+                            let ss = zNodes[s];
+                            while (pIDs[ss.id] != true) {
+                                if (ss.transition == 'reload' || urls[ss.url] == true) {
+                                    zNodes.splice(s, 1);
+                                } else {
+                                    urls[ss.url] = true;
+                                    break;
+                                }
+
+                                if (s < zNodes.length)
+                                    ss = zNodes[s];
+                                else
+                                    break;
+                            }
+                        }
+                    }
+
                     if (zNodes.length > 0) {
                         treeObj.addNodes(null, zNodes, false);
                         // $('calendar-total-value').set('text',zNodes.length);
@@ -445,7 +471,7 @@ document.addEvent('domready', function () {
                     $('calendar-total-value').set('text', zNodes.length);
 
                     // $('header-text').set('text',new Date(loadfrom-DAY*t).toLocaleString()+' - '+new Date(loadto).toLocaleString());
-                    $('header-text').set('text', timeStr2(new Date(loadfrom - DAY * t),false) + ' ~ ' + timeStr2(new Date(loadto),true));
+                    $('header-text').set('text', timeStr2(new Date(loadfrom - DAY * t), false) + ' ~ ' + timeStr2(new Date(loadto), true));
                     refreshSearchTags();
                     // 
                     alertLoadingHistory(true);
