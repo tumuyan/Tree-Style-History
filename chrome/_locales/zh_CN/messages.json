@@ -30,7 +30,7 @@
     "message": "样式设置"
   },
   "advanceOptions": {
-    "message": "高级设置"
+    "message": "其他设置"
   },
   "option1": {
     "message": "最多显示多少条最近访问历史"
@@ -84,7 +84,10 @@
     "message": "隐藏指定域名的访问历史"
   },
   "option18": {
-    "message": "左键单击操作"
+    "message": "单击记录的操作"
+  },
+  "option181": {
+    "message":"单击更多的操作"
   },
   "option19": {
     "message": "弹窗主题"
@@ -144,7 +147,10 @@
     "message": "此处指定你不想在访问历史中显示的网址。输入的内容必须包含域名，如163.com；注意指定顶级域名不能覆盖一级域名，如指定163.com不会隐藏music.163.com的访问记录，但是二级域名可以覆盖二级域名。"
   },
   "help18": {
-    "message": "当点击弹窗中的项目时执行什么操作"
+    "message": "当点击弹窗中的项目时，执行什么操作"
+  },
+  "help181": {
+    "message": "当点击弹窗中的“更多”时，执行什么操作"
   },
   "help20": {
     "message": "本扩展使用的时间格式"
@@ -190,6 +196,12 @@
   },
   "click3": {
     "message": "在新后台标签中打开"
+  },
+  "click4": {
+    "message": "在Tree Style History中打开"
+  },
+  "click5": {
+    "message": "在浏览器默认查看器中打开"
   },
   "translation1": {
     "message": "请提交更新更好的翻译来帮助改进Recent History。本页面可以简化你的翻译操作。"
@@ -356,6 +368,8 @@
   "message":"输入的内容太长，不是正确的域名"
 },"shortcuts": {
   "message":"设置快捷键"
+},"shortcutsTip": {
+    "message":"为popup弹窗、树状历史、线性历史、最近关闭的页面设置不同的快捷键"
 },"name": {
   "message":"Tree Style History - 树形历史"
 },"linerHistory": {
@@ -398,6 +412,12 @@
     "message":"快速关闭的页面（点击可以批量打开分组）"
   },"tidClosedTab": {
     "message":"点击可以批量打开分组 "
+  },"linerBookMark": {
+    "message":"线性书签"
+  },"OpenBookMark": {
+    "message":"打开线性书签"
+  },"BookMarkPath": {
+    "message":"在线性书签中显示保存路径"
   }
   
 }

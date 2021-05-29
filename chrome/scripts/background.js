@@ -312,6 +312,8 @@ chrome.commands.onCommand.addListener(function (command) {
         window.open("history.html");
     } else if (command == "open_closed") {
         window.open("closed.html");
+    } else if (command == "open_bookmark") {
+        window.open("bookmark.html");
     }
 });
 

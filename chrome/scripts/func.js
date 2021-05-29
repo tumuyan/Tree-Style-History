@@ -1,7 +1,7 @@
 // Version
 
 function getVersion() {
-    return '3.1.4';
+    return '3.1.5';
 }
 
 
@@ -26,7 +26,7 @@ var _DATE = new Date();
 _DATE.setHours(0); _DATE.setMinutes(0); _DATE.setSeconds(0); _DATE.setMilliseconds(0);
 var DAY = 24 * 3600 * 1000;
 
-function TimeToStr(time, skip_date, skip_year) {
+function TimeToStr(time, skip_date, skip_year, skip_clock) {
 
     if (new Date() - _DATE > DAY)
         _DATE = _DATE + DAY;
@@ -65,8 +65,6 @@ function TimeToStr(time, skip_date, skip_year) {
 
 
     var datestr = localStorage['rh-date'];
-    var day = currentTime.getDate();
-    var month = (currentTime.getMonth() + 1);
 
     var month = currentTime.getMonth() + 1;
     if (month < 10) { month = '0' + month; }
@@ -74,9 +72,14 @@ function TimeToStr(time, skip_date, skip_year) {
     var days = currentTime.getDate();
     if (days < 10) { days = '0' + days; }
 
-    datestr = datestr.replace('dd', day);
+    datestr = datestr.replace('dd', days);
     datestr = datestr.replace('mm', month);
     if (skip_year) {
+        if(skip_clock){
+            if((new Date()).getFullYear()!=currentTime.getFullYear())
+                return  datestr.replace('yyyy', currentTime.getFullYear());
+        }
+        
         datestr = datestr.replace('yyyy/', '').replace('/yyyy', '');
     } else {
         datestr = datestr.replace('yyyy', currentTime.getFullYear());
@@ -319,13 +322,15 @@ var defaultValues = {
     "rh-order": "desc",
     "rh-timeformat": "24",
     "rh-click": "newtab",
+    "rm-click": "default",
+    "rm-path": "yes",
     "rh-share": "yes",
     "rh-filtered": "false",
     "rh-pinned": "false",
     "rhs-showurl": "no",
     "rhs-showsep": "no",
     "rhs-showext": "no",
-    "rhs-showbg": "no"
+    "rhs-showbg": "no",
 };
 
 function defaultConfig(clean) {
@@ -363,6 +368,8 @@ function loadOptions(full) {
 
     var rhilo = localStorage['rh-list-order'].split(',');
 
+    $('rhlistorder').empty();
+
     for (var lo in rhilo) {
         if (rhilo[lo] == 'rh-order') {
             new Element('li', { 'id': rhilo[lo], 'html': returnLang('recentHistory') }).inject('rhlistorder');
@@ -394,7 +401,7 @@ function loadOptions(full) {
     $$('#rhtime option[value="' + localStorage['rh-timeformat'] + '"]').set('selected', 'selected');
     $$('#rhsearch option[value="' + localStorage['rh-search'] + '"]').set('selected', 'selected');
     $$('#rhshare option[value="' + localStorage['rh-share'] + '"]').set('selected', 'selected');
-
+    $$('#rmpath option[value="' + localStorage['rm-path'] + '"]').set('selected', 'selected');
     $$('#rhsshowurl option[value="' + localStorage['rhs-showurl'] + '"]').set('selected', 'selected');
     $$('#rhsshowsep option[value="' + localStorage['rhs-showsep'] + '"]').set('selected', 'selected');
     $$('#rhsshowext option[value="' + localStorage['rhs-showext'] + '"]').set('selected', 'selected');
@@ -427,7 +434,8 @@ function loadOptions(full) {
     if (full)
         filteredDomainsList();
 
-    $$('#rhclick option[value="' + localStorage['rh-click'] + '"]').set('selected', 'selected');
+        $$('#rhclick option[value="' + localStorage['rh-click'] + '"]').set('selected', 'selected');
+        $$('#rmclick option[value="' + localStorage['rm-click'] + '"]').set('selected', 'selected');
 
 }
 
@@ -449,8 +457,10 @@ function downloadOptions() {
             // console.log(i);
         }
 
-        loadOptions(false);
-        $('downloadConfig').set('value', returnLang('downloadConfig'));
+        location.reload();
+
+        // loadOptions(false);
+        // $('downloadConfig').set('value', returnLang('downloadConfig'));
     });
 
 }
@@ -572,6 +582,8 @@ function saveOptions(sync) {
     so['less-item'] = $('lessItem').getSelected().get('value');
     so['mv-blocklist'] = mlil;
     so['rh-click'] = $('rhclick').getSelected().get('value');
+    so['rm-click'] = $('rmclick').getSelected().get('value');
+    so['rm-path'] = $('rmpath').getSelected().get('value');
     so['rh-filtered'] = flil;
     for (var i in so) {
         localStorage[i] = so[i];
@@ -604,7 +616,7 @@ function saveOptions(sync) {
 
         (function () {
             console.log('c=' + c + ' mls=' + mls.length + ' so=' + so.length);
-            if (c - mls.length == 21)
+            if (c - mls.length == 23)
                 $('saveUpload').set('value', returnLang('saved'))
             else
                 $('saveUpload').set('value', returnLang('saveFail'))

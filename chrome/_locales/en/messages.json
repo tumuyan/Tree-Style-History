@@ -30,7 +30,7 @@
     "message": "Style Options"
   },
   "advanceOptions": {
-    "message": "Advance Options"
+    "message": "Others Options"
   },
   "option1": {
     "message": "Number of Recent History Items"
@@ -84,7 +84,10 @@
     "message": "Filter Domains from History"
   },
   "option18": {
-    "message": "Left Mouse Click Action"
+    "message": "Click Item Action"
+  },
+  "option181": {
+    "message": "Click More Action"
   },
   "option19": {
     "message": "Pop-up Theme"
@@ -146,6 +149,9 @@
   "help18": {
     "message": "What should happen when you click on an item in the pop-up"
   },
+  "help181": {
+    "message": "What should happen when you click MORE in the pop-up"
+  },
   "help20": {
     "message": "The format of the time used throughout the extension"
   },
@@ -178,6 +184,12 @@
   },
   "click3": {
     "message": "Open in new background tab"
+  },
+  "click4": {
+    "message": "Open in Tree Style History"
+  },
+  "click5": {
+    "message": "Open in browser default viewer"
   },
   "translation1": {
     "message": "Please help make Recent History better by providing new and better translations for it. This page has been created to make it easier for you to translate this extension."
@@ -341,6 +353,8 @@
   "message":"The length of your input URL is too long"
 },"shortcuts": {
   "message":"Shortcuts"
+},"shortcutsTip": {
+    "message":"Set shortcuts for popup, tree style history, liner history and recent closed page"
 },"name": {
   "message":"Tree Style History"
 },"linerHistory": {
@@ -385,5 +399,11 @@
     "message":"Fast Closed Tabs (Click me to open the tab group)"
   },"tidClosedTab": {
     "message":"Click me to open the tab group "
+  },"linerBookMark": {
+    "message":"Liner Bookmark"
+  },"OpenBookMark": {
+    "message":"Open Liner Bookmark"
+  },"BookMarkPath": {
+    "message":"Show the path in liner bookmark view"
   }
 }

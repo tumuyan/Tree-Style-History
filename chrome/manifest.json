@@ -2,7 +2,7 @@
   "name": "__MSG_name__",
   "short_name": "Tree Style History",
   "author": "Tumuyan",
-  "version": "3.1.4",
+  "version": "3.1.5",
   "update_url": "https://edge.microsoft.com/extensionwebstorebase/v1/crx",
   "manifest_version": 2,
   "minimum_chrome_version": "22.0",
@@ -61,13 +61,13 @@
         },
         "description": "__MSG_OpenClosedHistory__"
       },
-    "_execute_browser_action": {
-      "suggested_key": {
-        "windows": "Ctrl+H",
-        "mac": "Command+H",
-        "linux": "Ctrl+H"
-      },
-      "description": "打开popup页"
+    "open_bookmark": {
+        "suggested_key": {
+          "default": "Alt+Shift+O",
+          "windows": "Alt+Shift+O",
+          "mac": "Alt+Shift+O"
+        },
+        "description": "__MSG_OpenBookMark__"
     }
   }
 }

@@ -18,6 +18,7 @@
             <li><a href="history2.html" class="lang" data-lang-string="treeOptions"></a></li>
             <li><a href="history.html" class="lang" data-lang-string="linerHistory"></a></li>
             <li><a href="closed.html" class="lang" data-lang-string="closeHistory"></a></li>
+            <li><a href="bookmark.html" class="lang" data-lang-string="linerBookMark"></a></li>
             <li><a href="options.html" class="lang selected" data-lang-string="options"></a></li>
         </ul>
     </div>
@@ -35,8 +36,7 @@
                 <table>
                     <tr>
                         <td class="cell-left">
-                            <label for="lessItem"    
-                             style="width:36px;"  class="lang" data-lang-string="option22"></label>
+                            <label for="lessItem" style="width:36px;" class="lang" data-lang-string="option22"></label>
                             <span id="option22tip" title="" class="help-tip" alt="Help"></span>
                         </td>
                         <td class="cell-right">
@@ -108,12 +108,12 @@
 
                     <tr>
                         <td class="cell-left">
-                            <label for="deleteCache"    id="deleteCache"
-                             style="width:36px;"  class="lang" data-lang-string="deleteCache"></label>
+                            <label for="deleteCache" id="deleteCache" style="width:36px;" class="lang"
+                                data-lang-string="deleteCache"></label>
                             <span id="clickMe" title="" class="help-tip" alt="Help"></span>
                         </td>
                         <td class="cell-right">
-<!--                             <a style="width:36px;"  id="deleteCache"  class="lang"
+                            <!--                             <a style="width:36px;"  id="deleteCache"  class="lang"
                             data-lang-string="clickMe"> </a> -->
                         </td>
                     </tr>
@@ -210,7 +210,7 @@
                     </tr>
                 </table>
 
-                <hr/>
+                <hr />
 
                 <table>
                     <tr>
@@ -264,6 +264,35 @@
                     </tr>
                 </table>
 
+                <hr />
+
+                <table>
+                    <tr>
+                        <td class="cell-left"><label for="rhclick" class="lang"
+                                data-lang-string="option18"></label><span id="help18" title="" class="help-tip"
+                                alt="Help"></span></td>
+                        <td class="cell-right">
+                            <select name="rhclick" id="rhclick">
+                                <option value="current" class="lang" data-lang-string="click1"></option>
+                                <option value="newtab" class="lang" data-lang-string="click2"></option>
+                                <option value="newbgtab" class="lang" data-lang-string="click3"></option>
+                            </select>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td class="cell-left"><label for="rmclick" class="lang"
+                                data-lang-string="option181"></label><span id="help181" title="" class="help-tip"
+                                alt="Help"></span></td>
+                        <td class="cell-right">
+                            <select name="rmclick" id="rmclick">
+                                <option value="this" class="lang" data-lang-string="click4"></option>
+                                <option value="default" class="lang" data-lang-string="click5"></option>
+                            </select>
+                        </td>
+                    </tr>
+                </table>
+
 
 
             </form>
@@ -311,21 +340,21 @@
                         </td>
                     </tr>
                     <tr>
-                        <td class="cell-left"><label for="deleteList" class="lang"  id="deleteList" 
+                        <td class="cell-left"><label for="deleteList" class="lang" id="deleteList"
                                 data-lang-string="deleteList"></label><span id="clickMe" title="" class="help-tip"
                                 alt="Help"></span></td>
                         <td class="cell-right">
                         </td>
                     </tr>
                     <tr>
-                        <td class="cell-left"><label for="mergeList" class="lang"  id="mergeList" 
+                        <td class="cell-left"><label for="mergeList" class="lang" id="mergeList"
                                 data-lang-string="mergeList"></label><span id="clickMe" title="" class="help-tip"
                                 alt="Help"></span></td>
                         <td class="cell-right">
                         </td>
                     </tr>
 
-                    
+
                 </table>
 
             </form>
@@ -333,33 +362,32 @@
             <form id="advance-options" action="#">
                 <table>
                     <tr>
-                        <td class="cell-left"><label for="rhclick" class="lang"
-                                data-lang-string="option18"></label><span id="help18" title="" class="help-tip"
+                        <td class="cell-left"><label for="shortcuts" class="lang" id="shortcuts"
+                                data-lang-string="shortcuts"></label><span id="shortcutsTip" title="" class="help-tip"
                                 alt="Help"></span></td>
                         <td class="cell-right">
-                            <select name="rhclick" id="rhclick">
-                                <option value="current" class="lang" data-lang-string="click1"></option>
-                                <option value="newtab" class="lang" data-lang-string="click2"></option>
-                                <option value="newbgtab" class="lang" data-lang-string="click3"></option>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="cell-left"><label for="BookMarkPath" class="lang" id="BookMarkPath"
+                                data-lang-string="BookMarkPath"></label></td>
+                        <td class="cell-right">
+                            <select name="BookMarkPath" id="rmpath">
+                                <option value="yes" class="lang" data-lang-string="yes"></option>
+                                <option value="no" class="lang" data-lang-string="no"></option>
                             </select>
                         </td>
                     </tr>
 
-                    <tr>
-                        <td class="cell-left"><label for="shortcuts" class="lang"  id="shortcuts" 
-                                data-lang-string="shortcuts"></label><span id="clickMe" title="" class="help-tip"
-                                alt="Help"></span></td>
-                        <td class="cell-right">
-                        </td>
-                    </tr>
+
                 </table>
             </form>
             <h2>&nbsp;</h2>
             <div id="save-holder">
                 <input id="save" type="button" value="">
                 <input id="defaultConfig" type="button" value="">
-                
-               <!--  <input id="shortcuts" type="button" value=""> -->
+
+                <!--  <input id="shortcuts" type="button" value=""> -->
                 <input id="saveUpload" type="button" value="">
                 <input id="downloadConfig" type="button" value="">
                 <input id="downloadConfig2" type="button" value="" style="display:none">
@@ -464,7 +492,8 @@
             <p>
                 <b>Tree Style History: </b><span id="version"></span><br>
                 <b>Author: </b>Tumuyan<br>
-                <b>Project URI: </b><a target="_blank" href="https://github.com/tumuyan/Tree-Style-History">https://github.com/tumuyan/Tree-Style-History</a>
+                <b>Project URI: </b><a target="_blank"
+                    href="https://github.com/tumuyan/Tree-Style-History">https://github.com/tumuyan/Tree-Style-History</a>
             <h2>License</h2>
             <p>Tree Style History, Tree Style History (Toolbar Icon)</p>
             <p>Copyright (c) 2021 Tumuyan &lt;tumuyan@gmail.com&gt;</p>

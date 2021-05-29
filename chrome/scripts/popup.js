@@ -32,11 +32,11 @@ document.addEvent('domready', function () {
             }
         } else if (rhporder[o] == 'rct-order') {
             if ((localStorage['rct-itemsno'] * 1) > 0 && chrome.extension.getBackgroundPage().closedTabs.length > 0) {
-                    if( navigator.userAgent.toLowerCase().indexOf('edg')>0){
-                        new Element('div', {id: 'rct-inject', html: '<div id="rct-inject-title" class="popup-title"><span>'+returnLang('recentlyClosedTabs')+'	- <a href="#"  id="show-all-closed" target="_blank">'+returnLang('more')+'...</a></span></div>'}).inject('popup-insert', 'bottom');
-                    }else{
-                        new Element('div', {id: 'rct-inject', html: '<div id="rct-inject-title" class="popup-title"><span>'+returnLang('recentlyClosedTabs')+'</span></div>'}).inject('popup-insert', 'bottom');
-                   }
+                if (navigator.userAgent.toLowerCase().indexOf('edg') > 0) {
+                    new Element('div', { id: 'rct-inject', html: '<div id="rct-inject-title" class="popup-title"><span>' + returnLang('recentlyClosedTabs') + '	- <a href="#"  id="show-all-closed" target="_blank">' + returnLang('more') + '...</a></span></div>' }).inject('popup-insert', 'bottom');
+                } else {
+                    new Element('div', { id: 'rct-inject', html: '<div id="rct-inject-title" class="popup-title"><span>' + returnLang('recentlyClosedTabs') + '</span></div>' }).inject('popup-insert', 'bottom');
+                }
             }
         } else if (rhporder[o] == 'rb-order') {
             if ((localStorage['rb-itemsno'] * 1) > 0) {
@@ -50,15 +50,30 @@ document.addEvent('domready', function () {
     }
 
     // Assign events
- 
-    if ($('show-all-history') != undefined)
-    $('show-all-history').addEvent('click', function () { chromeURL('chrome://history/'); });
 
-    if ( $('show-all-bookmark') != undefined)
-    $('show-all-bookmark').addEvent('click', function () { chromeURL('chrome://favorites/'); });
- 
+    if ($('show-all-history') != undefined)
+        $('show-all-history').addEvent('click', function () {
+            if (localStorage['rm-click'] == 'this')
+                chromeURL('/history2.html');
+            else
+                chromeURL('chrome://history/');
+        });
+
+    if ($('show-all-bookmark') != undefined)
+        $('show-all-bookmark').addEvent('click', function () {
+            if (localStorage['rm-click'] == 'this')
+                chromeURL('/bookmark.html');
+            else
+                chromeURL('chrome://favorites/');
+        });
+
     if ($('show-all-closed') != undefined)
-    $('show-all-closed').addEvent('click', function () { chromeURL('chrome://history/recentlyClosed'); });
+        $('show-all-closed').addEvent('click', function () {
+            if (localStorage['rm-click'] == 'this')
+                chromeURL('/closed.html');
+            else
+                chromeURL('chrome://history/recentlyClosed');
+        });
 
     // Popup init
 
