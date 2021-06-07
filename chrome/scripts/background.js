@@ -344,9 +344,11 @@ chrome.tabs.onCreated.addListener(function (tab) {
     }
 
     // visitTab(tab,tabJson[tab.openerTabId.toString()]);
+    /*     
+    屏蔽替换默认历史页的功能
     if (localStorage['rh-historypage'] == 'yes' && (tab.url == 'chrome://history/' || ('pendingUrl' in tab && tab.pendingUrl == 'chrome://history/'))) {
         chrome.tabs.update(tab.id, { url: 'history2.html', selected: true }, function () { });
-    }
+    } */
 });
 chrome.tabs.onUpdated.addListener(function (id, info, tab) {
     // console.log("chrome.tabs.onUpdated "+tab.id +" "+id);

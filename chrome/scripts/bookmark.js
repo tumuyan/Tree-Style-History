@@ -147,7 +147,7 @@ document.addEvent('domready', function () {
 
     // Assign events
 
-    $('master-check-all').addEvent('click', function () { selectHistoryItem(this, 'all'); });
+    // $('master-check-all').addEvent('click', function () { selectHistoryItem(this, 'all'); });
 
 
 
@@ -160,7 +160,7 @@ document.addEvent('domready', function () {
             if (tree[i].children == undefined) {
                 let title = tree[i].title;
                 if (title == '') {
-                    title = url;
+                    title = tree[i].url;
                 }
                 if (localStorage['rm-path'] == 'yes')
                     tree[i].title = (path).replace(/[🗁]+/, '🗁') + ' - ' + title;
@@ -257,14 +257,20 @@ document.addEvent('domready', function () {
 
         for (i = 0; i <= hi.length; i++) {
 
-            if (hi[i] !== undefined && (/^(http|https|ftp|ftps)\:\/\//).test(hi[i].url)) {
+            if (hi[i] !== undefined) {
 
                 if (filtUrl(hi[i].url) == false) {
 
                     var title = hi[i].title;
                     var url = hi[i].url;
+                    var host = get_host(url);
                     var visits = hi[i].visitCount;
                     var furl = 'chrome://favicon/' + hi[i].url;
+                    if (host == "#") {
+                        url = encodeURI(url);
+                        furl = 'chrome://favicon/';
+                    }
+
 
                     if (title == '') {
                         title = url;
@@ -273,7 +279,7 @@ document.addEvent('domready', function () {
                     // if (hi[i].dateAdded >= obj['startTime'] && hi[i].dateAdded <= obj['endTime'])
                     {
                         //   rha.push({epoch: hi[i].dateAdded, url: url, host: (new URI(url).get('host')), time: timeNow(hi[i].dateAdded), date: formatDate(hi[i].dateAdded), favicon: furl, title: truncate(title_fix(title), 0, 100), visits: visits});
-                        rha.push({ epoch: hi[i].dateAdded, url: url, host: (new URI(url).get('host')), time: TimeToStr(hi[i].dateAdded, true, true, true), date: formatDate(hi[i].dateAdded), favicon: furl, title: truncate(title_fix(title), 0, 100), visits: visits });
+                        rha.push({ epoch: hi[i].dateAdded, url: url, host: host, time: TimeToStr(hi[i].dateAdded, true, true, true), date: formatDate(hi[i].dateAdded), favicon: furl, title: truncate(title_fix(title), 0, 100), visits: visits });
 
                     }
 
@@ -374,7 +380,7 @@ document.addEvent('domready', function () {
                             var selectid = 'select-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                             var item;
                             item = '<div class="item">';
-                            item += '<span class="checkbox"><label><input class="chkbx" type="checkbox" id="' + selectid + '" value="' + rha[thisc.counter].url + '" name="check"></label>&nbsp;</span>';
+                            // item += '<span class="checkbox"><label><input class="chkbx" type="checkbox" id="' + selectid + '" value="' + rha[thisc.counter].url + '" name="check"></label>&nbsp;</span>';
                             //item += '<span class="bookmark">&nbsp;</span>';
                             item += '<span class="time">' + rha[thisc.counter].time + '</span>';
                             item += '<a style="padding-left:0;" target="_blank" class="link" href="' + rha[thisc.counter].url + '">';
@@ -388,9 +394,9 @@ document.addEvent('domready', function () {
                                     'background-color': $(into).getElement('div.item-holder[title="' + rha[thisc.counter].host + '"]').getStyle('background-color')
                                 }
                             }).set('html', item + '<div class="clearitem" style="clear:both;"></div>').inject($(into).getElement('div[rel="' + rha[thisc.counter].host + '"]'));
-                            $(selectid).addEvent('click', function () {
-                                selectHistoryItem(this, 'single');
-                            });
+                            // $(selectid).addEvent('click', function () {
+                            //     selectHistoryItem(this, 'single');
+                            // });
                         }
                     }
                     thisc.counter++;
@@ -414,7 +420,7 @@ document.addEvent('domready', function () {
                             var errorid = 'error-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                             var item;
                             item = '<div class="item">';
-                            item += '<span class="checkbox"><label><input class="chkbx" type="checkbox" id="' + selectid + '" value="' + rha[thisc.counter].url + '" name="check"></label>&nbsp;</span>';
+                            // item += '<span class="checkbox"><label><input class="chkbx" type="checkbox" id="' + selectid + '" value="' + rha[thisc.counter].url + '" name="check"></label>&nbsp;</span>';
                             //item += '<span class="bookmark">&nbsp;</span>';
                             item += '<span class="time">' + rha[thisc.counter].time + '</span>';
                             item += '<a target="_blank" class="link" href="' + rha[thisc.counter].url + '">';
@@ -429,9 +435,9 @@ document.addEvent('domready', function () {
                             } else {
                                 ibcv = 'white';
                             }
-                            $(selectid).addEvent('click', function () {
-                                selectHistoryItem(this, 'single');
-                            });
+                            // $(selectid).addEvent('click', function () {
+                            //     selectHistoryItem(this, 'single');
+                            // });
                             $(errorid).addEvent('error', function () {
                                 this.setProperty('src', 'images/blank.png');
                             });
@@ -448,6 +454,5 @@ document.addEvent('domready', function () {
         }
 
     }
-
 
 });

@@ -1,7 +1,7 @@
 // Version
 
 function getVersion() {
-    return '3.1.5';
+    return '6';
 }
 
 
@@ -2140,6 +2140,14 @@ function deleteHistoryItem(w) {
             });
         }
     }
+}
+
+function get_host(url) {
+    let host = new URI(url).get('host');
+    if (host == undefined || host == "")
+        return "#";
+    else
+        return host;
 }
 
 // DOM functions

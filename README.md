@@ -51,6 +51,8 @@ https://github.com/tumuyan/Tree-Style-History/issues/1
 
 ## Changlog
 
+3.1.6 (2021/6/7) 修复bug：Chrome无法显示默认历史管理器的问题（在Edge是正常的）；线性书签无法正常显示小书签（bookmarklet）
+
 3.1.5 (2021/5/29)  
 增加功能：线性书签标签页。  
 增加选项：指定在popup弹窗中点击“更多”时，打开浏览器默认的页面还是扩展内置页面。  
