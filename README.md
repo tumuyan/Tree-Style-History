@@ -1,7 +1,12 @@
 # Tree Style Histyle
 
 This extension shows your recent browser history in tree style.  
-When you browser pages from internet, you always jump from one page to another by clicking hyper-text links. This extension shows such a jumping relationship through a tree structure, help you find out what you were doing, what website you visited, and whether what something has done faster.  
+When you browser pages from internet, you always jump from one page to another by clicking hyper-text links. This extension shows such a jumping relationship through a tree structure, help you find out what you were doing, what website you visited, and whether something has been done.  
+
+Also following features are available.  
+1. Use the right-click menu to quickly search the history for current site, or the site linked to.
+2. Tree view of recently closed pages. They are group by when they were closed and whether they were closed properly. 
+3. Linear view of bookmarks. Usually browser shows bookmarks in tree style, this extension does the opposite, reorders and displays bookmarks by time and site.  
 
 This work is based on [Recent History](https://github.com/umarsheikh13/recent-history) and has get the permission to modify and publish the code as a new exttension, many thanks to Umar.  
 Currently only Chinese and English UI are available.  
@@ -50,6 +55,8 @@ https://github.com/tumuyan/Tree-Style-History/issues/1
 ![screenshot](screen.jpg)
 
 ## Changlog
+
+3.1.7 (2021/6/24) 修复bug：在“最近关闭”的页面点击链接，会自动打开2个页面
 
 3.1.6 (2021/6/7) 修复bug：Chrome无法显示默认历史管理器的问题（在Edge是正常的）；线性书签无法正常显示小书签（bookmarklet）
 

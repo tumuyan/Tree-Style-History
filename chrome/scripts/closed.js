@@ -629,7 +629,7 @@ document.addEvent('domready', function () {
 
 
 function refreshRMenu(){
-    $('treeDemo').getElements('a[href="#"').each(function (el) {
+    $('treeDemo').getElements('a[href="#"]').each(function (el) {
         if (el.id != undefined) {
 
             el.addEvent('click', function () {

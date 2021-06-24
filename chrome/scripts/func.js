@@ -1,7 +1,7 @@
 // Version
 
 function getVersion() {
-    return '6';
+    return '3.1.7';
 }
 
 
