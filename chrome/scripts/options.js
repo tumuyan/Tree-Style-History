@@ -72,26 +72,23 @@ document.addEvent('domready', function () {
 
 
     // $('shortcuts').set('value', returnLang('shortcuts'));
-    $('shortcuts').addEvent('click',function(){
+    $('shortcuts').addEvent('click', function () {
         chromeURL('chrome://extensions/shortcuts');
     });
 
-        $('saveUpload').set('value', returnLang('saveUpload'));
-        $('saveUpload').addEvent('click',function(){
-             saveOptions(true);
-//            chromeURL('chrome://extensions/shortcuts');
-        });
+    $('saveUpload').set('value', returnLang('saveUpload'));
+    $('saveUpload').addEvent('click', function () {
+        saveOptions(true);
+    });
 
-            $('downloadConfig').set('value', returnLang('downloadConfig'));
-            $('downloadConfig').addEvent('click',function(){
-                downloadOptions();
-//                chromeURL('chrome://extensions/shortcuts');
-            });
+    $('downloadConfig').set('value', returnLang('downloadConfig'));
+    $('downloadConfig').addEvent('click', function () {
+        downloadOptions();
+    });
 
-                $('downloadConfig2').set('value', returnLang('downloadConfig2'));
-                $('downloadConfig2').addEvent('click',function(){
-//                    chromeURL('chrome://extensions/shortcuts');
-                });
+    $('downloadConfig2').set('value', returnLang('downloadConfig2'));
+    $('downloadConfig2').addEvent('click', function () {
+    });
 
     // Sliders
 

@@ -405,5 +405,9 @@
     "message":"Open Liner Bookmark"
   },"BookMarkPath": {
     "message":"Show the path in liner bookmark view"
-  }
+  },"showPopup": {
+    "message": "Show popup page"
+},"showPopuptip":{
+    "message":"Action for click the icon. Yes: open the popup-page; No: open Tree Style Page."
+} 
 }

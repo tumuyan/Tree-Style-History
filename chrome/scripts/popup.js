@@ -8,6 +8,12 @@ document.addEvent('domready', function () {
         localStorage['rh-version-' + getVersion()] = 'true';
     }
 
+    if (localStorage['show-popup'] == 'no') {
+        window.open("history2.html");
+        window.close();
+    }
+
+
     // Ctrl listener
 
     $(document.body).addEvent('keydown', function (e) {

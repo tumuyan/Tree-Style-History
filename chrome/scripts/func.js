@@ -1,7 +1,7 @@
 // Version
 
 function getVersion() {
-    return '3.1.7';
+    return '3.1.8';
 }
 
 
@@ -331,6 +331,7 @@ var defaultValues = {
     "rhs-showsep": "no",
     "rhs-showext": "no",
     "rhs-showbg": "no",
+    "show-popup": "yes"
 };
 
 function defaultConfig(clean) {
@@ -396,6 +397,8 @@ function loadOptions(full) {
         }
     });
 
+    
+    $$('#showPopup option[value="' + localStorage['show-popup'] + '"]').set('selected','selected');
     $$('#rhhistorypage option[value="' + localStorage['rh-historypage'] + '"]').set('selected', 'selected');
     $$('#rhdate option[value="' + localStorage['rh-date'] + '"]').set('selected', 'selected');
     $$('#rhtime option[value="' + localStorage['rh-timeformat'] + '"]').set('selected', 'selected');
@@ -568,6 +571,7 @@ function saveOptions(sync) {
     so['mv-itemsno'] = $('mvitemsno').get('value');
     so['rh-list-order'] = rhlo[0].get('id') + ',' + rhlo[1].get('id') + ',' + rhlo[2].get('id') + ',' + rhlo[3].get('id');
     so['rh-historypage'] = $('rhhistorypage').getSelected().get('value');
+    so['show-popup'] = $('showPopup').getSelected().get('value');
     so['rh-date'] = $('rhdate').getSelected().get('value');
     so['rh-timeformat'] = $('rhtime').getSelected().get('value');
     so['rh-search'] = $('rhsearch').getSelected().get('value');
@@ -616,7 +620,7 @@ function saveOptions(sync) {
 
         (function () {
             console.log('c=' + c + ' mls=' + mls.length + ' so=' + so.length);
-            if (c - mls.length == 23)
+            if (c - mls.length == 24)
                 $('saveUpload').set('value', returnLang('saved'))
             else
                 $('saveUpload').set('value', returnLang('saveFail'))
