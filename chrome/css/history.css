@@ -291,8 +291,10 @@ input[type="text"]:focus {
 }
 
 
-.group-title-toggle-bookmark {
-    left: 39px !important;
+label.group-title-toggle-count {
+    left: 39px;
+    display: block;
+    position: absolute;
 }
 
 .group-title-checkbox {
