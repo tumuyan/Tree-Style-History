@@ -28,10 +28,15 @@ document.addEvent('domready', function(){
     }
     if(localStorage['rh-orderby'] == 'title'){
       $('rh-bar-orderby').setStyle('background-position', 'right center');
-    }
+      $('rh-bar-orderby').set('title', returnLang('orderByTime') );       
+    } else {
+        $('rh-bar-orderby').set('title', returnLang('orderByTitle') ); 
+        }
+    $('rh-bar-order').set('title', returnLang('order') ); 
     if(localStorage['rh-order'] == 'asc'){
       $('rh-bar-order').setStyle('background-position', 'right center');
     }
+    $('rh-bar-group').set('title', returnLang('group') );  
     $('rh-bar-group').addEvent('click', function(){
       var rhgv = localStorage['rh-group'];
       if(rhgv == 'yes'){
@@ -57,9 +62,11 @@ document.addEvent('domready', function(){
       var rhgv = localStorage['rh-orderby'];
       if(rhgv == 'date'){
         $('rh-bar-orderby').setStyle('background-position', 'right center');
+        $('rh-bar-orderby').set('title', returnLang('orderByTime') );
         localStorage['rh-orderby'] = 'title';
       }else if(rhgv == 'title'){
         $('rh-bar-orderby').setStyle('background-position', 'left center');
+        $('rh-bar-orderby').set('title', returnLang('orderByTitle') );    
         localStorage['rh-orderby'] = 'date';
       }
       var gahv = getActiveHistory();

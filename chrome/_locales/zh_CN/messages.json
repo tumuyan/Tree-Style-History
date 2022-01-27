@@ -422,6 +422,14 @@
       "message": "显示弹窗"
   },"showPopuptip":{
       "message":"点击扩展图标或者激活扩展时的动作。是（弹窗）否（打开树状历史）"
-  } 
+  } ,"orderByTitle":{
+    "message":"按名称排序"
+} ,"orderByTime":{
+    "message":"按时间排序"
+},"group":{
+    "message":"分组"
+},"order":{
+    "message":"排序"
+}
   
 }

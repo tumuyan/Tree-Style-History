@@ -25,10 +25,15 @@ document.addEvent('domready', function () {
     }
     if (localStorage['rh-orderby'] == 'title') {
         $('rh-bar-orderby').setStyle('background-position', 'right center');
+        $('rh-bar-orderby').set('title', returnLang('orderByTime') ); 
+    } else {       
+         $('rh-bar-orderby').set('title', returnLang('orderByTitle') );   
     }
+    $('rh-bar-order').set('title', returnLang('order') ); 
     if (localStorage['rh-order'] == 'asc') {
         $('rh-bar-order').setStyle('background-position', 'right center');
-    }
+    }    
+    $('rh-bar-group').set('title', returnLang('group') );   
     $('rh-bar-group').addEvent('click', function () {
         var rhgv = localStorage['rh-group'];
         if (rhgv == 'yes') {
@@ -54,9 +59,11 @@ document.addEvent('domready', function () {
         var rhgv = localStorage['rh-orderby'];
         if (rhgv == 'date') {
             $('rh-bar-orderby').setStyle('background-position', 'right center');
+            $('rh-bar-orderby').set('title', returnLang('orderByTime') );  
             localStorage['rh-orderby'] = 'title';
         } else if (rhgv == 'title') {
             $('rh-bar-orderby').setStyle('background-position', 'left center');
+            $('rh-bar-orderby').set('title', returnLang('orderByTitle') );       
             localStorage['rh-orderby'] = 'date';
         }
         var gahv = getActiveHistory();
@@ -343,17 +350,19 @@ document.addEvent('domready', function () {
                         if ($$('#' + into + ' div.group-title').length > 0) { toggleGroup($$('#' + into + ' div.group-title')[0].get('title')); }
                         $('master-check-all').removeProperty('disabled');
                     } else {
-                        if (rha[thisc.counter] !== undefined) {
-                            if (!$(into).getElement('div[rel="' + rha[thisc.counter].host + '"]')) {
+                        
+                        var host = rha[thisc.counter].host;
+                        if (host !== undefined) {
+                            if (!$(into).getElement('div[rel="' + host + '"]')) {
                                 var toggleid = 'toggle-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                                 var moreid = 'more-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                                 var errorid = 'error-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                                 var groupid = 'group-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                                 new Element('div', {
-                                    title: rha[thisc.counter].host,
+                                    title: host,
                                     rel: ibcv,
                                     'class': 'item-holder group-title ',
-                                    html: '<a href="#" class="group-title-toggle" id="' + toggleid + '" data-host="' + rha[thisc.counter].host + '" rel="' + rha[thisc.counter].host + '"></a><input type="checkbox" class="group-title-checkbox" id="' + moreid + '" value="' + rha[thisc.counter].host + '"><img id="' + errorid + '" class="group-title-favicon" alt="Favicon" src="' + rha[thisc.counter].favicon + '"><span id="' + groupid + '" data-host="' + rha[thisc.counter].host + '" class="group-title-host">' + rha[thisc.counter].host.replace('www.', '') + '</span>'
+                                    html: '<a href="#" class="group-title-toggle group-title-toggle-bookmark" id="' + toggleid + '" data-host="' + host + '" rel="' + host + '"></a><label rel="' + host + '"></label><input type="hidden"  style="width: 0; display:none;   padding: 0 0 0 0;  margin: 0 0 0 0;    visibility: hidden;  left: 0;"  class="group-title-checkbox" id="' + moreid + '" value="' + host + '"><img id="' + errorid + '" class="group-title-favicon" alt="Favicon" src="' + rha[thisc.counter].favicon + '"><span id="' + groupid + '" data-host="' + rha[thisc.counter].host + '" class="group-title-host">' + host.replace('www.', '') + '</span>'
                                 }).inject(into);
                                 $(toggleid).addEvent('click', function () {
                                     var host = this.getProperty('data-host');
@@ -369,7 +378,7 @@ document.addEvent('domready', function () {
                                     var host = this.getProperty('data-host');
                                     toggleGroup(host);
                                 })
-                                new Element('div', { 'class': 'group-holder', rel: rha[thisc.counter].host, styles: { 'display': 'none' } }).inject(into);
+                                new Element('div', { 'class': 'group-holder', rel: host, styles: { 'display': 'none' } }).inject(into);
                                 if (ibcv == 'white') {
                                     ibcv = 'grey';
                                 } else {
@@ -380,23 +389,26 @@ document.addEvent('domready', function () {
                             var selectid = 'select-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                             var item;
                             item = '<div class="item">';
-                            // item += '<span class="checkbox"><label><input class="chkbx" type="checkbox" id="' + selectid + '" value="' + rha[thisc.counter].url + '" name="check"></label>&nbsp;</span>';
-                            //item += '<span class="bookmark">&nbsp;</span>';
                             item += '<span class="time">' + rha[thisc.counter].time + '</span>';
                             item += '<a style="padding-left:0;" target="_blank" class="link" href="' + rha[thisc.counter].url + '">';
-                            item += '<span class="title" title="' + rha[thisc.counter].url + '" rel="' + returnLang('visits') + ': ' + rha[thisc.counter].visits + ' | ' + rha[thisc.counter].time + ' ' + rha[thisc.counter].date + '">' + rha[thisc.counter].title + '</span>';
+                            item += '<span class="title" title="' + rha[thisc.counter].url + '" rel="' +  rha[thisc.counter].time +  '">' + rha[thisc.counter].title + '</span>';
                             item += '</a>';
                             item += '</div>';
                             new Element('div', {
-                                'rel': $(into).getElement('div.item-holder[title="' + rha[thisc.counter].host + '"]').get('rel'),
+                                'rel': $(into).getElement('div.item-holder[title="' + host + '"]').get('rel'),
                                 'class': 'item-holder',
                                 styles: {
-                                    'background-color': $(into).getElement('div.item-holder[title="' + rha[thisc.counter].host + '"]').getStyle('background-color')
+                                    'background-color': $(into).getElement('div.item-holder[title="' + host + '"]').getStyle('background-color')
                                 }
-                            }).set('html', item + '<div class="clearitem" style="clear:both;"></div>').inject($(into).getElement('div[rel="' + rha[thisc.counter].host + '"]'));
+                            }).set('html', item + '<div class="clearitem" style="clear:both;"></div>').inject($(into).getElement('div[rel="' + host + '"]'));
                             // $(selectid).addEvent('click', function () {
                             //     selectHistoryItem(this, 'single');
                             // });
+
+                            var size = $(into).getElement('div[rel="' + host + '"]').childNodes.length;
+                            var label = $(into).getElement('label[rel="' + host + '"]');
+                            if (label != undefined)
+                                label.set("text", size);
                         }
                     }
                     thisc.counter++;
@@ -420,12 +432,10 @@ document.addEvent('domready', function () {
                             var errorid = 'error-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                             var item;
                             item = '<div class="item">';
-                            // item += '<span class="checkbox"><label><input class="chkbx" type="checkbox" id="' + selectid + '" value="' + rha[thisc.counter].url + '" name="check"></label>&nbsp;</span>';
-                            //item += '<span class="bookmark">&nbsp;</span>';
                             item += '<span class="time">' + rha[thisc.counter].time + '</span>';
                             item += '<a target="_blank" class="link" href="' + rha[thisc.counter].url + '">';
                             item += '<img id="' + errorid + '" class="favicon" alt="Favicon" src="' + rha[thisc.counter].favicon + '">';
-                            item += '<span class="title" title="' + rha[thisc.counter].url + '" rel="' + returnLang('visits') + ': ' + rha[thisc.counter].visits + ' | ' + rha[thisc.counter].time + ' ' + rha[thisc.counter].date + '">' + rha[thisc.counter].title + '</span>';
+                            item += '<span class="title" title="' + rha[thisc.counter].url + '" rel="'  + rha[thisc.counter].time +  '">' + rha[thisc.counter].title + '</span>';
                             item += '</a>';
                             item += '</div>';
                             new Element('div', { 'rel': ibcv, 'class': 'item-holder ' }).set('html', item + '<div class="clearitem" style="clear:both;"></div>').inject(into);

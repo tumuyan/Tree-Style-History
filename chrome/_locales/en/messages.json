@@ -407,7 +407,15 @@
     "message":"Show the path in liner bookmark view"
   },"showPopup": {
     "message": "Show popup page"
-},"showPopuptip":{
+} ,"showPopuptip":{
     "message":"Action for click the icon. Yes: open the popup-page; No: open Tree Style Page."
-} 
+} ,"orderByTitle":{
+    "message":"Order by title"
+} ,"orderByTime":{
+    "message":"Order by time"
+},"group":{
+    "message":"Group"
+},"order":{
+    "message":"Order"
+}
 }

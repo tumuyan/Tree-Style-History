@@ -1,7 +1,7 @@
 // Version
 
 function getVersion() {
-    return '3.1.8';
+    return '3.1.9';
 }
 
 
@@ -37,32 +37,37 @@ function TimeToStr(time, skip_date, skip_year, skip_clock) {
     var currentTime = new Date(time);
     var hours = currentTime.getHours() * 1;
     var minutes = currentTime.getMinutes() * 1;
-    if (tf == '12') {
-        if (hours > 11) {
-            var te = ' ' + returnLang('PM');
-        } else {
-            var te = ' ' + returnLang('AM');
-        }
-        if (hours == 0) {
-            hours = 12;
-        }
-        if (hours > 12) {
-            hours = hours - 12;
-        }
-    } else if (tf == '24') {
-        var te = '';
-    }
-    if (hours < 10) {
-        hours = '0' + hours;
-    }
-    if (minutes < 10) {
-        minutes = '0' + minutes;
-    }
 
-    if (time > _DATE.getTime() && skip_date) {
-        return hours + ':' + minutes + te;
-    }
+    if (time == undefined) {
+        hours = '--';
+        minutes = '--';
+    } else {
+        if (tf == '12') {
+            if (hours > 11) {
+                var te = ' ' + returnLang('PM');
+            } else {
+                var te = ' ' + returnLang('AM');
+            }
+            if (hours == 0) {
+                hours = 12;
+            }
+            if (hours > 12) {
+                hours = hours - 12;
+            }
+        } else if (tf == '24') {
+            var te = '';
+        }
+        if (hours < 10) {
+            hours = '0' + hours;
+        }
+        if (minutes < 10) {
+            minutes = '0' + minutes;
+        }
 
+        if (time > _DATE.getTime() && skip_date) {
+            return hours + ':' + minutes + te;
+        }
+    }
 
     var datestr = localStorage['rh-date'];
 
@@ -72,17 +77,25 @@ function TimeToStr(time, skip_date, skip_year, skip_clock) {
     var days = currentTime.getDate();
     if (days < 10) { days = '0' + days; }
 
+    var year = currentTime.getFullYear();
+
+    if (time == undefined) {
+        year = '----';
+        month = '--';
+        days = '--';
+    }
+
     datestr = datestr.replace('dd', days);
     datestr = datestr.replace('mm', month);
     if (skip_year) {
-        if(skip_clock){
-            if((new Date()).getFullYear()!=currentTime.getFullYear())
-                return  datestr.replace('yyyy', currentTime.getFullYear());
+        if (skip_clock) {
+            if ((new Date()).getFullYear() != year)
+                return datestr.replace('yyyy', year);
         }
-        
+
         datestr = datestr.replace('yyyy/', '').replace('/yyyy', '');
     } else {
-        datestr = datestr.replace('yyyy', currentTime.getFullYear());
+        datestr = datestr.replace('yyyy', currentTime.year);
     }
 
     return datestr + ' ' + hours + ':' + minutes + te;
@@ -185,17 +198,24 @@ function timeNow(st) {
 // Format date
 
 function formatDate(str) {
-    str = str * 1;
+
     var datestr = localStorage['rh-date'];
-    var date = new Date(str);
-    var day = date.getDate() + '';
-    var month = (date.getMonth() + 1) + '';
-    var year = date.getFullYear() + '';
-    if (day.length == 1) { day = '0' + day; }
-    if (month.length == 1) { month = '0' + month; }
-    datestr = datestr.replace('dd', day);
-    datestr = datestr.replace('mm', month);
-    datestr = datestr.replace('yyyy', year);
+    if (str == undefined) {
+        datestr = datestr.replace('dd', '--');
+        datestr = datestr.replace('mm', '--');
+        datestr = datestr.replace('yyyy', '----');
+    } else {
+        str = str * 1;
+        var date = new Date(str);
+        var day = date.getDate() + '';
+        var month = (date.getMonth() + 1) + '';
+        var year = date.getFullYear() + '';
+        if (day.length == 1) { day = '0' + day; }
+        if (month.length == 1) { month = '0' + month; }
+        datestr = datestr.replace('dd', day);
+        datestr = datestr.replace('mm', month);
+        datestr = datestr.replace('yyyy', year);
+    }
     return datestr;
 }
 
@@ -1672,7 +1692,7 @@ function history(w, q) {
 
                         if (hi[i].lastVisitTime >= obj['startTime'] && hi[i].lastVisitTime <= obj['endTime']) {
                             //   rha.push({epoch: hi[i].lastVisitTime, url: url, host: (new URI(url).get('host')), time: timeNow(hi[i].lastVisitTime), date: formatDate(hi[i].lastVisitTime), favicon: furl, title: truncate(title_fix(title), 0, 100), visits: visits});
-                            rha.push({ epoch: hi[i].lastVisitTime, url: url, host: (new URI(url).get('host')), time: TimeToStr(hi[i].lastVisitTime, true, true), date: formatDate(hi[i].lastVisitTime), favicon: furl, title: truncate(title_fix(title), 0, 100), visits: visits });
+                            rha.push({ epoch: hi[i].lastVisitTime, url: url, host: (new URI(url).get('host')), time: TimeToStr(hi[i].lastVisitTime, true, true, false), date: formatDate(hi[i].lastVisitTime), favicon: furl, title: truncate(title_fix(title), 0, 100), visits: visits });
 
                         }
 
