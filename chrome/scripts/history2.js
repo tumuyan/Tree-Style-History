@@ -220,6 +220,18 @@ document.addEvent('domready', function () {
     }
 
 
+    function zTreeOnClickUrl(event, treeId, treeNode) {
+        chrome.tabs.query({ url: treeNode.t }, function (tabs) {
+            if (tabs.length > 0) {
+                chrome.windows.update(tabs[0].windowId, { focused: true }, function () {
+                    chrome.tabs.update(tabs[0].id, { active: true } );
+                });
+            } else {
+                window.open(treeNode.t, "_blank");
+            }
+        });
+    }; 
+
     // ztree
     var setting = {
 
@@ -240,12 +252,10 @@ document.addEvent('domready', function () {
                 enable: true,
                 pIdKey: "pId"
             }
+        },
+        callback: {
+            onClick: zTreeOnClickUrl
         }
-        /*     ,
-            callback: {
-                beforeClick: beforeClick,
-                onClick: onClick
-            } */
     };
 
     // 待插入的全部数据
@@ -410,7 +420,7 @@ document.addEvent('domready', function () {
                         id: v.visitId,
                         pId: parseInt(v.referringVisitId),
                         name: TimeToStr(v.visitTime, true, true) + " - " + v.title.replace(/[<>]/g, ' ') + ' ' + t,
-                        url: v.url,
+                        // url: v.url,
                         icon: 'chrome://favicon/' + v.url.replace(/(?<![\/])\/[^\/].+/, ""),
                         open: true,
                         transition: v.transition,
