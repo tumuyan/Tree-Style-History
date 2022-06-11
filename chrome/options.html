@@ -124,13 +124,17 @@
                 <table>
                     <tr>
                         <td class="cell-left">
-                            <label for="showPopup" style="width:36px;" class="lang" data-lang-string="showPopup"></label>
-                            <span id="showPopuptip" title="" class="help-tip" alt="Help"></span>
+                            <label for="showPopup" style="width:36px;" class="lang" data-lang-string="showPopuptip"></label>
+                            <!-- <span id="showPopuptip" title="" class="help-tip" alt="Help"></span> -->
                         </td>
                         <td class="cell-right">
                             <select name="showPopup" id="showPopup">
-                                <option value="yes" class="lang" data-lang-string="yes"></option>
-                                <option value="no" class="lang" data-lang-string="no"></option>
+                                <option value="yes" class="lang" data-lang-string="showPopup"></option>
+                                <option value="history2" class="lang" data-lang-string="treeOptions"></option>
+                                <option value="history" class="lang" data-lang-string="linerHistory"></option>
+                                <option value="closed" class="lang" data-lang-string="closeHistory"></option>
+                                <option value="bookmark" class="lang" data-lang-string="linerBookMark"></option>
+                                <option value="options" class="lang" data-lang-string="options"></option>
                             </select>
                         </td>
                     </tr>
@@ -391,7 +395,16 @@
                         </td>
                     </tr>
 
-
+                    <tr>
+                        <td class="cell-left"><label for="UseContextMenu" class="lang" id="UseContextMenu"
+                                data-lang-string="UseContextMenu"></label></td>
+                        <td class="cell-right">
+                            <select name="UseContextMenu" id="contextmenu">
+                                <option value="yes" class="lang" data-lang-string="yes"></option>
+                                <option value="no" class="lang" data-lang-string="no"></option>
+                            </select>
+                        </td>
+                    </tr>
                 </table>
             </form>
             <h2>&nbsp;</h2>

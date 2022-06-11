@@ -906,21 +906,26 @@ chrome.contextMenus.removeAll(() => {
         contexts: ["link", "page"],
         visible: true,
     }
-    chrome.contextMenus.create(options, () => {
-        console.log('select ' + options.id);
-    });
 
-    chrome.contextMenus.onClicked.addListener((info) => {
-        // console.log(JSON.stringify(info));
+    if (localStorage['use-contextmenu'] == 'yes') {
+        chrome.contextMenus.create(options, () => {
+            console.log('select ' + options.id);
+        });
 
-        let url = info.linkUrl;
-        if (url != undefined) {
-            window.open('history.html?' + url);
-        } else {
-            url = info.pageUrl;
+        chrome.contextMenus.onClicked.addListener((info) => {
+            // console.log(JSON.stringify(info));
+
+            let url = info.linkUrl;
             if (url != undefined) {
                 window.open('history.html?' + url);
+            } else {
+                url = info.pageUrl;
+                if (url != undefined) {
+                    window.open('history.html?' + url);
+                }
             }
-        }
-    })
-});
+        })
+    }
+}
+
+);

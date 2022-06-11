@@ -1,435 +1,473 @@
 {
-  "recentHistory": {
-    "message": "最近访问历史"
-  },
-  "recentlyClosedTabs": {
-    "message": "最近关闭的标签"
-  },
-  "mostVisited": {
-    "message": "最常访问"
-  },
-  "recentBookmarks": {
-    "message": "最近添加的书签"
-  },
-  "pinned": {
-    "message": "钉住"
-  },
-  "options": {
-    "message": "设置"
-  },
-  "translations": {
-    "message": "翻译"
-  },
-  "about": {
-    "message": "关于"
-  },
-  "mainOptions": {
-    "message": "弹窗设置"
-  },
-  "styleOptions": {
-    "message": "样式设置"
-  },
-  "advanceOptions": {
-    "message": "其他设置"
-  },
-  "option1": {
-    "message": "最多显示多少条最近访问历史"
-  },
-  "option2": {
-    "message": "最多显示多少条最近关闭的标签"
-  },
-  "option3": {
-    "message": "最多显示多少条最常访问页面"
-  },
-  "option4": {
-    "message": "最多显示多少条最近添加的书签"
-  },
-  "option5": {
-    "message": "弹窗顺序"
-  },
-  "option6": {
-    "message": "历史页"
-  },
-  "option7": {
-    "message": "日期格式"
-  },
-  "option8": {
-    "message": "在弹窗中显示搜索栏"
-  },
-  "option9": {
-    "message": "预览"
-  },
-  "option10": {
-    "message": "显示URL"
-  },
-  "option11": {
-    "message": "显示分隔线"
-  },
-  "option12": {
-    "message": "显示附加信息"
-  },
-  "option13": {
-    "message": "显示背景色"
-  },
-  "option14": {
-    "message": "弹窗图标"
-  },
-  "option15": {
-    "message": "弹窗宽度"
-  },
-  "option16": {
-    "message": "将项目恢复到最常访问列表"
-  },
-  "option17": {
-    "message": "隐藏指定域名的访问历史"
-  },
-  "option18": {
-    "message": "单击记录的操作"
-  },
-  "option181": {
-    "message":"单击更多的操作"
-  },
-  "option19": {
-    "message": "弹窗主题"
-  },
-  "option20": {
-    "message": "时间格式"
-  },
-  "option21": {
-    "message": "社交网络书签"
-  },
-  "option22":{
-    "message":"显示较少的历史"
-  },
-  "option22tip":{
-    "message":"不显示刷新页面的历史记录、没有跳转关系的重复记录，从而减少展示的历史记录"
-  },
-  "help1": {
-    "message": "在弹窗中最多显示多少条最近访问历史"
-  },
-  "help2": {
-    "message": "在弹窗中最多显示多少条最近关闭的标签"
-  },
-  "help3": {
-    "message": "在弹窗中最多显示多少条最常访问的页面"
-  },
-  "help4": {
-    "message": "在弹窗中最多显示多少条最近添加的书签"
-  },
-  "help5": {
-    "message": "项目的排列顺序"
-  },
-  "help6": {
-    "message": "使用哪个历史记录管理器"
-  },
-  "help7": {
-    "message": "本扩展使用的日期格式"
-  },
-  "help8": {
-    "message": "在弹窗顶部显示搜索栏"
-  },
-  "help10": {
-    "message": "在项目标题下显示页面URL"
-  },
-  "help11": {
-    "message": "在项目底部显示分隔线"
-  },
-  "help12": {
-    "message": "在页面URL旁显示附加信息，如访问次数和日期"
-  },
-  "help13": {
-    "message": "如果启用，将为不同项目使用不同的颜色，如在最近访问历史和最近关闭的标签中那些添加过书签的URL，或钉住的URL"
-  },
-  "help16": {
-    "message": "此处显示你从最常访问列表中删除的URL。点击右边的X可以将其恢复到最常访问列表"
-  },
-  "help17": {
-    "message": "此处指定你不想在访问历史中显示的网址。输入的内容必须包含域名，如163.com；注意指定顶级域名不能覆盖一级域名，如指定163.com不会隐藏music.163.com的访问记录，但是二级域名可以覆盖二级域名。"
-  },
-  "help18": {
-    "message": "当点击弹窗中的项目时，执行什么操作"
-  },
-  "help181": {
-    "message": "当点击弹窗中的“更多”时，执行什么操作"
-  },
-  "help20": {
-    "message": "本扩展使用的时间格式"
-  },
-  "help21": {
-    "message": "在弹窗中编辑时，在项目旁显示分享按钮"
-  },
-  "help22": {
-    "message": "打开浏览器时插件会检查已缓存的历史记录是否大于设定的天数。如果不足，会消耗资源进行缓存"
-  },
-  "help23": {
-    "message": ""
-  },
-  "help24": {
-    "message": "超出此范围的缓存记录会被自动清除，设为0则不清除"
-  },
-  "help25": {
-    "message": "如果当前日期的历史记录小于设定值，会自动加载前几天的历史，一直到加载的记录大于设定值"
-  },
-  "yes": {
-    "message": "是"
-  },
-  "no": {
-    "message": "否"
-  },
-  "visits": {
-    "message": "访问"
-  },
-  "saveOptions": {
-    "message": "保存设置"
-  },
-  "saving": {
-    "message": "正在保存..."
-  },
-  "saved": {
-    "message": "已保存！"
-  },
-  "click1": {
-    "message": "在当前标签中打开"
-  },
-  "click2": {
-    "message": "在新标签中打开"
-  },
-  "click3": {
-    "message": "在新后台标签中打开"
-  },
-  "click4": {
-    "message": "在Tree Style History中打开"
-  },
-  "click5": {
-    "message": "在浏览器默认查看器中打开"
-  },
-  "translation1": {
-    "message": "请提交更新更好的翻译来帮助改进Recent History。本页面可以简化你的翻译操作。"
-  },
-  "translation2": {
-    "message": "请按照以下步骤来翻译Recent History："
-  },
-  "translation3": {
-    "message": "下拉本页面到底部。"
-  },
-  "translation4": {
-    "message": "正确填写表格。"
-  },
-  "translation5": {
-    "message": "将所有的信息翻译为你的语言。"
-  },
-  "translation6": {
-    "message": "点击“提交”按钮。"
-  },
-  "translation7": {
-    "message": "完成！"
-  },
-  "aboutText": {
-    "message": "以树形展示浏览器历史记录。"
-  },
-  "successfullyInstalled": {
-    "message": "成功安装/更新"
-  },
-  "whatsNew": {
-    "message": "有什么改进？"
-  },
-  "version": {
-    "message": "版本"
-  },
-  "showAllHistory": {
-    "message": "显示所有历史"
-  },
-  "noResults": {
-    "message": "未找到结果"
-  },
-  "currentHistory": {
-    "message": "当前日期"
-  },
-  "allHistory": {
-    "message": "所有历史"
-  },
-  "totalHistoryItems": {
-    "message": "总计历史条数："
-  },
-  "deleteItems": {
-    "message": "删除项目"
-  },
-  "mondayLetter": {
-    "message": "一"
-  },
-  "tuesdayLetter": {
-    "message": "二"
-  },
-  "wednesdayLetter": {
-    "message": "三"
-  },
-  "thursdayLetter": {
-    "message": "四"
-  },
-  "fridayLetter": {
-    "message": "五"
-  },
-  "saturdayLetter": {
-    "message": "六"
-  },
-  "sundayLetter": {
-    "message": "日"
-  },
-  "AM": {
-    "message": "am"
-  },
-  "PM": {
-    "message": "pm"
-  },
-  "12hour": {
-    "message": "12小时"
-  },
-  "24hour": {
-    "message": "24小时"
-  },
-  "loading": {
-    "message": "正在载入..."
-  },
-  "original": {
-    "message": "原始"
-  },
-  "classic": {
-    "message": "经典"
-  },
-  "pink": {
-    "message": "粉红"
-  },
-  "ui1": {
-    "message": "钉住项目？"
-  },
-  "ui2": {
-    "message": "从历史中删除？"
-  },
-  "ui3": {
-    "message": "从最近关闭的标签中删除？"
-  },
-  "ui4": {
-    "message": "删除书签？"
-  },
-  "ui5": {
-    "message": "从最常访问列表中删除？"
-  },
-  "ui6": {
-    "message": "解除钉住?"
-  },
-  "tips": {
-    "message": "使用提示"
-  },
-  "tip1": {
-    "message": "弹窗：要在新的后台标签页中打开项目，可以按住Ctrl并左键单击此项目。"
-  },
-  "tip2": {
-    "message": "弹窗：单击标题旁的齿轮，可以删除、钉住和分享项目。"
-  },
-  "tip3": {
-    "message": "设置：更改一个数值型选项时，可以按上下箭头来加减此值。"
-  },
-  "tip4": {
-    "message": "设置：可以按回车来添加域名到过滤列表。"
-  },
-  "tip5": {
-    "message": "历史：可以按住Shift多选。"
-  },
-  "tip6": {
-    "message": "历史：使用蓝色工具栏中的按钮来更改历史项的显示方式。"
-  },
-  "optionloadrange":{
-    "message": "解析并缓存历史的天数"    
-  }, 
-   "optionloadrange2":{
-    "message": "默认展示的历史的天数"    
-  },
-  "optionloadrange3":{
-    "message": "缓存保留天数"    
-  },
-  "optionloadrange4":{
-    "message": "至少展示的数量"    
-  },
-  "treeOptions":{
-    "message": "树状历史"    
-  },
-  "treeOpen":{
-    "message": "打开树状历史"    
-  },
-  "treePolicy":{
-    "message": "Tree Style History会收集您的浏览器记录，分析并存储到您的计算机内，并在需要的时候进行展示。<br/>它不会上传数据上传到互联网或者分享给其他程序。当您卸载扩展时，所有保存的数据均会被浏览器自动清除。<br/>项目基于recent historic，已经获得原作者的许可进行修改并重新发布。"
-},"more":{
-    "message":"更多"
-},"searchSite":{
-    "message":"搜索此网站的浏览记录"
-},"plsInputUrl":{
-  "message":"请输入正确的域名"
-},"longInputUrl":{
-  "message":"输入的内容太长，不是正确的域名"
-},"shortcuts": {
-  "message":"设置快捷键"
-},"shortcutsTip": {
-    "message":"为popup弹窗、树状历史、线性历史、最近关闭的页面设置不同的快捷键"
-},"name": {
-  "message":"Tree Style History - 树形历史"
-},"linerHistory": {
-  "message":"线性历史"
-},"saveUpload": {
-  "message":"保存并上传参数"
-},"downloadConfig": {
-  "message":"下载参数（不含域名过滤设置）"
-},"downloadConfig2": {
-  "message":"下载基本参数并合并（预览功能）"
-},"defaultConfig": {
-  "message":"恢复默认"
-},"saveFail": {
-  "message":"失败"
-},"deleteCache": {
-    "message":"清除缓存"
-  },"clickMe": {
-    "message":"点击这里"
-  },"done": {
-    "message":"已完成"
-  },"deleteList": {
-    "message":"清空列表"
-  },"mergeList": {
-    "message":"合并当且列表和在线列表"
-  },"filterSetting": {
-    "message":"域名过滤设置"
-  },"addItemNum": {
-    "message":"增加数量: "
-  },"closeHistory": {
-    "message":"最近关闭"
-  },"OpenClosedHistory": {
-    "message":"打开最近关闭的页面的记录"
-  },"abnormalClosedTab": {
-    "message":"没能正常关闭的页面（点击可以批量打开分组）"
-  },"dateConfig": {
-    "message":"日期时间格式设置"
-  },"showCalendar": {
-    "message":"选择日期"
-  },"fastClosedTab": {
-    "message":"快速关闭的页面（点击可以批量打开分组）"
-  },"tidClosedTab": {
-    "message":"点击可以批量打开分组 "
-  },"linerBookMark": {
-    "message":"线性书签"
-  },"OpenBookMark": {
-    "message":"打开线性书签"
-  },"BookMarkPath": {
-    "message":"在线性书签中显示保存路径"
-  },"showPopup": {
-      "message": "显示弹窗"
-  },"showPopuptip":{
-      "message":"点击扩展图标或者激活扩展时的动作。是（弹窗）否（打开树状历史）"
-  } ,"orderByTitle":{
-    "message":"按名称排序"
-} ,"orderByTime":{
-    "message":"按时间排序"
-},"group":{
-    "message":"分组"
-},"order":{
-    "message":"排序"
-}
-  
+    "recentHistory": {
+        "message": "最近访问历史"
+    },
+    "recentlyClosedTabs": {
+        "message": "最近关闭的标签"
+    },
+    "mostVisited": {
+        "message": "最常访问"
+    },
+    "recentBookmarks": {
+        "message": "最近添加的书签"
+    },
+    "pinned": {
+        "message": "钉住"
+    },
+    "options": {
+        "message": "设置"
+    },
+    "translations": {
+        "message": "翻译"
+    },
+    "about": {
+        "message": "关于"
+    },
+    "mainOptions": {
+        "message": "弹窗设置"
+    },
+    "styleOptions": {
+        "message": "样式设置"
+    },
+    "advanceOptions": {
+        "message": "其他设置"
+    },
+    "option1": {
+        "message": "最多显示多少条最近访问历史"
+    },
+    "option2": {
+        "message": "最多显示多少条最近关闭的标签"
+    },
+    "option3": {
+        "message": "最多显示多少条最常访问页面"
+    },
+    "option4": {
+        "message": "最多显示多少条最近添加的书签"
+    },
+    "option5": {
+        "message": "弹窗顺序"
+    },
+    "option6": {
+        "message": "历史页"
+    },
+    "option7": {
+        "message": "日期格式"
+    },
+    "option8": {
+        "message": "在弹窗中显示搜索栏"
+    },
+    "option9": {
+        "message": "预览"
+    },
+    "option10": {
+        "message": "显示URL"
+    },
+    "option11": {
+        "message": "显示分隔线"
+    },
+    "option12": {
+        "message": "显示附加信息"
+    },
+    "option13": {
+        "message": "显示背景色"
+    },
+    "option14": {
+        "message": "弹窗图标"
+    },
+    "option15": {
+        "message": "弹窗宽度"
+    },
+    "option16": {
+        "message": "将项目恢复到最常访问列表"
+    },
+    "option17": {
+        "message": "隐藏指定域名的访问历史"
+    },
+    "option18": {
+        "message": "单击记录的操作"
+    },
+    "option181": {
+        "message": "单击更多的操作"
+    },
+    "option19": {
+        "message": "弹窗主题"
+    },
+    "option20": {
+        "message": "时间格式"
+    },
+    "option21": {
+        "message": "社交网络书签"
+    },
+    "option22": {
+        "message": "显示较少的历史"
+    },
+    "option22tip": {
+        "message": "不显示刷新页面的历史记录、没有跳转关系的重复记录，从而减少展示的历史记录"
+    },
+    "help1": {
+        "message": "在弹窗中最多显示多少条最近访问历史"
+    },
+    "help2": {
+        "message": "在弹窗中最多显示多少条最近关闭的标签"
+    },
+    "help3": {
+        "message": "在弹窗中最多显示多少条最常访问的页面"
+    },
+    "help4": {
+        "message": "在弹窗中最多显示多少条最近添加的书签"
+    },
+    "help5": {
+        "message": "项目的排列顺序"
+    },
+    "help6": {
+        "message": "使用哪个历史记录管理器"
+    },
+    "help7": {
+        "message": "本扩展使用的日期格式"
+    },
+    "help8": {
+        "message": "在弹窗顶部显示搜索栏"
+    },
+    "help10": {
+        "message": "在项目标题下显示页面URL"
+    },
+    "help11": {
+        "message": "在项目底部显示分隔线"
+    },
+    "help12": {
+        "message": "在页面URL旁显示附加信息，如访问次数和日期"
+    },
+    "help13": {
+        "message": "如果启用，将为不同项目使用不同的颜色，如在最近访问历史和最近关闭的标签中那些添加过书签的URL，或钉住的URL"
+    },
+    "help16": {
+        "message": "此处显示你从最常访问列表中删除的URL。点击右边的X可以将其恢复到最常访问列表"
+    },
+    "help17": {
+        "message": "此处指定你不想在访问历史中显示的网址。输入的内容必须包含域名，如163.com；注意指定顶级域名不能覆盖一级域名，如指定163.com不会隐藏music.163.com的访问记录，但是二级域名可以覆盖二级域名。"
+    },
+    "help18": {
+        "message": "当点击弹窗中的项目时，执行什么操作"
+    },
+    "help181": {
+        "message": "当点击弹窗中的“更多”时，执行什么操作"
+    },
+    "help20": {
+        "message": "本扩展使用的时间格式"
+    },
+    "help21": {
+        "message": "在弹窗中编辑时，在项目旁显示分享按钮"
+    },
+    "help22": {
+        "message": "打开浏览器时插件会检查已缓存的历史记录是否大于设定的天数。如果不足，会消耗资源进行缓存"
+    },
+    "help23": {
+        "message": ""
+    },
+    "help24": {
+        "message": "超出此范围的缓存记录会被自动清除，设为0则不清除"
+    },
+    "help25": {
+        "message": "如果当前日期的历史记录小于设定值，会自动加载前几天的历史，一直到加载的记录大于设定值"
+    },
+    "yes": {
+        "message": "是"
+    },
+    "no": {
+        "message": "否"
+    },
+    "visits": {
+        "message": "访问"
+    },
+    "saveOptions": {
+        "message": "保存设置"
+    },
+    "saving": {
+        "message": "正在保存..."
+    },
+    "saved": {
+        "message": "已保存！"
+    },
+    "click1": {
+        "message": "在当前标签中打开"
+    },
+    "click2": {
+        "message": "在新标签中打开"
+    },
+    "click3": {
+        "message": "在新后台标签中打开"
+    },
+    "click4": {
+        "message": "在Tree Style History中打开"
+    },
+    "click5": {
+        "message": "在浏览器默认查看器中打开"
+    },
+    "translation1": {
+        "message": "请提交更新更好的翻译来帮助改进Recent History。本页面可以简化你的翻译操作。"
+    },
+    "translation2": {
+        "message": "请按照以下步骤来翻译Recent History："
+    },
+    "translation3": {
+        "message": "下拉本页面到底部。"
+    },
+    "translation4": {
+        "message": "正确填写表格。"
+    },
+    "translation5": {
+        "message": "将所有的信息翻译为你的语言。"
+    },
+    "translation6": {
+        "message": "点击“提交”按钮。"
+    },
+    "translation7": {
+        "message": "完成！"
+    },
+    "aboutText": {
+        "message": "以树形展示浏览器历史记录。"
+    },
+    "successfullyInstalled": {
+        "message": "成功安装/更新"
+    },
+    "whatsNew": {
+        "message": "有什么改进？"
+    },
+    "version": {
+        "message": "版本"
+    },
+    "showAllHistory": {
+        "message": "显示所有历史"
+    },
+    "noResults": {
+        "message": "未找到结果"
+    },
+    "currentHistory": {
+        "message": "当前日期"
+    },
+    "allHistory": {
+        "message": "所有历史"
+    },
+    "totalHistoryItems": {
+        "message": "总计历史条数："
+    },
+    "deleteItems": {
+        "message": "删除项目"
+    },
+    "mondayLetter": {
+        "message": "一"
+    },
+    "tuesdayLetter": {
+        "message": "二"
+    },
+    "wednesdayLetter": {
+        "message": "三"
+    },
+    "thursdayLetter": {
+        "message": "四"
+    },
+    "fridayLetter": {
+        "message": "五"
+    },
+    "saturdayLetter": {
+        "message": "六"
+    },
+    "sundayLetter": {
+        "message": "日"
+    },
+    "AM": {
+        "message": "am"
+    },
+    "PM": {
+        "message": "pm"
+    },
+    "12hour": {
+        "message": "12小时"
+    },
+    "24hour": {
+        "message": "24小时"
+    },
+    "loading": {
+        "message": "正在载入..."
+    },
+    "original": {
+        "message": "原始"
+    },
+    "classic": {
+        "message": "经典"
+    },
+    "pink": {
+        "message": "粉红"
+    },
+    "ui1": {
+        "message": "钉住项目？"
+    },
+    "ui2": {
+        "message": "从历史中删除？"
+    },
+    "ui3": {
+        "message": "从最近关闭的标签中删除？"
+    },
+    "ui4": {
+        "message": "删除书签？"
+    },
+    "ui5": {
+        "message": "从最常访问列表中删除？"
+    },
+    "ui6": {
+        "message": "解除钉住?"
+    },
+    "tips": {
+        "message": "使用提示"
+    },
+    "tip1": {
+        "message": "弹窗：要在新的后台标签页中打开项目，可以按住Ctrl并左键单击此项目。"
+    },
+    "tip2": {
+        "message": "弹窗：单击标题旁的齿轮，可以删除、钉住和分享项目。"
+    },
+    "tip3": {
+        "message": "设置：更改一个数值型选项时，可以按上下箭头来加减此值。"
+    },
+    "tip4": {
+        "message": "设置：可以按回车来添加域名到过滤列表。"
+    },
+    "tip5": {
+        "message": "历史：可以按住Shift多选。"
+    },
+    "tip6": {
+        "message": "历史：使用蓝色工具栏中的按钮来更改历史项的显示方式。"
+    },
+    "optionloadrange": {
+        "message": "解析并缓存历史的天数"
+    },
+    "optionloadrange2": {
+        "message": "默认展示的历史的天数"
+    },
+    "optionloadrange3": {
+        "message": "缓存保留天数"
+    },
+    "optionloadrange4": {
+        "message": "至少展示的数量"
+    },
+    "treeOptions": {
+        "message": "树状历史"
+    },
+    "treeOpen": {
+        "message": "打开树状历史"
+    },
+    "treePolicy": {
+        "message": "Tree Style History会收集您的浏览器记录，分析并存储到您的计算机内，并在需要的时候进行展示。<br/>它不会上传数据上传到互联网或者分享给其他程序。当您卸载扩展时，所有保存的数据均会被浏览器自动清除。<br/>项目基于recent historic，已经获得原作者的许可进行修改并重新发布。"
+    },
+    "more": {
+        "message": "更多"
+    },
+    "searchSite": {
+        "message": "搜索此网站的浏览记录"
+    },
+    "plsInputUrl": {
+        "message": "请输入正确的域名"
+    },
+    "longInputUrl": {
+        "message": "输入的内容太长，不是正确的域名"
+    },
+    "shortcuts": {
+        "message": "设置快捷键"
+    },
+    "shortcutsTip": {
+        "message": "为popup弹窗、树状历史、线性历史、最近关闭的页面设置不同的快捷键"
+    },
+    "name": {
+        "message": "Tree Style History - 树形历史"
+    },
+    "linerHistory": {
+        "message": "线性历史"
+    },
+    "saveUpload": {
+        "message": "保存并上传参数"
+    },
+    "downloadConfig": {
+        "message": "下载参数（不含域名过滤设置）"
+    },
+    "downloadConfig2": {
+        "message": "下载基本参数并合并（预览功能）"
+    },
+    "defaultConfig": {
+        "message": "恢复默认"
+    },
+    "saveFail": {
+        "message": "失败"
+    },
+    "deleteCache": {
+        "message": "清除缓存"
+    },
+    "clickMe": {
+        "message": "点击这里"
+    },
+    "done": {
+        "message": "已完成"
+    },
+    "deleteList": {
+        "message": "清空列表"
+    },
+    "mergeList": {
+        "message": "合并当且列表和在线列表"
+    },
+    "filterSetting": {
+        "message": "域名过滤设置"
+    },
+    "addItemNum": {
+        "message": "增加数量: "
+    },
+    "closeHistory": {
+        "message": "最近关闭"
+    },
+    "OpenClosedHistory": {
+        "message": "打开最近关闭的页面的记录"
+    },
+    "abnormalClosedTab": {
+        "message": "没能正常关闭的页面（点击可以批量打开分组）"
+    },
+    "dateConfig": {
+        "message": "日期时间格式设置"
+    },
+    "showCalendar": {
+        "message": "选择日期"
+    },
+    "fastClosedTab": {
+        "message": "快速关闭的页面（点击可以批量打开分组）"
+    },
+    "tidClosedTab": {
+        "message": "点击可以批量打开分组 "
+    },
+    "linerBookMark": {
+        "message": "线性书签"
+    },
+    "OpenBookMark": {
+        "message": "打开线性书签"
+    },
+    "BookMarkPath": {
+        "message": "在线性书签中显示保存路径"
+    },
+    "showPopup": {
+        "message": "显示弹窗"
+    },
+    "showPopuptip": {
+        "message": "点击扩展图标或者激活扩展时的动作"
+    },
+    "orderByTitle": {
+        "message": "按名称排序"
+    },
+    "orderByTime": {
+        "message": "按时间排序"
+    },
+    "group": {
+        "message": "分组"
+    },
+    "order": {
+        "message": "排序"
+    },
+    "UseContextMenu": {
+        "message": "启用快捷菜单(重新打开浏览器时生效)"
+    }
 }

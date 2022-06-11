@@ -2,7 +2,7 @@
   "name": "__MSG_name__",
   "short_name": "Tree Style History",
   "author": "Tumuyan",
-  "version": "3.1.9",
+  "version": "3.1.11",
   "update_url": "https://edge.microsoft.com/extensionwebstorebase/v1/crx",
   "manifest_version": 2,
   "minimum_chrome_version": "22.0",

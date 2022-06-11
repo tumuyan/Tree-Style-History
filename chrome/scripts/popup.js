@@ -8,9 +8,37 @@ document.addEvent('domready', function () {
         localStorage['rh-version-' + getVersion()] = 'true';
     }
 
-    if (localStorage['show-popup'] == 'no') {
-        window.open("history2.html");
-        window.close();
+    // if (localStorage['show-popup'] != 'yes') {
+    //     window.open("history2.html");
+    //     window.close();
+    // }
+
+    switch (localStorage['show-popup']) {
+        case 'history2':
+            window.open("history2.html");
+            window.close();
+            break;
+        case 'history':
+            window.open("history.html");
+            window.close();
+            break;
+
+        case 'closed':
+            window.open("closed.html");
+            window.close();
+            break;
+
+        case 'bookmark':
+            window.open("bookmark.html");
+            window.close();
+            break;
+
+        case 'options':
+            window.open("options.html");
+            window.close();
+            break;
+
+
     }
 
 

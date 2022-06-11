@@ -1,7 +1,7 @@
 // Version
 
 function getVersion() {
-    return '3.1.10';
+    return '3.1.11';
 }
 
 
@@ -344,6 +344,7 @@ var defaultValues = {
     "rh-click": "newtab",
     "rm-click": "default",
     "rm-path": "yes",
+    'use-contextmenu': "yes",
     "rh-share": "yes",
     "rh-filtered": "false",
     "rh-pinned": "false",
@@ -425,6 +426,7 @@ function loadOptions(full) {
     $$('#rhsearch option[value="' + localStorage['rh-search'] + '"]').set('selected', 'selected');
     $$('#rhshare option[value="' + localStorage['rh-share'] + '"]').set('selected', 'selected');
     $$('#rmpath option[value="' + localStorage['rm-path'] + '"]').set('selected', 'selected');
+    $$('#contextmenu option[value="' + localStorage['use-contextmenu'] + '"]').set('selected', 'selected');
     $$('#rhsshowurl option[value="' + localStorage['rhs-showurl'] + '"]').set('selected', 'selected');
     $$('#rhsshowsep option[value="' + localStorage['rhs-showsep'] + '"]').set('selected', 'selected');
     $$('#rhsshowext option[value="' + localStorage['rhs-showext'] + '"]').set('selected', 'selected');
@@ -608,6 +610,7 @@ function saveOptions(sync) {
     so['rh-click'] = $('rhclick').getSelected().get('value');
     so['rm-click'] = $('rmclick').getSelected().get('value');
     so['rm-path'] = $('rmpath').getSelected().get('value');
+    so['use-contextmenu'] = $('contextmenu').getSelected().get('value');
     so['rh-filtered'] = flil;
     for (var i in so) {
         localStorage[i] = so[i];
@@ -640,7 +643,7 @@ function saveOptions(sync) {
 
         (function () {
             console.log('c=' + c + ' mls=' + mls.length + ' so=' + so.length);
-            if (c - mls.length == 24)
+            if (c - mls.length == 25)
                 $('saveUpload').set('value', returnLang('saved'))
             else
                 $('saveUpload').set('value', returnLang('saveFail'))
