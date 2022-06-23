@@ -64,7 +64,7 @@ document.addEvent('domready', function () {
                 new Element('div', { id: 'rh-inject', html: '<div id="rh-inject-title" class="popup-title"><span>' + returnLang('recentHistory') + '	- <a href="#"  id="show-all-history" target="_blank">' + returnLang('more') + '🕑</a></span></div>' }).inject('popup-insert', 'bottom');
             }
         } else if (rhporder[o] == 'rct-order') {
-            if ((localStorage['rct-itemsno'] * 1) > 0 && chrome.extension.getBackgroundPage().closedTabs.length > 0) {
+            if ((localStorage['rct-itemsno'] * 1) > 0 ) {
                 if (navigator.userAgent.toLowerCase().indexOf('edg') > 0) {
                     new Element('div', { id: 'rct-inject', html: '<div id="rct-inject-title" class="popup-title"><span>' + returnLang('recentlyClosedTabs') + '	- <a href="#"  id="show-all-closed" target="_blank">' + returnLang('more') + '...</a></span></div>' }).inject('popup-insert', 'bottom');
                 } else {

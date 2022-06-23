@@ -1021,20 +1021,7 @@ function uiDeleteItem(el, type) {
                 }
             }
         } else if (type == 'rt') {
-            console.log("rt ? //todo");
-            // var rct = chrome.extension.getBackgroundPage().closedTabs;
-            // for (var i in rct) {
-            //     if (rct[i] !== undefined && rct[i].url == url) {
-            //         rct.splice(i, 1);
-            //         $$('#rct-inject .item').destroy();
-            //         recentlyClosedTabs();
-            //         if ($$('#rct-inject .item').length == 0) {
-            //             $('rct-inject').setStyle('display', 'none');
-            //         }
-            //         alertUser('', 'close');
-            //         break;
-            //     }
-            // }
+            console.log("//todo uiDeleteItem");
         } else if (type == 'rb') {
             chrome.bookmarks.search(url, function (bms) {
                 if (bms.length > 0) {

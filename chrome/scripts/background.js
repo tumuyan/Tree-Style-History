@@ -2,7 +2,9 @@
 // Set global vars
 
 var openedTabs = {};
-var closedTabs = [];
+// var closedTabs = [];
+
+// 最近访问的tab的tabId构成的数组
 var recentTabs = [];
 
 
@@ -21,7 +23,7 @@ function closedTab(id) {
         console.log('close ' + id + ' ' + openedTabs[id].url);
         addCloseRedord(id, openedTabs[id].url, openedTabs[id].title, (new Date()).getTime(), 0);
         openedTabs[id].time = timeNow(0);
-        closedTabs.unshift(openedTabs[id]);
+        // closedTabs.unshift(openedTabs[id]);
 
         var i = recentTabs.indexOf(id);
         if (i >= 0) {
