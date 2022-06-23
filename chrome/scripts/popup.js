@@ -38,7 +38,6 @@ document.addEvent('domready', function () {
             window.close();
             break;
 
-
     }
 
 
@@ -80,6 +79,11 @@ document.addEvent('domready', function () {
             if ((localStorage['mv-itemsno'] * 1) > 0) {
                 new Element('div', { id: 'mv-inject', html: '<div id="mv-inject-title" class="popup-title"><span>' + returnLang('mostVisited') + '</span></div>' }).inject('popup-insert', 'bottom');
             }
+        }  else if (rhporder[o] == 'rt-order') {
+            // rt = recent tab
+            if ((localStorage['rt-itemsno'] * 1) > 0 && chrome.extension.getBackgroundPage().recentTabs.length > 0) {
+               new Element('div', { id: 'rt-inject', html: '<div id="rt-inject-title" class="popup-title"><span>' + returnLang('recentTabs') + '</span></div>' }).inject('popup-insert', 'bottom');
+            }
         }
     }
 
@@ -114,8 +118,19 @@ document.addEvent('domready', function () {
     // -- Insert
     if ($('rh-inject')) { recentHistory(); }
     if ($('rct-inject')) { recentlyClosedTabs(); }
+    if ($('rt-inject')) { showRecentTabs(); }
     if ($('rb-inject')) { recentBookmarks(); }
     if ($('mv-inject')) { mostVisited(); }
+
+    // $$("#rt-inject-title .item[target]").each(function (el, i) {
+    //     if (i !== 0) {
+    //         el.addEvent('click', function () {
+    //             openTab(el.tabId);
+    //         });
+    //     }
+    // });
+    
+    
 
     // -- Functions
     $$('.favicon').addEvent('error', function () {

@@ -38,6 +38,9 @@
     "option2": {
         "message": "Number of Recently Closed Tabs"
     },
+    "option2_2": {
+        "message": "Number of Recent Tabs"
+    },
     "option3": {
         "message": "Number of Most Visited Items"
     },
@@ -109,6 +112,9 @@
     },
     "help2": {
         "message": "The number of recently closed tabs in the pop-up"
+    },
+    "help2_2": {
+        "message": "The number of recently tabs in the pop-up"
     },
     "help3": {
         "message": "The number of most visited items in the pop-up"
@@ -457,5 +463,8 @@
     },
     "UseContextMenu": {
         "message": "Use Context menu (need restarting browser)"
+    },
+    "recentTabs": {
+        "message": "Recent viewed tabs"
     }
 }

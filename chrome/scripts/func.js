@@ -283,6 +283,7 @@ Clipboard.copy = function (data) {
 function leftClick(url) {
 
     new Event(event).stop();
+
     var ca = localStorage['rh-click'];
     var cs = ctrlState;
     if (cs == 'true' || event.button == 1) {
@@ -323,6 +324,7 @@ function rightClick(url) {
 var defaultValues = {
     "rh-itemsno": 16,
     "rct-itemsno": 4,
+    "rt-itemsno": 6,
     "mv-itemsno": 0,
     "rb-itemsno": 3,
     "mv-blocklist": "false",
@@ -335,7 +337,7 @@ var defaultValues = {
     "load-range4": 150,
     "less-item": "no",
     "rh-search": "yes",
-    "rh-list-order": "rh-order,rct-order,rb-order,mv-order",
+    "rh-list-order": "rh-order,rct-order,rb-order,mv-order,rt-order",
     "rh-time": "yes",
     "rh-group": "yes",
     "rh-orderby": "date",
@@ -385,10 +387,17 @@ function loadOptions(full) {
 
     $('rhitemsno').set('value', localStorage['rh-itemsno']);
     $('rctitemsno').set('value', localStorage['rct-itemsno']);
+    $('rtitemsno').set('value', localStorage['rt-itemsno']);
     $('mvitemsno').set('value', localStorage['mv-itemsno']);
     $('rbitemsno').set('value', localStorage['rb-itemsno']);
 
+    var rhilo_default = defaultValues["rh-list-order"].split(',');
     var rhilo = localStorage['rh-list-order'].split(',');
+
+    for (var lo in rhilo_default) {
+        if (rhilo.indexOf(rhilo_default[lo]) < 0)
+            rhilo.push(rhilo_default[lo]);
+    }
 
     $('rhlistorder').empty();
 
@@ -401,6 +410,8 @@ function loadOptions(full) {
             new Element('li', { 'id': rhilo[lo], 'html': returnLang('mostVisited') }).inject('rhlistorder');
         } else if (rhilo[lo] == 'rb-order') {
             new Element('li', { 'id': rhilo[lo], 'html': returnLang('recentBookmarks') }).inject('rhlistorder');
+        } else if (rhilo[lo] == 'rt-order') {
+            new Element('li', { 'id': rhilo[lo], 'html': returnLang('recentTabs') }).inject('rhlistorder');
         }
     }
 
@@ -589,9 +600,10 @@ function saveOptions(sync) {
 
     so['rh-itemsno'] = $('rhitemsno').get('value');
     so['rct-itemsno'] = $('rctitemsno').get('value');
+    so['rt-itemsno'] = $('rtitemsno').get('value');
     so['rb-itemsno'] = $('rbitemsno').get('value');
     so['mv-itemsno'] = $('mvitemsno').get('value');
-    so['rh-list-order'] = rhlo[0].get('id') + ',' + rhlo[1].get('id') + ',' + rhlo[2].get('id') + ',' + rhlo[3].get('id');
+    so['rh-list-order'] = rhlo[0].get('id') + ',' + rhlo[1].get('id') + ',' + rhlo[2].get('id') + ',' + rhlo[3].get('id') + ',' +  rhlo[4].get('id');
     so['rh-historypage'] = $('rhhistorypage').getSelected().get('value');
     so['show-popup'] = $('showPopup').getSelected().get('value');
     so['rh-date'] = $('rhdate').getSelected().get('value');
@@ -643,7 +655,7 @@ function saveOptions(sync) {
 
         (function () {
             console.log('c=' + c + ' mls=' + mls.length + ' so=' + so.length);
-            if (c - mls.length == 25)
+            if (c - mls.length == 26)
                 $('saveUpload').set('value', returnLang('saved'))
             else
                 $('saveUpload').set('value', returnLang('saveFail'))
@@ -932,6 +944,9 @@ function uiPinItem(el, type) {
                 } else if (type == 'rct') {
                     $$('#rct-inject .item').destroy();
                     recentlyClosedTabs();
+                } else if (type == 'rt') {
+                    $$('#rt-inject .item').destroy();
+                    showRecentTabs();
                 } else if (type == 'rb') {
                     $$('#rb-inject .item').destroy();
                     recentBookmarks();
@@ -951,6 +966,9 @@ function uiPinItem(el, type) {
                 } else if (type == 'rct') {
                     $$('#rct-inject .item').destroy();
                     recentlyClosedTabs();
+                }  else if (type == 'rt') {
+                    $$('#rt-inject .item').destroy();
+                    showRecentTabs();
                 } else if (type == 'rb') {
                     $$('#rb-inject .item').destroy();
                     recentBookmarks();
@@ -1002,6 +1020,21 @@ function uiDeleteItem(el, type) {
                     break;
                 }
             }
+        } else if (type == 'rt') {
+            console.log("rt ? //todo");
+            // var rct = chrome.extension.getBackgroundPage().closedTabs;
+            // for (var i in rct) {
+            //     if (rct[i] !== undefined && rct[i].url == url) {
+            //         rct.splice(i, 1);
+            //         $$('#rct-inject .item').destroy();
+            //         recentlyClosedTabs();
+            //         if ($$('#rct-inject .item').length == 0) {
+            //             $('rct-inject').setStyle('display', 'none');
+            //         }
+            //         alertUser('', 'close');
+            //         break;
+            //     }
+            // }
         } else if (type == 'rb') {
             chrome.bookmarks.search(url, function (bms) {
                 if (bms.length > 0) {
@@ -1144,10 +1177,30 @@ function formatItem(data) {
     item += '<span class="title" title="' + tip + '"><span class="edit-items-ui" data-url="' + url + '" data-title="' + tip.replace(/\'/g, "\\'") + '">' + ui + '</span>' + title + '</span>';
     item += '<span ' + saext + ' class="extra-url"><span ' + sext + ' class="extra">' + returnLang("visits") + ': ' + visits + extsep + '</span><span ' + surl + ' class="url">' + url.replace(/^(.*?)\:\/\//, '').replace(/\/$/, '') + '</span></span>';
 
+
+    if (data.tabId == undefined) {
+
+        return new Element('a', {
+            'events': {
+                'click': function () {
+                    leftClick(url);
+                },
+                'contextmenu': function () {
+                    rightClick(url);
+                }
+            },
+            'class': 'item',
+            target: '_blank',
+            styles: sobj,
+            href: url,
+            html: item
+        });
+    }
+
     return new Element('a', {
         'events': {
             'click': function () {
-                leftClick(url);
+                openTab(data.tabId);
             },
             'contextmenu': function () {
                 rightClick(url);
@@ -1156,7 +1209,7 @@ function formatItem(data) {
         'class': 'item',
         target: '_blank',
         styles: sobj,
-        href: url,
+        // href: url,
         html: item
     });
 
@@ -1283,6 +1336,81 @@ function recentlyClosedTabs() {
 }
 
 
+function openTab(id) {
+    chrome.tabs.get(id, (tab) => {
+        chrome.windows.update(tab.windowId, { focused: true }, function () {
+            chrome.tabs.update(id, { active: true });
+        });
+    });
+};
+
+
+// Recent Tabs in popup
+
+function showRecentTabs() {
+
+    var rhhistory = chrome.extension.getBackgroundPage().openedTabs;
+    var rt = chrome.extension.getBackgroundPage().recentTabs;
+    console.log("showRecentTabs() count = "+rt.length);
+
+    // chrome.tabs.get( id , function (tabs) {
+    //     if (tabs.length > 0) {
+    //         chrome.windows.update(tabs[0].windowId, { focused: true }, function () {
+    //             chrome.tabs.update(tabs[0].id, { active: true } );
+    //         });
+    //     } else {
+    //         console.log("showRecentTabs() openTab error, id="+id);
+    //     }
+    // });
+ 
+
+
+    var itemsno = localStorage['rt-itemsno'] * 1;
+    var rcti = 0;
+
+    if (itemsno > 0) {
+ 
+        for (i = 0; i < rt.length; i++) {
+
+            if (rcti >= itemsno || i > 99) { break; }
+
+            var t = rt[i];
+
+            if (rhhistory[t] !== undefined) {
+
+                var title = rhhistory[t].title;
+                var url = rhhistory[t].url;
+                var time = rhhistory[t].time;
+                var furl = 'chrome://favicon/' + rhhistory[t].url;
+
+                if (title == '') {
+                    title = url;
+                }
+
+                if (title !== undefined) {
+                    formatItem({ type: 'rt', title: title, url: url, favicon: furl, time: time , tabId: t }).inject('rt-inject', 'bottom');
+                    rcti++;
+                }
+
+            } else {
+                console.log("showRecentTabs() tabId = " + t + ", rhhistory undefined");
+            }
+
+        }
+
+        if ($$('#rt-inject .item').length == 0) {
+            $('rt-inject').setStyle('display', 'none');
+        }
+
+            if (localStorage['rhs-showbg'] == 'yes') {
+                //isBookmarked('#rct-inject .item');
+                isPinned('#rt-inject .item');
+            }
+ 
+
+    }
+
+}
 // Most Visited
 
 function mostVisited() {

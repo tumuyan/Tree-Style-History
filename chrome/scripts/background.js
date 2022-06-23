@@ -3,6 +3,7 @@
 
 var openedTabs = {};
 var closedTabs = [];
+var recentTabs = [];
 
 
 // Opened tab
@@ -21,6 +22,11 @@ function closedTab(id) {
         addCloseRedord(id, openedTabs[id].url, openedTabs[id].title, (new Date()).getTime(), 0);
         openedTabs[id].time = timeNow(0);
         closedTabs.unshift(openedTabs[id]);
+
+        var i = recentTabs.indexOf(id);
+        if (i >= 0) {
+            recentTabs.splice(i, 1);
+        }
     }
 }
 
@@ -350,6 +356,11 @@ chrome.tabs.onCreated.addListener(function (tab) {
         chrome.tabs.update(tab.id, { url: 'history2.html', selected: true }, function () { });
     } */
 });
+
+
+var tabActive = 0;
+var tab
+
 chrome.tabs.onUpdated.addListener(function (id, info, tab) {
     // console.log("chrome.tabs.onUpdated "+tab.id +" "+id);
 
@@ -372,6 +383,18 @@ chrome.tabs.onUpdated.addListener(function (id, info, tab) {
         chrome.pageAction.show(id);
     }
 });
+
+
+
+chrome.tabs.onActivated.addListener(function (activeInfo) {
+    var i = recentTabs.indexOf(activeInfo.tabId);
+    if (i >= 0) {
+        recentTabs.splice(i, 1);
+    }
+    recentTabs.unshift(activeInfo.tabId);
+});
+
+
 
 /* 
 only get historyItem, not visitItem, without visitId, useless

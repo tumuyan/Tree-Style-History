@@ -94,6 +94,7 @@ document.addEvent('domready', function () {
 
     loadSlider('rhitemsno', 0, 30, 'rh-itemsno');
     loadSlider('rctitemsno', 0, 30, 'rct-itemsno');
+    loadSlider('rtitemsno', 0, 30, 'rt-itemsno');
     loadSlider('mvitemsno', 0, 30, 'mv-itemsno');
     loadSlider('rbitemsno', 0, 30, 'rb-itemsno');
     loadSlider('rhwidth', 225, 800, 'rh-width');
