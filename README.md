@@ -1,8 +1,9 @@
 # Tree Style Histyle
 
-![GitHub tag (latest by date)](https://img.shields.io/github/v/tag/tumuyan/Tree-Style-History?label=github)
-[![Microsoft Edge Addons](https://img.shields.io/badge/dynamic/json?label=%20Edge&query=%24.version&url=https%3A%2F%2Fmicrosoftedge.microsoft.com%2Faddons%2Fgetproductdetailsbycrxid%2Fgfmkhnaldbgcpoddmapciblllofekbpn)](https://microsoftedge.microsoft.com/addons/detail/gfmkhnaldbgcpoddmapciblllofekbpn)
-[![Chrome Web Store](https://img.shields.io/chrome-web-store/v/khcenbpnhbeplojhaolbpldmoppicold)](https://chrome.google.com/webstore/detail/tree-style-history/khcenbpnhbeplojhaolbpldmoppicold)
+![GitHub tag (latest by date)](https://img.shields.io/github/v/tag/tumuyan/Tree-Style-History?label=github) 
+[![Microsoft Edge Addons](https://img.shields.io/badge/dynamic/json?label=%20Edge&query=%24.version&url=https%3A%2F%2Fmicrosoftedge.microsoft.com%2Faddons%2Fgetproductdetailsbycrxid%2Fgfmkhnaldbgcpoddmapciblllofekbpn)](https://microsoftedge.microsoft.com/addons/detail/gfmkhnaldbgcpoddmapciblllofekbpn) 
+[![Chrome Web Store](https://img.shields.io/chrome-web-store/v/khcenbpnhbeplojhaolbpldmoppicold)](https://chrome.google.com/webstore/detail/tree-style-history/khcenbpnhbeplojhaolbpldmoppicold) 
+[![CC BY-NC-ND](https://img.shields.io/badge/CC-BY--NC--ND-blue)](./chrome/License.txt)  
 
 This extension shows your recent browser history in tree style.  
 When you browser pages from internet, you always jump from one page to another by clicking hyper-text links. This extension shows such a jumping relationship through a tree structure, help you find out what you were doing, what website you visited, and whether something has been done.  
