@@ -1177,31 +1177,28 @@ function formatItem(data) {
     item += '<span class="title" title="' + tip + '"><span class="edit-items-ui" data-url="' + url + '" data-title="' + tip.replace(/\'/g, "\\'") + '">' + ui + '</span>' + title + '</span>';
     item += '<span ' + saext + ' class="extra-url"><span ' + sext + ' class="extra">' + returnLang("visits") + ': ' + visits + extsep + '</span><span ' + surl + ' class="url">' + url.replace(/^(.*?)\:\/\//, '').replace(/\/$/, '') + '</span></span>';
 
+ 
 
-    if (data.tabId == undefined) {
+    var click =  function () {
+        leftClick(url);
+    };
+  
 
-        return new Element('a', {
-            'events': {
-                'click': function () {
-                    leftClick(url);
-                },
-                'contextmenu': function () {
-                    rightClick(url);
-                }
-            },
-            'class': 'item',
-            target: '_blank',
-            styles: sobj,
-            href: url,
-            html: item
-        });
+    // switch tab
+    if (data.tabId != undefined) {
+        click = function () {
+            openTab(data.tabId);
+        }
+    } else if (data.sessionId != undefined) {
+        click = function () {
+            chrome.sessions.restore(data.sessionId , function (session) { })
+        }
     }
+
 
     return new Element('a', {
         'events': {
-            'click': function () {
-                openTab(data.tabId);
-            },
+            'click': click,
             'contextmenu': function () {
                 rightClick(url);
             }
@@ -1274,51 +1271,40 @@ function recentHistory() {
 
 function recentlyClosedTabs() {
 
-    var rhhistory = chrome.extension.getBackgroundPage().closedTabs;
-
     var itemsno = localStorage['rct-itemsno'] * 1;
-    var rcti = 0;
 
     if (itemsno > 0) {
 
-        if (rhhistory.length > 0) {
+        chrome.sessions.getRecentlyClosed({
+            maxResults: itemsno
+        }, function (sessionInfos) {
+            console.log(" sessions found " + sessionInfos.length)
 
-            for (i = 0; i < 99; i++) {
-
-                if (itemsno == rcti) { break; }
-
-                if (rhhistory[i] !== undefined) {
-
-                    var title = rhhistory[i].title;
-                    var url = rhhistory[i].url;
-                    var time = rhhistory[i].time;
-                    var furl = 'chrome://favicon/' + rhhistory[i].url;
-
-                    if (title == '') {
-                        title = url;
-                    }
-
-                    if (title !== undefined) {
-                        if (!(/^(file|chrome|chrome-extension|chrome-devtools)\:\/\//).test(url)) {
-                            if (rhhistory[(i - 1)] == undefined) {
-                                if (filtUrl(url) == false) {
-                                    formatItem({ type: 'rct', title: title, url: url, favicon: furl, time: time }).inject('rct-inject', 'bottom');
-                                    rcti++;
-                                }
-                            } else {
-                                if (rhhistory[(i - 1)].url !== url) {
-                                    if (filtUrl(url) == false) {
-                                        formatItem({ type: 'rct', title: title, url: url, favicon: furl, time: time }).inject('rct-inject', 'bottom');
-                                        rcti++;
-                                    }
-                                }
-                            }
-                        }
-                    }
-
+            for (var i = 0; i < sessionInfos.length; i++) {
+                var win;
+                var sessionId;
+                var title;
+                var tab = sessionInfos[i].tab;
+                if (tab == undefined) {
+                    win = sessionInfos[i].window;
+                    sessionId = win.sessionId;
+                    tab = win.tabs[0];
+                    title = "[" + win.tabs.length + "] " + tab.title;
+                } else {
+                    sessionId = tab.sessionId;
+                    title = tab.title;
                 }
 
+                var url = tab.url;
+                var furl = tab.favIconUrl;
+
+                if (title == '') {
+                    title = url;
+                }
+                formatItem({ type: 'rct', sessionId: sessionId, title: title, url: url, favicon: furl }).inject('rct-inject', 'bottom');
+
             }
+
 
             if ($$('#rct-inject .item').length == 0) {
                 $('rct-inject').setStyle('display', 'none');
@@ -1329,7 +1315,7 @@ function recentlyClosedTabs() {
                 isPinned('#rct-inject .item');
             }
 
-        }
+        });
 
     }
 

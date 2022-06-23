@@ -17,6 +17,7 @@
     "tabs",
     "history",
     "bookmarks",
+    "sessions",
     "chrome://favicon/",
     "contextMenus"
   ],
