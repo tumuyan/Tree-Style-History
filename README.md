@@ -11,6 +11,7 @@ Also following features are available.
 1. Use the right-click menu to quickly search the history for current site, or the site linked to.
 2. Tree view of recently closed pages. They are group by when they were closed and whether they were closed properly. 
 3. Linear view of bookmarks. Usually browser shows bookmarks in tree style, this extension does the opposite, reorders and displays bookmarks by time and site.  
+4. Quickly switch tabs in popup page. Sort tabs in reverse order of the time you visited.
 
 This work is based on [Recent History](https://github.com/umarsheikh13/recent-history) and has get the permission to modify and publish the code as a new exttension, many thanks to Umar.  
 Currently only Chinese and English UI are available.  
@@ -21,6 +22,7 @@ Currently only Chinese and English UI are available.
 1. 使用右键菜单，快速搜索当前网站，或者链接指向的网站的访问历史。
 2. 树状查看最近关闭的页面。根据关闭页面的时间、是否正常关闭对页面自动分组。批量打开一个分组的全部页面。
 3. 线性查看书签。通常浏览器使用树状结构展示书签；本扩展反其道而行，按照时间和网站重新排序并展示书签，方便查看和整理最新收藏的内容。
+4. 快速切换最近访问的标签页。在弹窗中按照访问时刻倒序排列标签页。
 
 灵感来自Firefox扩展[voyage](https://docs.google.com/document/d/1oaJjS9zWGQDBzy4wE403P7V2nQukMql_sfvAURl2noI/preview)，后来ff飙版本的时候这个扩展就废了，现在连发布页都被删除。  
 我一直没有再见到类似的扩展，所以自己就搓了一个，算是完成多年夙愿。  
