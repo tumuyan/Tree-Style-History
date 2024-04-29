@@ -386,6 +386,9 @@
     "name": {
         "message": "Tree Style History - 树形历史"
     },
+    "nameShort": {
+        "message": "树形历史"
+    },
     "linerHistory": {
         "message": "线性历史"
     },

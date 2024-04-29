@@ -1,6 +1,6 @@
 {
   "name": "__MSG_name__",
-  "short_name": "Tree Style History",
+  "short_name": "__MSG_nameShort__",
   "author": "Tumuyan",
   "version": "3.1.13",
   "update_url": "https://edge.microsoft.com/extensionwebstorebase/v1/crx",
