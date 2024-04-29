@@ -358,11 +358,12 @@ document.addEvent('domready', function () {
                                 var moreid = 'more-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                                 var errorid = 'error-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                                 var groupid = 'group-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
+                                var faviconSrc =rha[thisc.counter].favicon ? 'src="' + rha[thisc.counter].favicon + '"' : '';
                                 new Element('div', {
                                     title: host,
                                     rel: ibcv,
                                     'class': 'item-holder group-title ',
-                                    html: '<a href="#" class="group-title-toggle group-title-toggle-bookmark" id="' + toggleid + '" data-host="' + host + '" rel="' + host + '"></a><label class="group-title-toggle-count" rel="' + host + '"></label><input type="hidden"  style="width: 0; display:none;   padding: 0 0 0 0;  margin: 0 0 0 0;    visibility: hidden;  left: 0;"  class="group-title-checkbox" id="' + moreid + '" value="' + host + '"><img id="' + errorid + '" class="group-title-favicon" alt="Favicon" src="' + rha[thisc.counter].favicon + '"><span id="' + groupid + '" data-host="' + rha[thisc.counter].host + '" class="group-title-host">' + host.replace('www.', '') + '</span>'
+                                    html: '<a href="#" class="group-title-toggle group-title-toggle-bookmark" id="' + toggleid + '" data-host="' + host + '" rel="' + host + '"></a><label class="group-title-toggle-count" rel="' + host + '"></label><input type="hidden"  style="width: 0; display:none;   padding: 0 0 0 0;  margin: 0 0 0 0;    visibility: hidden;  left: 0;"  class="group-title-checkbox" id="' + moreid + '" value="' + host + '"><img id="' + errorid + '" class="group-title-favicon" alt="Favicon" ' + faviconSrc + '><span id="' + groupid + '" data-host="' + rha[thisc.counter].host + '" class="group-title-host">' + host.replace('www.', '') + '</span>'
                                 }).inject(into);
                                 $(toggleid).addEvent('click', function () {
                                     var host = this.getProperty('data-host');
@@ -430,11 +431,12 @@ document.addEvent('domready', function () {
 
                             var selectid = 'select-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                             var errorid = 'error-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
+                            var faviconSrc =rha[thisc.counter].favicon ? 'src="' + rha[thisc.counter].favicon + '"' : '';
                             var item;
                             item = '<div class="item">';
                             item += '<span class="time">' + rha[thisc.counter].time + '</span>';
                             item += '<a target="_blank" class="link" href="' + rha[thisc.counter].url + '">';
-                            item += '<img id="' + errorid + '" class="favicon" alt="Favicon" src="' + rha[thisc.counter].favicon + '">';
+                            item += '<img id="' + errorid + '" class="favicon" alt="Favicon" ' + faviconSrc +'>';
                             item += '<span class="title" title="' + rha[thisc.counter].url + '" rel="'  + rha[thisc.counter].time +  '">' + rha[thisc.counter].title + '</span>';
                             item += '</a>';
                             item += '</div>';

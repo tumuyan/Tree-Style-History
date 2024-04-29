@@ -29,6 +29,7 @@ Currently only Chinese and English UI are available.
 我一直没有再见到类似的扩展，所以自己就搓了一个，算是完成多年夙愿。  
 基于Umar的扩展[Recent History](https://github.com/umarsheikh13/recent-history)修改，已经获得原作者Umar的许可可以修改并且作为一个新的扩展进行发布，非常感谢他的劳动和许可。 
 
+
 ## Policy  
 
 Tree Style History collects your browser history, analyzes it and stores it on your computer, and shows it when needed.   
@@ -48,6 +49,7 @@ https://chrome.google.com/webstore/detail/tree-style-history/khcenbpnhbeplojhaol
 Or download - unzip - load the folder in developer mode.  
 https://github.com/tumuyan/Tree-Style-History/issues/1  
 
+**Both Chrome and Edge require extensions adapt to Manifest V3, but I couldn't update this extension to Manifest V3, so this extension will soon become unusable.**
 
 已经上传到Edge外接程序商店
 https://microsoftedge.microsoft.com/addons/detail/gfmkhnaldbgcpoddmapciblllofekbpn  
@@ -59,10 +61,15 @@ https://chrome.google.com/webstore/detail/tree-style-history/khcenbpnhbeplojhaol
 https://jingyan.baidu.com/article/ca2d939dfa5762ab6d31ce10.html  
 https://github.com/tumuyan/Tree-Style-History/issues/1  
 
+
+**Chrome和Edge都要求浏览器扩展适配manifest v3，但是由于我无法把此扩展更新到manifest v3，此扩展即将无法使用**
+
 ![screenshot](screen.jpg)
 
 ## Changlog
 
+
+3.1.13 (2024/04/29) 调整popup窗口所能显示的项目数量的上限，处理favicon 为空的情况。
 
 3.1.12 (2022/06/23) 增加功能：在弹窗中显示最近浏览的标签页，快速切换标签页; 优化功能（弹窗中的最近关闭的标签页）：数据改为从Chrome API获取，点击改为恢复会话而不是打开网页，关闭窗口显示一笔记录点击时可以直接恢复窗口 
 

@@ -1,7 +1,7 @@
 // Version
 
 function getVersion() {
-    return '3.1.12';
+    return '3.1.13';
 }
 
 
@@ -1160,7 +1160,13 @@ function formatItem(data) {
         var ui = '<span class="ui-delete" data-function="' + type + '">&nbsp;</span>';
     }
 
-    item += '<img class="favicon" alt="Favicon" src="' + favicon + '">';
+    if (favicon) {
+        item += '<img class="favicon" alt="Favicon" src="' + favicon + '">';
+    }
+    else {
+        item += '<img class="favicon" alt="Favicon">';
+    }
+
     item += '<span class="title" title="' + tip + '"><span class="edit-items-ui" data-url="' + url + '" data-title="' + tip.replace(/\'/g, "\\'") + '">' + ui + '</span>' + title + '</span>';
     item += '<span ' + saext + ' class="extra-url"><span ' + sext + ' class="extra">' + returnLang("visits") + ': ' + visits + extsep + '</span><span ' + surl + ' class="url">' + url.replace(/^(.*?)\:\/\//, '').replace(/\/$/, '') + '</span></span>';
 
@@ -1881,11 +1887,12 @@ function history(w, q) {
                                     var moreid = 'more-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                                     var errorid = 'error-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                                     var groupid = 'group-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
+                                    var faviconSrc =rha[thisc.counter].favicon ? 'src="' + rha[thisc.counter].favicon + '"' : '';
                                     new Element('div', {
                                         title: rha[thisc.counter].host,
                                         rel: ibcv,
                                         'class': 'item-holder group-title ',
-                                        html: '<a href="#" class="group-title-toggle" id="' + toggleid + '" data-host="' + rha[thisc.counter].host + '" rel="' + rha[thisc.counter].host + '"></a><input type="checkbox" class="group-title-checkbox" id="' + moreid + '" value="' + rha[thisc.counter].host + '"><img id="' + errorid + '" class="group-title-favicon" alt="Favicon" src="' + rha[thisc.counter].favicon + '"><span id="' + groupid + '" data-host="' + rha[thisc.counter].host + '" class="group-title-host">' + rha[thisc.counter].host.replace('www.', '') + '</span>'
+                                        html: '<a href="#" class="group-title-toggle" id="' + toggleid + '" data-host="' + rha[thisc.counter].host + '" rel="' + rha[thisc.counter].host + '"></a><input type="checkbox" class="group-title-checkbox" id="' + moreid + '" value="' + rha[thisc.counter].host + '"><img id="' + errorid + '" class="group-title-favicon" alt="Favicon" ' + faviconSrc +'><span id="' + groupid + '" data-host="' + rha[thisc.counter].host + '" class="group-title-host">' + rha[thisc.counter].host.replace('www.', '') + '</span>'
                                     }).inject(into);
                                     $(toggleid).addEvent('click', function () {
                                         var host = this.getProperty('data-host');
@@ -1954,13 +1961,14 @@ function history(w, q) {
                                 }
                                 var selectid = 'select-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                                 var errorid = 'error-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
+                                var faviconSrc =rha[thisc.counter].favicon ? 'src="' + rha[thisc.counter].favicon + '"' : '';
                                 var item;
                                 item = '<div class="item">';
                                 item += '<span class="checkbox"><label><input class="chkbx" type="checkbox" id="' + selectid + '" value="' + rha[thisc.counter].url + '" name="check"></label>&nbsp;</span>';
                                 //item += '<span class="bookmark">&nbsp;</span>';
                                 item += '<span class="time">' + rha[thisc.counter].time + '</span>';
                                 item += '<a target="_blank" class="link" href="' + rha[thisc.counter].url + '">';
-                                item += '<img id="' + errorid + '" class="favicon" alt="Favicon" src="' + rha[thisc.counter].favicon + '">';
+                                item += '<img id="' + errorid + '" class="favicon" alt="Favicon" ' + faviconSrc + '">';
                                 item += '<span class="title" title="' + rha[thisc.counter].url + '" rel="' + returnLang('visits') + ': ' + rha[thisc.counter].visits + ' | ' + rha[thisc.counter].time + ' ' + rha[thisc.counter].date + '">' + rha[thisc.counter].title + '</span>';
                                 item += '</a>';
                                 item += '</div>';

@@ -91,15 +91,19 @@ document.addEvent('domready', function () {
     });
 
     // Sliders
-
-    loadSlider('rhitemsno', 0, 30, 'rh-itemsno');
-    loadSlider('rctitemsno', 0, 30, 'rct-itemsno');
-    loadSlider('rtitemsno', 0, 30, 'rt-itemsno');
-    loadSlider('mvitemsno', 0, 30, 'mv-itemsno');
-    loadSlider('rbitemsno', 0, 30, 'rb-itemsno');
+    // recent-history
+    loadSlider('rhitemsno', 0, 100, 'rh-itemsno');
+    // recent-closed
+    loadSlider('rctitemsno', 0, 100, 'rct-itemsno');
+    // recent-tab
+    loadSlider('rtitemsno', 0, 100, 'rt-itemsno');
+    // most visited
+    loadSlider('mvitemsno', 0, 100, 'mv-itemsno');
+    // recent-bookmark
+    loadSlider('rbitemsno', 0, 100, 'rb-itemsno');
     loadSlider('rhwidth', 225, 800, 'rh-width');
     loadSlider('loadrange', 3, 300, 'load-range');
-    loadSlider('loadrange2', 1, 30, 'load-range2');
+    loadSlider('loadrange2', 1, 100, 'load-range2');
     loadSlider('loadrange3', 0, 900, 'load-range3');
     loadSlider('loadrange4', 0, 9000, 'load-range4');
     // Load translations iframe
