@@ -148,8 +148,14 @@
     globalObj.localStorageAdapter = storageProxy;
 
     let overrideSucceeded = false;
+
     try {
         delete globalObj.localStorage;
+    } catch (error) {
+        console.warn('storageAdapter: unable to delete localStorage property', error);
+    }
+
+    try {
         Object.defineProperty(globalObj, 'localStorage', {
             get() {
                 return storageProxy;
@@ -160,11 +166,20 @@
         });
         overrideSucceeded = true;
     } catch (error) {
-        console.warn('Unable to override localStorage, falling back to localStorageAdapter alias', error);
+        console.warn('storageAdapter: unable to redefine localStorage property', error);
     }
 
-    if (!overrideSucceeded && typeof globalObj.localStorage === 'undefined') {
-        globalObj.localStorage = storageProxy;
+    if (!overrideSucceeded) {
+        try {
+            globalObj.localStorage = storageProxy;
+            overrideSucceeded = true;
+        } catch (error) {
+            console.warn('storageAdapter: unable to assign localStorage proxy directly', error);
+        }
+    }
+
+    if (!overrideSucceeded) {
+        console.error('storageAdapter: failed to override window.localStorage. Use window.localStorageAdapter instead.');
     }
 
     globalObj.onStorageReady = function (callback) {
