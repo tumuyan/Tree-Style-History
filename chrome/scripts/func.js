@@ -70,6 +70,9 @@ function TimeToStr(time, skip_date, skip_year, skip_clock) {
     }
 
     var datestr = localStorage['rh-date'];
+    if (!datestr || typeof datestr !== 'string') {
+        datestr = 'mm/dd/yyyy';
+    }
 
     var month = currentTime.getMonth() + 1;
     if (month < 10) { month = '0' + month; }

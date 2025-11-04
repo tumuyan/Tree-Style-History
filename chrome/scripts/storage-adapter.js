@@ -4,6 +4,46 @@
 (function () {
     const globalObj = typeof window !== 'undefined' ? window : self;
 
+    const toStorageString = (value) => {
+        if (typeof value === 'string') {
+            return value;
+        }
+        if (typeof value === 'number' || typeof value === 'boolean') {
+            return String(value);
+        }
+        if (value === null) {
+            return 'null';
+        }
+        if (value === undefined) {
+            return 'undefined';
+        }
+        // For objects (including arrays), mimic localStorage behavior
+        // by calling toString() which yields [object Object] unless overridden.
+        try {
+            return String(value);
+        } catch (error) {
+            console.warn('storageAdapter: failed to stringify value', error);
+            return '';
+        }
+    };
+
+    const normalizeItems = (items) => {
+        const normalized = {};
+        const updates = {};
+        if (!items) {
+            return { normalized, updates };
+        }
+        Object.keys(items).forEach((key) => {
+            const value = items[key];
+            const stringValue = toStorageString(value);
+            normalized[key] = stringValue;
+            if (value !== stringValue) {
+                updates[key] = stringValue;
+            }
+        });
+        return { normalized, updates };
+    };
+
     const adapter = {
         _cache: {},
         _initialized: false,
@@ -42,12 +82,17 @@
         },
 
         getItem(key) {
-            return this._cache[key];
+            const value = this._cache[key];
+            if (value === undefined) {
+                return undefined;
+            }
+            return value;
         },
 
         setItem(key, value) {
-            this._cache[key] = value;
-            chrome.storage.local.set({ [key]: value });
+            const stringValue = toStorageString(value);
+            this._cache[key] = stringValue;
+            chrome.storage.local.set({ [key]: stringValue });
         },
 
         removeItem(key) {
@@ -78,9 +123,14 @@
         const now = (typeof performance !== 'undefined' && performance.now) ? performance.now.bind(performance) : Date.now;
         const startTime = now();
         
-        adapter._cache = items || {};
+        const { normalized, updates } = normalizeItems(items);
+        adapter._cache = normalized;
         adapter._initialized = true;
         adapter._initializing = false;
+
+        if (Object.keys(updates).length > 0 && typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+            chrome.storage.local.set(updates);
+        }
 
         if (adapter._resolveReady) {
             adapter._resolveReady();
@@ -146,7 +196,7 @@
         Object.keys(changes).forEach((key) => {
             const change = changes[key];
             if ('newValue' in change) {
-                adapter._cache[key] = change.newValue;
+                adapter._cache[key] = ('newValue' in change) ? toStorageString(change.newValue) : adapter._cache[key];
             } else {
                 delete adapter._cache[key];
             }
