@@ -16,6 +16,7 @@
             if (callback) {
                 if (this._initialized) {
                     callback();
+                    return this.readyPromise;
                 } else {
                     this._initCallbacks.push(callback);
                 }
@@ -29,29 +30,9 @@
                 return this.readyPromise;
             }
 
+            console.debug('storageAdapter: starting initialization...');
             this._initializing = true;
-
-            chrome.storage.local.get(null, (items) => {
-                this._cache = items || {};
-                this._initialized = true;
-                this._initializing = false;
-
-                if (this._resolveReady) {
-                    this._resolveReady();
-                    this.readyPromise = Promise.resolve();
-                    this._resolveReady = null;
-                }
-
-                const callbacks = this._initCallbacks.slice();
-                this._initCallbacks.length = 0;
-                callbacks.forEach((cb) => {
-                    try {
-                        cb();
-                    } catch (err) {
-                        console.error('storageAdapter callback error', err);
-                    }
-                });
-            });
+            fetchFromStorage();
 
             return this.readyPromise;
         },
@@ -92,6 +73,71 @@
     adapter.readyPromise = new Promise((resolve) => {
         adapter._resolveReady = resolve;
     });
+
+    function completeInitialization(items) {
+        const now = (typeof performance !== 'undefined' && performance.now) ? performance.now.bind(performance) : Date.now;
+        const startTime = now();
+        
+        adapter._cache = items || {};
+        adapter._initialized = true;
+        adapter._initializing = false;
+
+        if (adapter._resolveReady) {
+            adapter._resolveReady();
+            adapter.readyPromise = Promise.resolve();
+            adapter._resolveReady = null;
+        }
+
+        const callbacks = adapter._initCallbacks.slice();
+        adapter._initCallbacks.length = 0;
+        
+        const cacheSize = Object.keys(adapter._cache).length;
+        const duration = now() - startTime;
+        const elapsed = (typeof duration === 'number' && typeof duration.toFixed === 'function') ? duration.toFixed(2) : duration;
+        console.debug(`storageAdapter: initialized with ${cacheSize} keys in ${elapsed}ms`);
+        
+        callbacks.forEach((cb) => {
+            try {
+                cb();
+            } catch (err) {
+                console.error('storageAdapter callback error', err);
+            }
+        });
+    }
+
+    function fetchFromStorage() {
+        const fallbackToStorage = () => {
+            chrome.storage.local.get(null, (items) => {
+                console.debug('storageAdapter: loading data from chrome.storage.local');
+                completeInitialization(items);
+            });
+        };
+
+        if (typeof chrome !== 'undefined' && chrome.runtime && typeof chrome.runtime.getBackgroundPage === 'function') {
+            try {
+                chrome.runtime.getBackgroundPage((bg) => {
+                    if (chrome.runtime.lastError || !bg || bg === globalObj || !bg.storageAdapter || !bg.storageAdapter._initialized) {
+                        fallbackToStorage();
+                        return;
+                    }
+
+                    try {
+                        const cloned = JSON.parse(JSON.stringify(bg.storageAdapter._cache || {}));
+                        console.debug('storageAdapter: using background cache for initialization');
+                        completeInitialization(cloned);
+                    } catch (error) {
+                        console.warn('storageAdapter: failed to clone background cache', error);
+                        fallbackToStorage();
+                    }
+                });
+                return;
+            } catch (error) {
+                console.warn('storageAdapter: getBackgroundPage failed', error);
+            }
+        }
+
+        fallbackToStorage();
+    }
 
     chrome.storage.onChanged.addListener((changes, area) => {
         if (area !== 'local') {
