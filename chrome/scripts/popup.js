@@ -1,7 +1,8 @@
 
 document.addEvent('domready', function () {
+    onStorageReady(function () {
 
-    // Updated/Installed
+        // Updated/Installed
 
     if (localStorage['rh-version-' + getVersion()] !== 'true') {
         alertUser(returnLang('successfullyInstalled') + '<span>v' + getVersion() + '</span>', 'open');
@@ -61,19 +62,19 @@ document.addEvent('domready', function () {
     for (var o in rhporder) {
         if (rhporder[o] == 'rh-order') {
             if ((localStorage['rh-itemsno'] * 1) > 0) {
-                new Element('div', { id: 'rh-inject', html: '<div id="rh-inject-title" class="popup-title"><span>' + returnLang('recentHistory') + '	- <a href="#"  id="show-all-history" target="_blank">' + returnLang('more') + '🕑</a></span></div>' }).inject('popup-insert', 'bottom');
+                new Element('div', { id: 'rh-inject', html: '<div id="rh-inject-title" class="popup-title"><span>' + returnLang('recentHistory') + '    - <a href="#"  id="show-all-history" target="_blank">' + returnLang('more') + '🕑</a></span></div>' }).inject('popup-insert', 'bottom');
             }
         } else if (rhporder[o] == 'rct-order') {
             if ((localStorage['rct-itemsno'] * 1) > 0 ) {
                 if (navigator.userAgent.toLowerCase().indexOf('edg') > 0) {
-                    new Element('div', { id: 'rct-inject', html: '<div id="rct-inject-title" class="popup-title"><span>' + returnLang('recentlyClosedTabs') + '	- <a href="#"  id="show-all-closed" target="_blank">' + returnLang('more') + '...</a></span></div>' }).inject('popup-insert', 'bottom');
+                    new Element('div', { id: 'rct-inject', html: '<div id="rct-inject-title" class="popup-title"><span>' + returnLang('recentlyClosedTabs') + '    - <a href="#"  id="show-all-closed" target="_blank">' + returnLang('more') + '...</a></span></div>' }).inject('popup-insert', 'bottom');
                 } else {
                     new Element('div', { id: 'rct-inject', html: '<div id="rct-inject-title" class="popup-title"><span>' + returnLang('recentlyClosedTabs') + '</span></div>' }).inject('popup-insert', 'bottom');
                 }
             }
         } else if (rhporder[o] == 'rb-order') {
             if ((localStorage['rb-itemsno'] * 1) > 0) {
-                new Element('div', { id: 'rb-inject', html: '<div id="rb-inject-title" class="popup-title"><span>' + returnLang('recentBookmarks') + '	- <a href="#"  id="show-all-bookmark" target="_blank">' + returnLang('more') + '...</a></span></div>' }).inject('popup-insert', 'bottom');
+                new Element('div', { id: 'rb-inject', html: '<div id="rb-inject-title" class="popup-title"><span>' + returnLang('recentBookmarks') + '    - <a href="#"  id="show-all-bookmark" target="_blank">' + returnLang('more') + '...</a></span></div>' }).inject('popup-insert', 'bottom');
             }
         } else if (rhporder[o] == 'mv-order') {
             if ((localStorage['mv-itemsno'] * 1) > 0) {
@@ -183,4 +184,5 @@ document.addEvent('domready', function () {
     // -- Scrollbar fix
     //popup_scrollbar_fix.periodical(250);
 
+    });
 });

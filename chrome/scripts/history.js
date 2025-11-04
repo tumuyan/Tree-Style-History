@@ -1,6 +1,7 @@
 document.addEvent('domready', function(){
+    onStorageReady(function () {
   
-    // Fade in
+        // Fade in
   
     var historyFx = new Fx.Morph('history-container', {duration: 250});
     if(chrome.i18n.getMessage("@@bidi_dir") == 'rtl' && chrome.i18n.getMessage("@@ui_locale") !== 'en'){
@@ -264,4 +265,5 @@ document.addEvent('domready', function(){
 
 
 
+    });
 });
