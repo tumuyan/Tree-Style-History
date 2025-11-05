@@ -319,12 +319,29 @@ document.addEvent('domready', function () {
                     } else if (nameA > nameB) {
                         return 1;
                     } else {
-                        return 0;
+                        var epochA = (a.epoch === undefined || a.epoch === null) ? 0 : a.epoch * 1;
+                        var epochB = (b.epoch === undefined || b.epoch === null) ? 0 : b.epoch * 1;
+                        return epochB - epochA;
                     }
                 });
             } else {
                 rha.sort(function (a, b) {
-                    return a.epoch - b.epoch;
+                    var epochA = (a.epoch === undefined || a.epoch === null) ? 0 : a.epoch * 1;
+                    var epochB = (b.epoch === undefined || b.epoch === null) ? 0 : b.epoch * 1;
+
+                    if (epochA !== epochB) {
+                        return epochA - epochB;
+                    }
+
+                    var titleA = (a.title || '').toLowerCase();
+                    var titleB = (b.title || '').toLowerCase();
+                    if (titleA < titleB) {
+                        return -1;
+                    } else if (titleA > titleB) {
+                        return 1;
+                    } else {
+                        return 0;
+                    }
                 });
                 rha.reverse();
             }
