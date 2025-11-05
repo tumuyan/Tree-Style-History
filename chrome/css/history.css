@@ -339,6 +339,10 @@ label.group-title-toggle-count {
 
 #search {
     text-align: right;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
 }
 
 #rh-search {
@@ -401,9 +405,6 @@ label.group-title-toggle-count {
 }
 
 #bookmark-actions {
-    position: absolute;
-    top: 0;
-    right: 110px;
     display: flex;
     gap: 6px;
     align-items: center;
