@@ -277,6 +277,32 @@ document.addEvent('domready', function () {
     }
 
 
+    function attachBookmarkletHandlers(into) {
+        var container = $(into);
+        if (!container) {
+            return;
+        }
+
+        container.getElements('div.item-holder').each(function (holder) {
+            var bookmarkUrl = holder.getProperty('data-bookmark-url');
+            if (!bookmarkUrl || !isBookmarklet(bookmarkUrl)) {
+                return;
+            }
+
+            var link = holder.getElement('a.link');
+            if (!link || link.retrieve('bookmarklet-handler')) {
+                return;
+            }
+
+            link.store('bookmarklet-handler', true);
+            link.setProperty('target', '_self');
+            link.addEvent('click', function (ev) {
+                executeBookmarklet(bookmarkUrl, ev, false);
+            });
+        });
+    }
+
+
     function showData(hi, into) {
 
         alertLoadingHistory(false);
@@ -297,14 +323,23 @@ document.addEvent('domready', function () {
                     var visits = hi[i].visitCount;
                     var furl = 'chrome://favicon/' + hi[i].url;
                     var bookmarkId = hi[i].bookmarkId || hi[i].id;
-                    if (host == "#") {
+                    
+                    if (isBookmarklet(url)) {
+                        host = "#";
+                        furl = 'images/blank.png';
+                        if (title == '') {
+                            title = '[Bookmarklet]';
+                        }
+                    } else if (host == "#") {
                         url = encodeURI(url);
                         furl = 'chrome://favicon/';
-                    }
-
-
-                    if (title == '') {
-                        title = url;
+                        if (title == '') {
+                            title = url;
+                        }
+                    } else {
+                        if (title == '') {
+                            title = url;
+                        }
                     }
 
                     var originalTitle = hi[i].originalTitle;
@@ -400,6 +435,7 @@ document.addEvent('domready', function () {
                         new Tips('.title', { className: 'tip-holder' });
                         if ($$('#' + into + ' div.group-title').length > 0) { toggleGroup($$('#' + into + ' div.group-title')[0].get('title')); }
                         $('master-check-all').removeProperty('disabled');
+                        attachBookmarkletHandlers(into);
                     } else {
                         
                         var host = rha[thisc.counter].host;
@@ -481,6 +517,7 @@ document.addEvent('domready', function () {
                         new Tips('.title', { className: 'tip-holder' });
                         if ($$('#' + into + ' div.group-title').length > 0) { toggleGroup($$('#' + into + ' div.group-title')[0].get('title')); }
                         $('master-check-all').removeProperty('disabled');
+                        attachBookmarkletHandlers(into);
                     } else {
                         if (rha[thisc.counter] !== undefined) {
 

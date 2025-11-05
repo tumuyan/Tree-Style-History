@@ -283,15 +283,85 @@ Clipboard.copy = function (data) {
 };
 
 
+// Check if URL is a bookmarklet
+
+function isBookmarklet(url) {
+    return url && url.toLowerCase().trim().indexOf('javascript:') === 0;
+}
+
+
+function stopDomEvent(ev) {
+    if (ev && typeof ev.preventDefault === 'function') {
+        ev.preventDefault();
+        if (typeof ev.stopPropagation === 'function') {
+            ev.stopPropagation();
+        }
+        return;
+    }
+
+    if (typeof event !== 'undefined' && event) {
+        try {
+            if (typeof event.preventDefault === 'function') {
+                event.preventDefault();
+            }
+            if (typeof event.stopPropagation === 'function') {
+                event.stopPropagation();
+            }
+        } catch (e) { }
+    }
+}
+
+
+// Execute bookmarklet
+
+function executeBookmarklet(url, ev, closeWindow) {
+    if (ev) {
+        stopDomEvent(ev);
+    }
+
+    if (closeWindow === undefined) {
+        closeWindow = true;
+    }
+
+    if (!url) {
+        return;
+    }
+
+    var jsCode = url.replace(/^\s*javascript:\s*/i, '');
+
+    if (jsCode.trim() === '') {
+        return;
+    }
+
+    chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
+        if (tabs && tabs.length > 0) {
+            chrome.tabs.executeScript(tabs[0].id, { code: jsCode }, function() {
+                if (chrome.runtime.lastError) {
+                    console.error('Error executing bookmarklet:', chrome.runtime.lastError);
+                } else if (closeWindow) {
+                    window.close();
+                }
+            });
+        }
+    });
+}
+
+
 // Left click
 
-function leftClick(url) {
+function leftClick(url, ev) {
 
-    new Event(event).stop();
+    stopDomEvent(ev);
+
+    if (isBookmarklet(url)) {
+        executeBookmarklet(url, null, true);
+        return;
+    }
 
     var ca = localStorage['rh-click'];
     var cs = ctrlState;
-    if (cs == 'true' || event.button == 1) {
+    var domEvent = ev || event;
+    if (cs == 'true' || (domEvent && domEvent.button == 1)) {
         chrome.tabs.create({
             url: url,
             selected: false
@@ -1177,18 +1247,20 @@ function formatItem(data) {
 
  
 
-    var click =  function () {
-        leftClick(url);
+    var click =  function (ev) {
+        leftClick(url, ev);
     };
   
 
     // switch tab
     if (data.tabId != undefined) {
-        click = function () {
+        click = function (ev) {
+            stopDomEvent(ev);
             openTab(data.tabId);
         }
     } else if (data.sessionId != undefined) {
-        click = function () {
+        click = function (ev) {
+            stopDomEvent(ev);
             chrome.sessions.restore(data.sessionId , function (session) { })
         }
     }
@@ -1202,7 +1274,7 @@ function formatItem(data) {
             }
         },
         'class': 'item',
-        target: '_blank',
+        target: isBookmarklet(url) ? '_self' : '_blank',
         styles: sobj,
         // href: url,
         html: item
@@ -1447,9 +1519,16 @@ function recentBookmarks() {
                         var title = bm[i].title;
                         var url = bm[i].url;
                         var furl = 'chrome://favicon/' + bm[i].url;
-
-                        if (title == '') {
-                            title = url;
+                        
+                        if (isBookmarklet(url)) {
+                            furl = 'images/blank.png';
+                            if (title == '') {
+                                title = '[Bookmarklet]';
+                            }
+                        } else {
+                            if (title == '') {
+                                title = url;
+                            }
                         }
 
                         formatItem({ type: 'rb', url: url, title: title, favicon: furl, time: formatDate(bm[i].dateAdded) }).inject('rb-inject', 'bottom');
