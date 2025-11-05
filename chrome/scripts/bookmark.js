@@ -178,14 +178,23 @@ document.addEvent('domready', function () {
         let list = [];
         for (let i = 0; i < tree.length; i++) {
             if (tree[i].children == undefined) {
-                let title = tree[i].title;
-                if (title == '') {
-                    title = tree[i].url;
+                let rawTitle = tree[i].title;
+                if (rawTitle === undefined || rawTitle === null) {
+                    rawTitle = '';
                 }
-                if (localStorage['rm-path'] == 'yes')
-                    tree[i].title = (path).replace(/[🗁]+/, '🗁') + ' - ' + title;
-                tree[i].bookmarkId = tree[i].id;
-                list.push(tree[i]);
+                let displayTitle = rawTitle;
+                if (displayTitle === '') {
+                    displayTitle = tree[i].url;
+                }
+                let node = Object.assign({}, tree[i]);
+                node.originalTitle = rawTitle;
+                if (localStorage['rm-path'] == 'yes') {
+                    node.title = (path).replace(/[🗁]+/, '🗁') + ' - ' + displayTitle;
+                } else {
+                    node.title = displayTitle;
+                }
+                node.bookmarkId = node.id;
+                list.push(node);
             } else {
                 // 使用全角字符／，避免解析html发生错误
                 list = list.concat(bmtree2array(path + tree[i].title, tree[i].children));
@@ -298,12 +307,20 @@ document.addEvent('domready', function () {
                         title = url;
                     }
 
+                    var originalTitle = hi[i].originalTitle;
+                    if (originalTitle === undefined || originalTitle === null) {
+                        originalTitle = hi[i].title;
+                    }
+                    if (originalTitle === undefined || originalTitle === null) {
+                        originalTitle = '';
+                    }
+
                     // if (hi[i].dateAdded >= obj['startTime'] && hi[i].dateAdded <= obj['endTime'])
                     {
                         //   rha.push({epoch: hi[i].dateAdded, url: url, host: (new URI(url).get('host')), time: timeNow(hi[i].dateAdded), date: formatDate(hi[i].dateAdded), favicon: furl, title: truncate(title_fix(title), 0, 100), visits: visits});
                         var safeTitle = title_fix(title);
                         var displayTitle = truncate(safeTitle, 0, 100);
-                        rha.push({ epoch: hi[i].dateAdded, url: url, host: host, time: TimeToStr(hi[i].dateAdded, true, true, true), date: formatDate(hi[i].dateAdded), favicon: furl, title: displayTitle, visits: visits, bookmarkId: bookmarkId, originalTitle: title });
+                        rha.push({ epoch: hi[i].dateAdded, url: url, host: host, time: TimeToStr(hi[i].dateAdded, true, true, true), date: formatDate(hi[i].dateAdded), favicon: furl, title: displayTitle, visits: visits, bookmarkId: bookmarkId, originalTitle: originalTitle });
 
                     }
 
