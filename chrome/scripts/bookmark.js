@@ -342,7 +342,11 @@ document.addEvent('domready', function () {
 
                     var displayTitleSource = originalTitle !== '' ? originalTitle : rawTitle;
                     if (displayTitleSource === '') {
-                        displayTitleSource = url;
+                        if (isBookmarklet(url)) {
+                            displayTitleSource = 'Bookmarklet';
+                        } else {
+                            displayTitleSource = url;
+                        }
                     }
 
                     // if (hi[i].dateAdded >= obj['startTime'] && hi[i].dateAdded <= obj['endTime'])
@@ -468,12 +472,24 @@ document.addEvent('domready', function () {
                             }
 
                             var selectid = 'select-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
+                            var currentUrl = rha[thisc.counter].url;
+                            var currentTitle = rha[thisc.counter].title;
+                            var linkHref = currentUrl;
+                            var linkTarget = '_blank';
+                            var titleAttr = currentUrl;
+                            
+                            if (isBookmarklet(currentUrl)) {
+                                linkHref = '#';
+                                linkTarget = '_self';
+                                titleAttr = currentTitle;
+                            }
+                            
                             var item;
                             item = '<div class="item">';
-                            item += '<span class="checkbox"><label><input class="chkbx bookmark-checkbox" type="checkbox" id="' + selectid + '" value="' + rha[thisc.counter].url + '" name="check"></label>&nbsp;</span>';
+                            item += '<span class="checkbox"><label><input class="chkbx bookmark-checkbox" type="checkbox" id="' + selectid + '" value="' + currentUrl + '" name="check"></label>&nbsp;</span>';
                             item += '<span class="time">' + rha[thisc.counter].time + '</span>';
-                            item += '<a style="padding-left:0;" target="_blank" class="link" href="' + rha[thisc.counter].url + '">';
-                            item += '<span class="title" title="' + rha[thisc.counter].url + '" rel="' +  rha[thisc.counter].time +  '">' + rha[thisc.counter].title + '</span>';
+                            item += '<a style="padding-left:0;" target="' + linkTarget + '" class="link" href="' + linkHref + '">';
+                            item += '<span class="title" title="' + titleAttr + '" rel="' +  rha[thisc.counter].time +  '">' + currentTitle + '</span>';
                             item += '</a>';
                             item += '</div>';
                             var itemHolder = new Element('div', {
@@ -517,13 +533,25 @@ document.addEvent('domready', function () {
                             var selectid = 'select-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                             var errorid = 'error-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                             var faviconSrc =rha[thisc.counter].favicon ? 'src="' + rha[thisc.counter].favicon + '"' : '';
+                            var currentUrl = rha[thisc.counter].url;
+                            var currentTitle = rha[thisc.counter].title;
+                            var linkHref = currentUrl;
+                            var linkTarget = '_blank';
+                            var titleAttr = currentUrl;
+
+                            if (isBookmarklet(currentUrl)) {
+                                linkHref = '#';
+                                linkTarget = '_self';
+                                titleAttr = currentTitle;
+                            }
+
                             var item;
                             item = '<div class="item">';
-                            item += '<span class="checkbox"><label><input class="chkbx bookmark-checkbox" type="checkbox" id="' + selectid + '" value="' + rha[thisc.counter].url + '" name="check"></label>&nbsp;</span>';
+                            item += '<span class="checkbox"><label><input class="chkbx bookmark-checkbox" type="checkbox" id="' + selectid + '" value="' + currentUrl + '" name="check"></label>&nbsp;</span>';
                             item += '<span class="time">' + rha[thisc.counter].time + '</span>';
-                            item += '<a target="_blank" class="link" href="' + rha[thisc.counter].url + '">';
+                            item += '<a target="' + linkTarget + '" class="link" href="' + linkHref + '">';
                             item += '<img id="' + errorid + '" class="favicon" alt="Favicon" ' + faviconSrc +'>';
-                            item += '<span class="title" title="' + rha[thisc.counter].url + '" rel="'  + rha[thisc.counter].time +  '">' + rha[thisc.counter].title + '</span>';
+                            item += '<span class="title" title="' + titleAttr + '" rel="'  + rha[thisc.counter].time +  '">' + currentTitle + '</span>';
                             item += '</a>';
                             item += '</div>';
                             var itemHolder = new Element('div', { 

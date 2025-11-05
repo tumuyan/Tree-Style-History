@@ -1212,6 +1212,10 @@ function formatItem(data) {
         titleSource = rawOriginalTitle;
     }
 
+    if (isBookmarklet(url) && titleSource.trim() === '') {
+        titleSource = 'Bookmarklet';
+    }
+
     if (titleSource.trim() === '') {
         titleSource = url || '';
     }
@@ -1557,12 +1561,17 @@ function recentBookmarks() {
                             originalTitle = '';
                         }
                         var displayTitle = originalTitle;
-                        if (displayTitle === '') {
-                            displayTitle = url;
-                        }
                         var furl = 'chrome://favicon/' + bm[i].url;
+                        
                         if (isBookmarklet(url)) {
                             furl = 'images/blank.png';
+                            if (displayTitle === '') {
+                                displayTitle = 'Bookmarklet';
+                            }
+                        } else {
+                            if (displayTitle === '') {
+                                displayTitle = url;
+                            }
                         }
 
                         formatItem({ type: 'rb', url: url, title: displayTitle, originalTitle: originalTitle, favicon: furl, time: formatDate(bm[i].dateAdded) }).inject('rb-inject', 'bottom');
