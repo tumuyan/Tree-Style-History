@@ -529,7 +529,7 @@ document.addEvent('domready', function () {
                 el.getParent('div.item-holder').setStyle('background-color', itemSelectedColor);
             } else if (el.get('checked') == false) {
                 var iurl = el.get('value');
-                $(into + ' .chkbx').each(function (ele) {
+                $$(into + ' .chkbx').each(function (ele) {
                     if (ele.get('value') == iurl) {
                         if (ele.getParent('div.item-holder').get('rel') == 'white') {
                             ele.getParent('div.item-holder').setStyle('background-color', '#fff');
@@ -539,7 +539,7 @@ document.addEvent('domready', function () {
                     }
                 });
             }
-            if ($(into + ' .chkbx').length == $(into + ' .chkbx:checked').length) {
+            if ($$(into + ' .chkbx').length == $$(into + ' .chkbx:checked').length) {
                 $('master-check-all').set('checked', true);
                 $('master-check-all').set('value', 'true');
             } else {
@@ -548,13 +548,13 @@ document.addEvent('domready', function () {
             }
         } else if (w == 'all') {
             if (el.get('value') == 'false') {
-                $(into + ' .chkbx').each(function (ele) {
+                $$(into + ' .chkbx').each(function (ele) {
                     ele.set('checked', true);
                     ele.getParent('div.item-holder').setStyle('background-color', itemSelectedColor);
                 });
                 el.set('value', 'true');
             } else {
-                $(into + ' .chkbx').each(function (ele) {
+                $$(into + ' .chkbx').each(function (ele) {
                     ele.set('checked', false);
                     if (ele.getParent('div.item-holder').get('rel') == 'white') {
                         ele.getParent('div.item-holder').setStyle('background-color', '#fff');
