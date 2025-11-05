@@ -277,6 +277,30 @@ document.addEvent('domready', function () {
     }
 
 
+    function attachBookmarkletClickHandler(holder) {
+        if (!holder) {
+            return;
+        }
+        var link = holder.getElement('a.link');
+        if (!link) {
+            return;
+        }
+        var bookmarkUrl = holder.getProperty('data-bookmark-url') || link.get('href');
+        if (!isBookmarklet(bookmarkUrl)) {
+            return;
+        }
+        link.set('href', '#');
+        link.set('target', '_self');
+        link.addEvent('click', function (ev) {
+            var eventObj = ev || window.event;
+            if (eventObj) {
+                new Event(eventObj).stop();
+            }
+            executeBookmarklet(bookmarkUrl, { closeAfterExecution: false });
+        });
+    }
+
+
     function showData(hi, into) {
 
         alertLoadingHistory(false);
@@ -291,34 +315,39 @@ document.addEvent('domready', function () {
 
                 if (filtUrl(hi[i].url) == false) {
 
-                    var title = hi[i].title;
+                    var rawTitle = hi[i].title;
+                    if (rawTitle === undefined || rawTitle === null) {
+                        rawTitle = '';
+                    }
                     var url = hi[i].url;
                     var host = get_host(url);
                     var visits = hi[i].visitCount;
                     var furl = 'chrome://favicon/' + hi[i].url;
                     var bookmarkId = hi[i].bookmarkId || hi[i].id;
-                    if (host == "#") {
+
+                    if (isBookmarklet(url)) {
+                        furl = 'images/blank.png';
+                    } else if (host == "#") {
                         url = encodeURI(url);
                         furl = 'chrome://favicon/';
                     }
 
-
-                    if (title == '') {
-                        title = url;
-                    }
-
                     var originalTitle = hi[i].originalTitle;
                     if (originalTitle === undefined || originalTitle === null) {
-                        originalTitle = hi[i].title;
+                        originalTitle = rawTitle;
                     }
                     if (originalTitle === undefined || originalTitle === null) {
                         originalTitle = '';
                     }
 
+                    var displayTitleSource = originalTitle !== '' ? originalTitle : rawTitle;
+                    if (displayTitleSource === '') {
+                        displayTitleSource = url;
+                    }
+
                     // if (hi[i].dateAdded >= obj['startTime'] && hi[i].dateAdded <= obj['endTime'])
                     {
-                        //   rha.push({epoch: hi[i].dateAdded, url: url, host: (new URI(url).get('host')), time: timeNow(hi[i].dateAdded), date: formatDate(hi[i].dateAdded), favicon: furl, title: truncate(title_fix(title), 0, 100), visits: visits});
-                        var safeTitle = title_fix(title);
+                        var safeTitle = title_fix(displayTitleSource);
                         var displayTitle = truncate(safeTitle, 0, 100);
                         rha.push({ epoch: hi[i].dateAdded, url: url, host: host, time: TimeToStr(hi[i].dateAdded, true, true, true), date: formatDate(hi[i].dateAdded), favicon: furl, title: displayTitle, visits: visits, bookmarkId: bookmarkId, originalTitle: originalTitle });
 
@@ -457,6 +486,7 @@ document.addEvent('domready', function () {
                                     'background-color': $(into).getElement('div.item-holder[title="' + host + '"]').getStyle('background-color')
                                 }
                             }).set('html', item + '<div class="clearitem" style="clear:both;"></div>').inject($(into).getElement('div[rel="' + host + '"]'));
+                            attachBookmarkletClickHandler(itemHolder);
                             $(selectid).addEvent('click', function () {
                                 selectBookmarkItem(this, 'single');
                             });
@@ -496,7 +526,7 @@ document.addEvent('domready', function () {
                             item += '<span class="title" title="' + rha[thisc.counter].url + '" rel="'  + rha[thisc.counter].time +  '">' + rha[thisc.counter].title + '</span>';
                             item += '</a>';
                             item += '</div>';
-                            new Element('div', { 
+                            var itemHolder = new Element('div', { 
                                 'rel': ibcv, 
                                 'class': 'item-holder',
                                 'data-bookmark-id': rha[thisc.counter].bookmarkId,
@@ -509,6 +539,7 @@ document.addEvent('domready', function () {
                             } else {
                                 ibcv = 'white';
                             }
+                            attachBookmarkletClickHandler(itemHolder);
                             $(selectid).addEvent('click', function () {
                                 selectBookmarkItem(this, 'single');
                             });

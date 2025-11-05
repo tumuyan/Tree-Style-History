@@ -283,15 +283,92 @@ Clipboard.copy = function (data) {
 };
 
 
+var bookmarkletSchemePattern = /^javascript:/i;
+
+function isBookmarklet(url) {
+    if (typeof url !== 'string') {
+        return false;
+    }
+    return bookmarkletSchemePattern.test(url.trim());
+}
+
+function getBookmarkletCode(url) {
+    if (!isBookmarklet(url)) {
+        return '';
+    }
+    var code = url.replace(bookmarkletSchemePattern, '').trim();
+    if (code === '') {
+        return '';
+    }
+    try {
+        return decodeURIComponent(code);
+    } catch (e) {
+        return code;
+    }
+}
+
+function executeBookmarklet(url, options) {
+    var opts = options || {};
+    var code = getBookmarkletCode(url);
+    if (!code) {
+        if (opts.onComplete) {
+            opts.onComplete(false);
+        }
+        return false;
+    }
+    chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
+        var tab = (tabs && tabs.length > 0) ? tabs[0] : null;
+        if (!tab) {
+            if (opts.onComplete) {
+                opts.onComplete(false);
+            }
+            return;
+        }
+        chrome.tabs.executeScript(tab.id, { code: code }, function () {
+            var success = true;
+            if (chrome.runtime.lastError) {
+                console.error('Bookmarklet execution error:', chrome.runtime.lastError.message);
+                success = false;
+            }
+            if (opts.closeAfterExecution) {
+                window.close();
+            }
+            if (opts.onComplete) {
+                opts.onComplete(success);
+            }
+        });
+    });
+    return true;
+}
+
+
 // Left click
 
-function leftClick(url) {
+function leftClick(url, evt) {
 
-    new Event(event).stop();
+    var e = evt;
+    if (!e && typeof window !== 'undefined') {
+        e = window.event;
+    }
+    if (!e && typeof event !== 'undefined') {
+        e = event;
+    }
+
+    if (e) {
+        new Event(e).stop();
+    } else if (typeof event !== 'undefined') {
+        new Event(event).stop();
+    }
+
+    if (isBookmarklet(url)) {
+        executeBookmarklet(url, { closeAfterExecution: true });
+        return;
+    }
 
     var ca = localStorage['rh-click'];
     var cs = ctrlState;
-    if (cs == 'true' || event.button == 1) {
+    var button = (e && typeof e.button !== 'undefined') ? e.button : ((typeof event !== 'undefined' && typeof event.button !== 'undefined') ? event.button : 0);
+    if (cs == 'true' || button == 1) {
         chrome.tabs.create({
             url: url,
             selected: false
@@ -1107,9 +1184,39 @@ function formatItem(data) {
 
     var url = data.url;
     var type = data.type;
-    var title = title_fix(data.title);
     var favicon = data.favicon;
     var time = data.time;
+
+    var rawOriginalTitle = '';
+    if (typeof data.originalTitle === 'string') {
+        rawOriginalTitle = data.originalTitle;
+    } else if (data.originalTitle !== undefined && data.originalTitle !== null) {
+        rawOriginalTitle = String(data.originalTitle);
+    }
+
+    var providedTitle = '';
+    if (typeof data.title === 'string') {
+        providedTitle = data.title;
+    } else if (data.title !== undefined && data.title !== null) {
+        providedTitle = String(data.title);
+    }
+
+    var titleSource = providedTitle;
+    if (isBookmarklet(url)) {
+        if (rawOriginalTitle.trim() !== '') {
+            titleSource = rawOriginalTitle;
+        }
+    }
+
+    if (titleSource.trim() === '' && rawOriginalTitle.trim() !== '') {
+        titleSource = rawOriginalTitle;
+    }
+
+    if (titleSource.trim() === '') {
+        titleSource = url || '';
+    }
+
+    var title = title_fix(titleSource);
 
     if (data.visits !== undefined) {
         var visits = data.visits;
@@ -1444,15 +1551,21 @@ function recentBookmarks() {
 
                     if (bm[i] !== undefined) {
 
-                        var title = bm[i].title;
                         var url = bm[i].url;
+                        var originalTitle = bm[i].title;
+                        if (originalTitle === undefined || originalTitle === null) {
+                            originalTitle = '';
+                        }
+                        var displayTitle = originalTitle;
+                        if (displayTitle === '') {
+                            displayTitle = url;
+                        }
                         var furl = 'chrome://favicon/' + bm[i].url;
-
-                        if (title == '') {
-                            title = url;
+                        if (isBookmarklet(url)) {
+                            furl = 'images/blank.png';
                         }
 
-                        formatItem({ type: 'rb', url: url, title: title, favicon: furl, time: formatDate(bm[i].dateAdded) }).inject('rb-inject', 'bottom');
+                        formatItem({ type: 'rb', url: url, title: displayTitle, originalTitle: originalTitle, favicon: furl, time: formatDate(bm[i].dateAdded) }).inject('rb-inject', 'bottom');
 
                     }
 
