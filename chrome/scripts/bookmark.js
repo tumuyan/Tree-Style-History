@@ -18,6 +18,14 @@ document.addEvent('domready', function () {
     historyFx.start(ho);
 
     // Language
+    
+    // Set button labels
+    if ($('delete-bookmark-button')) {
+        $('delete-bookmark-button').set('value', returnLang('deleteBookmarks'));
+    }
+    if ($('edit-bookmark-button')) {
+        $('edit-bookmark-button').set('value', returnLang('editBookmark'));
+    }
 
     // Toggle history
 
@@ -670,7 +678,7 @@ document.addEvent('domready', function () {
 
     function editBookmarkItem() {
         var containerSelector = getBookmarkContainerSelector();
-        var checkedItems = $(containerSelector + ' .chkbx:checked');
+        var checkedItems = $$(containerSelector + ' .chkbx:checked');
 
         if (checkedItems.length !== 1) {
             return;

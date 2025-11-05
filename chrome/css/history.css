@@ -400,6 +400,22 @@ label.group-title-toggle-count {
     right: 4px;
 }
 
+#bookmark-actions {
+    position: absolute;
+    top: 0;
+    right: 110px;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+#bookmark-actions .button {
+    padding: 6px 10px;
+    font-size: 12px;
+    height: auto;
+    display: none;
+}
+
 @media (-webkit-min-device-pixel-ratio: 1.5), (min-resolution: 144dpi) {
     #rh-bar-group {
         background: url('../images/group-toggle-@2x.png') no-repeat left center;
