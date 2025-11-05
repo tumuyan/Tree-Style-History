@@ -339,6 +339,10 @@ label.group-title-toggle-count {
 
 #search {
     text-align: right;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
 }
 
 #rh-search {
@@ -398,6 +402,19 @@ label.group-title-toggle-count {
 #rh-bar-order {
     background: url('../images/order-toggle.png') no-repeat left center;
     right: 4px;
+}
+
+#bookmark-actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+#bookmark-actions .button {
+    padding: 6px 10px;
+    font-size: 12px;
+    height: auto;
+    display: none;
 }
 
 @media (-webkit-min-device-pixel-ratio: 1.5), (min-resolution: 144dpi) {
