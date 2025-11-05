@@ -1,6 +1,9 @@
 document.addEvent('domready', function(){
     onStorageReady(function () {
   
+        // Apply page zoom
+        applyPageZoom();
+
         // Fade in
   
     var historyFx = new Fx.Morph('history-container', {duration: 250});

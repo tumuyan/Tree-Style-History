@@ -493,5 +493,11 @@
     },
     "editBookmarkUrlPrompt": {
         "message": "输入书签地址："
+    },
+    "pageZoom": {
+        "message": "页面缩放比例"
+    },
+    "pageZoomHelp": {
+        "message": "设置历史、书签、选项等页面的显示缩放比例（50%-200%）"
     }
 }

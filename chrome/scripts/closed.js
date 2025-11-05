@@ -1,6 +1,9 @@
 document.addEvent('domready', function () {
     onStorageReady(function () {
 
+        // Apply page zoom
+        applyPageZoom();
+
         //释放jquery中$定义，并直接使用jQuery代替平时的$
     var $jq = jQuery.noConflict();
 

@@ -359,7 +359,8 @@ var defaultValues = {
     "rhs-showsep": "no",
     "rhs-showext": "no",
     "rhs-showbg": "no",
-    "show-popup": "yes"
+    "show-popup": "yes",
+    "page-zoom": 100
 };
 
 function defaultConfig(clean) {
@@ -370,7 +371,35 @@ function defaultConfig(clean) {
     }
 }
 
+function normalizePageZoomValue(value) {
+    var zoom = parseInt(value, 10);
+    if (isNaN(zoom)) {
+        zoom = defaultValues['page-zoom'] || 100;
+    }
+    if (zoom < 50) {
+        zoom = 50;
+    }
+    if (zoom > 200) {
+        zoom = 200;
+    }
+    return zoom;
+}
 
+function applyPageZoom(zoomValue) {
+    if (typeof document === 'undefined' || !document.documentElement) {
+        return;
+    }
+    var targetZoom = zoomValue;
+    if (targetZoom === undefined || targetZoom === null || targetZoom === '') {
+        targetZoom = localStorage['page-zoom'];
+    }
+    var zoom = normalizePageZoomValue(targetZoom);
+    if (zoom === 100) {
+        document.documentElement.style.removeProperty('zoom');
+    } else {
+        document.documentElement.style.zoom = zoom + '%';
+    }
+}
 
 
 // Load Options lang
@@ -436,6 +465,7 @@ function loadOptions(full) {
 
     
     $$('#showPopup option[value="' + localStorage['show-popup'] + '"]').set('selected','selected');
+    $$('#pageZoom option[value="' + localStorage['page-zoom'] + '"]').set('selected', 'selected');
     $$('#rhhistorypage option[value="' + localStorage['rh-historypage'] + '"]').set('selected', 'selected');
     $$('#rhdate option[value="' + localStorage['rh-date'] + '"]').set('selected', 'selected');
     $$('#rhtime option[value="' + localStorage['rh-timeformat'] + '"]').set('selected', 'selected');
@@ -611,6 +641,7 @@ function saveOptions(sync) {
     so['rh-list-order'] = rhlo[0].get('id') + ',' + rhlo[1].get('id') + ',' + rhlo[2].get('id') + ',' + rhlo[3].get('id') + ',' +  rhlo[4].get('id');
     so['rh-historypage'] = $('rhhistorypage').getSelected().get('value');
     so['show-popup'] = $('showPopup').getSelected().get('value');
+    so['page-zoom'] = $('pageZoom').getSelected().get('value');
     so['rh-date'] = $('rhdate').getSelected().get('value');
     so['rh-timeformat'] = $('rhtime').getSelected().get('value');
     so['rh-search'] = $('rhsearch').getSelected().get('value');

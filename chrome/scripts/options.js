@@ -2,6 +2,9 @@
 document.addEvent('domready', function () {
     onStorageReady(function () {
 
+        // Apply page zoom
+        applyPageZoom();
+
         // Fade in
 
     var optionsFx = new Fx.Morph('options', { duration: 250 });
@@ -50,6 +53,12 @@ document.addEvent('domready', function () {
     // Load saved options
 
     loadOptions(true);
+
+    if ($('pageZoom')) {
+        $('pageZoom').addEvent('change', function () {
+            applyPageZoom(this.get('value'));
+        });
+    }
 
     // Save options
 

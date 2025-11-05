@@ -481,5 +481,11 @@
     },
     "editBookmarkUrlPrompt": {
         "message": "Enter bookmark URL:"
+    },
+    "pageZoom": {
+        "message": "Page Zoom"
+    },
+    "pageZoomHelp": {
+        "message": "Set the display zoom for options, history and bookmarks pages (50%-200%)."
     }
 }
