@@ -481,5 +481,17 @@
     },
     "recentTabs": {
         "message": "最近浏览的标签页"
+    },
+    "deleteBookmarks": {
+        "message": "删除书签"
+    },
+    "editBookmark": {
+        "message": "编辑书签"
+    },
+    "editBookmarkTitlePrompt": {
+        "message": "输入书签标题："
+    },
+    "editBookmarkUrlPrompt": {
+        "message": "输入书签地址："
     }
 }

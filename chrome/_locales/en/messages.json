@@ -469,5 +469,17 @@
     },
     "recentTabs": {
         "message": "Recent viewed tabs"
+    },
+    "deleteBookmarks": {
+        "message": "Delete Bookmarks"
+    },
+    "editBookmark": {
+        "message": "Edit Bookmark"
+    },
+    "editBookmarkTitlePrompt": {
+        "message": "Enter bookmark title:"
+    },
+    "editBookmarkUrlPrompt": {
+        "message": "Enter bookmark URL:"
     }
 }

@@ -155,7 +155,11 @@ document.addEvent('domready', function () {
 
     // Assign events
 
-    // $('master-check-all').addEvent('click', function () { selectHistoryItem(this, 'all'); });
+    $('master-check-all').addEvent('click', function () { selectBookmarkItem(this, 'all'); });
+    $('delete-bookmark-button').set('value', returnLang('deleteBookmarks'));
+    $('delete-bookmark-button').addEvent('click', function() { deleteBookmarkItems(); });
+    $('edit-bookmark-button').set('value', returnLang('editBookmark'));
+    $('edit-bookmark-button').addEvent('click', function() { editBookmarkItem(); });
 
 
 
@@ -172,6 +176,7 @@ document.addEvent('domready', function () {
                 }
                 if (localStorage['rm-path'] == 'yes')
                     tree[i].title = (path).replace(/[🗁]+/, '🗁') + ' - ' + title;
+                tree[i].bookmarkId = tree[i].id;
                 list.push(tree[i]);
             } else {
                 // 使用全角字符／，避免解析html发生错误
@@ -274,6 +279,7 @@ document.addEvent('domready', function () {
                     var host = get_host(url);
                     var visits = hi[i].visitCount;
                     var furl = 'chrome://favicon/' + hi[i].url;
+                    var bookmarkId = hi[i].bookmarkId || hi[i].id;
                     if (host == "#") {
                         url = encodeURI(url);
                         furl = 'chrome://favicon/';
@@ -287,7 +293,9 @@ document.addEvent('domready', function () {
                     // if (hi[i].dateAdded >= obj['startTime'] && hi[i].dateAdded <= obj['endTime'])
                     {
                         //   rha.push({epoch: hi[i].dateAdded, url: url, host: (new URI(url).get('host')), time: timeNow(hi[i].dateAdded), date: formatDate(hi[i].dateAdded), favicon: furl, title: truncate(title_fix(title), 0, 100), visits: visits});
-                        rha.push({ epoch: hi[i].dateAdded, url: url, host: host, time: TimeToStr(hi[i].dateAdded, true, true, true), date: formatDate(hi[i].dateAdded), favicon: furl, title: truncate(title_fix(title), 0, 100), visits: visits });
+                        var safeTitle = title_fix(title);
+                        var displayTitle = truncate(safeTitle, 0, 100);
+                        rha.push({ epoch: hi[i].dateAdded, url: url, host: host, time: TimeToStr(hi[i].dateAdded, true, true, true), date: formatDate(hi[i].dateAdded), favicon: furl, title: displayTitle, visits: visits, bookmarkId: bookmarkId, originalTitle: title });
 
                     }
 
@@ -408,21 +416,25 @@ document.addEvent('domready', function () {
                             var selectid = 'select-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                             var item;
                             item = '<div class="item">';
+                            item += '<span class="checkbox"><label><input class="chkbx bookmark-checkbox" type="checkbox" id="' + selectid + '" value="' + rha[thisc.counter].url + '" name="check"></label>&nbsp;</span>';
                             item += '<span class="time">' + rha[thisc.counter].time + '</span>';
                             item += '<a style="padding-left:0;" target="_blank" class="link" href="' + rha[thisc.counter].url + '">';
                             item += '<span class="title" title="' + rha[thisc.counter].url + '" rel="' +  rha[thisc.counter].time +  '">' + rha[thisc.counter].title + '</span>';
                             item += '</a>';
                             item += '</div>';
-                            new Element('div', {
+                            var itemHolder = new Element('div', {
                                 'rel': $(into).getElement('div.item-holder[title="' + host + '"]').get('rel'),
                                 'class': 'item-holder',
+                                'data-bookmark-id': rha[thisc.counter].bookmarkId,
+                                'data-bookmark-title': rha[thisc.counter].originalTitle,
+                                'data-bookmark-url': rha[thisc.counter].url,
                                 styles: {
                                     'background-color': $(into).getElement('div.item-holder[title="' + host + '"]').getStyle('background-color')
                                 }
                             }).set('html', item + '<div class="clearitem" style="clear:both;"></div>').inject($(into).getElement('div[rel="' + host + '"]'));
-                            // $(selectid).addEvent('click', function () {
-                            //     selectHistoryItem(this, 'single');
-                            // });
+                            $(selectid).addEvent('click', function () {
+                                selectBookmarkItem(this, 'single');
+                            });
 
                             var size = $(into).getElement('div[rel="' + host + '"]').childNodes.length;
                             var label = $(into).getElement('label[rel="' + host + '"]');
@@ -452,22 +464,29 @@ document.addEvent('domready', function () {
                             var faviconSrc =rha[thisc.counter].favicon ? 'src="' + rha[thisc.counter].favicon + '"' : '';
                             var item;
                             item = '<div class="item">';
+                            item += '<span class="checkbox"><label><input class="chkbx bookmark-checkbox" type="checkbox" id="' + selectid + '" value="' + rha[thisc.counter].url + '" name="check"></label>&nbsp;</span>';
                             item += '<span class="time">' + rha[thisc.counter].time + '</span>';
                             item += '<a target="_blank" class="link" href="' + rha[thisc.counter].url + '">';
                             item += '<img id="' + errorid + '" class="favicon" alt="Favicon" ' + faviconSrc +'>';
                             item += '<span class="title" title="' + rha[thisc.counter].url + '" rel="'  + rha[thisc.counter].time +  '">' + rha[thisc.counter].title + '</span>';
                             item += '</a>';
                             item += '</div>';
-                            new Element('div', { 'rel': ibcv, 'class': 'item-holder ' }).set('html', item + '<div class="clearitem" style="clear:both;"></div>').inject(into);
+                            new Element('div', { 
+                                'rel': ibcv, 
+                                'class': 'item-holder',
+                                'data-bookmark-id': rha[thisc.counter].bookmarkId,
+                                'data-bookmark-title': rha[thisc.counter].originalTitle,
+                                'data-bookmark-url': rha[thisc.counter].url
+                            }).set('html', item + '<div class="clearitem" style="clear:both;"></div>').inject(into);
 
                             if (ibcv == 'white') {
                                 ibcv = 'grey';
                             } else {
                                 ibcv = 'white';
                             }
-                            // $(selectid).addEvent('click', function () {
-                            //     selectHistoryItem(this, 'single');
-                            // });
+                            $(selectid).addEvent('click', function () {
+                                selectBookmarkItem(this, 'single');
+                            });
                             $(errorid).addEvent('error', function () {
                                 this.setProperty('src', 'images/blank.png');
                             });
@@ -484,6 +503,219 @@ document.addEvent('domready', function () {
         }
 
     }
+
+
+    function getActiveBookmark() {
+        if ($('rh-views-insert').getStyle('display') == 'block') {
+            return 'history';
+        } else if ($('rh-views-search-insert').getStyle('display') == 'block') {
+            return 'search';
+        }
+    }
+
+
+    function selectBookmarkItem(el, w) {
+        var grp = localStorage['rh-group'];
+        if (getActiveBookmark() == 'history') {
+            var into = '#rh-views-insert';
+        } else if (getActiveBookmark() == 'search') {
+            var into = '#rh-views-search-insert';
+        }
+        
+        var itemSelectedColor = '#ffcbd3';
+        
+        if (w == 'single') {
+            if (el.get('checked') == true) {
+                el.getParent('div.item-holder').setStyle('background-color', itemSelectedColor);
+            } else if (el.get('checked') == false) {
+                var iurl = el.get('value');
+                $(into + ' .chkbx').each(function (ele) {
+                    if (ele.get('value') == iurl) {
+                        if (ele.getParent('div.item-holder').get('rel') == 'white') {
+                            ele.getParent('div.item-holder').setStyle('background-color', '#fff');
+                        } else {
+                            ele.getParent('div.item-holder').setStyle('background-color', '#f1f1f1');
+                        }
+                    }
+                });
+            }
+            if ($(into + ' .chkbx').length == $(into + ' .chkbx:checked').length) {
+                $('master-check-all').set('checked', true);
+                $('master-check-all').set('value', 'true');
+            } else {
+                $('master-check-all').set('checked', false);
+                $('master-check-all').set('value', 'false');
+            }
+        } else if (w == 'all') {
+            if (el.get('value') == 'false') {
+                $(into + ' .chkbx').each(function (ele) {
+                    ele.set('checked', true);
+                    ele.getParent('div.item-holder').setStyle('background-color', itemSelectedColor);
+                });
+                el.set('value', 'true');
+            } else {
+                $(into + ' .chkbx').each(function (ele) {
+                    ele.set('checked', false);
+                    if (ele.getParent('div.item-holder').get('rel') == 'white') {
+                        ele.getParent('div.item-holder').setStyle('background-color', '#fff');
+                    } else {
+                        ele.getParent('div.item-holder').setStyle('background-color', '#fafafa');
+                    }
+                });
+                el.set('value', 'false');
+            }
+        }
+        
+        updateBookmarkButtons();
+    }
+
+
+    function updateBookmarkButtons() {
+        var into = getActiveBookmark() == 'history' ? '#rh-views-insert' : '#rh-views-search-insert';
+        var checkedItems = $$(into + ' .chkbx:checked');
+        var checkedCount = checkedItems.length;
+        
+        if (checkedCount > 0) {
+            $('delete-bookmark-button').setStyle('display', 'inline-block');
+        } else {
+            $('delete-bookmark-button').setStyle('display', 'none');
+        }
+        
+        if (checkedCount == 1) {
+            $('edit-bookmark-button').setStyle('display', 'inline-block');
+        } else {
+            $('edit-bookmark-button').setStyle('display', 'none');
+        }
+    }
+
+
+    function deleteBookmarkItems() {
+        var into = getActiveBookmark() == 'history' ? '#rh-views-insert' : '#rh-views-search-insert';
+        var checkedItems = $$(into + ' .chkbx:checked');
+        
+        if (checkedItems.length > 0) {
+            var confirmMsg = returnLang('ui4');
+            if (confirm(confirmMsg)) {
+                alertLoadingHistory(false);
+                var deleteCount = 0;
+                var totalCount = checkedItems.length;
+                
+                checkedItems.each(function(el) {
+                    var holder = el.getParent('div.item-holder');
+                    var bookmarkId = holder.getProperty('data-bookmark-id');
+                    
+                    if (bookmarkId) {
+                        chrome.bookmarks.remove(bookmarkId, function() {
+                            deleteCount++;
+                            holder.destroy();
+                            
+                            if (deleteCount == totalCount) {
+                                $('master-check-all').set('checked', false);
+                                $('master-check-all').set('value', 'false');
+                                updateBookmarkButtons();
+                                alertLoadingHistory(true);
+                            }
+                        });
+                    } else {
+                        deleteCount++;
+                        if (deleteCount == totalCount) {
+                            alertLoadingHistory(true);
+                        }
+                    }
+                });
+            }
+        }
+    }
+
+
+    function resetBookmarkSelectionState() {
+        if ($('master-check-all')) {
+            $('master-check-all').set('checked', false);
+            $('master-check-all').set('value', 'false');
+        }
+        selectedItem = undefined;
+        updateBookmarkButtons();
+    }
+
+
+    function refreshBookmarkView() {
+        var activeView = getActiveBookmark();
+        var query = $('rh-search') ? $('rh-search').get('value') : '';
+        if (activeView === 'search' && query && (query.length + query.replace(/[0-9a-zA-Z]+/g, '').length >= 2)) {
+            bookmark('search', query);
+        } else {
+            bookmark('yes', '');
+        }
+    }
+
+
+    function getBookmarkContainerSelector() {
+        return getActiveBookmark() == 'search' ? '#rh-views-search-insert' : '#rh-views-insert';
+    }
+
+
+    function getBookmarkDataFromCheckbox(checkbox) {
+        var holder = checkbox.getParent('div.item-holder');
+        if (!holder) {
+            return null;
+        }
+        return {
+            id: holder.getProperty('data-bookmark-id'),
+            title: holder.getProperty('data-bookmark-title'),
+            url: holder.getProperty('data-bookmark-url'),
+            holder: holder
+        };
+    }
+
+
+    function editBookmarkItem() {
+        var containerSelector = getBookmarkContainerSelector();
+        var checkedItems = $(containerSelector + ' .chkbx:checked');
+
+        if (checkedItems.length !== 1) {
+            return;
+        }
+
+        var data = getBookmarkDataFromCheckbox(checkedItems[0]);
+        if (!data || !data.id) {
+            return;
+        }
+
+        var currentTitle = data.title || data.url || '';
+        var currentUrl = data.url || '';
+
+        var newTitle = prompt(returnLang('editBookmarkTitlePrompt'), currentTitle);
+        if (newTitle === null) {
+            return;
+        }
+        newTitle = newTitle.trim();
+        if (newTitle === '') {
+            newTitle = currentTitle;
+        }
+
+        var newUrl = prompt(returnLang('editBookmarkUrlPrompt'), currentUrl);
+        if (newUrl === null) {
+            return;
+        }
+        newUrl = newUrl.trim();
+        if (newUrl === '') {
+            newUrl = currentUrl;
+        }
+
+        if (newTitle === currentTitle && newUrl === currentUrl) {
+            return;
+        }
+
+        chrome.bookmarks.update(data.id, { title: newTitle, url: newUrl }, function () {
+            if (chrome.runtime.lastError) {
+                alert('Error updating bookmark: ' + chrome.runtime.lastError.message);
+                return;
+            }
+            resetBookmarkSelectionState();
+            refreshBookmarkView();
+        });
+    }
+
 
     });
 });
