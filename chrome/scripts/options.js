@@ -1,7 +1,8 @@
 
 document.addEvent('domready', function () {
+    onStorageReady(function () {
 
-    // Fade in
+        // Fade in
 
     var optionsFx = new Fx.Morph('options', { duration: 250 });
     if (chrome.i18n.getMessage("@@bidi_dir") == 'rtl' && chrome.i18n.getMessage("@@ui_locale") !== 'en') {
@@ -128,4 +129,5 @@ document.addEvent('domready', function () {
         $('select_history_page').set('style','display:none');
     }
 
+    });
 });

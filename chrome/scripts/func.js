@@ -70,6 +70,9 @@ function TimeToStr(time, skip_date, skip_year, skip_clock) {
     }
 
     var datestr = localStorage['rh-date'];
+    if (!datestr || typeof datestr !== 'string') {
+        datestr = 'mm/dd/yyyy';
+    }
 
     var month = currentTime.getMonth() + 1;
     if (month < 10) { month = '0' + month; }
@@ -103,10 +106,12 @@ function TimeToStr(time, skip_date, skip_year, skip_clock) {
 
 
 var calendar_storage2 = {};
-var calendar_storage2_str = localStorage['calendar-storage2'];
-if (calendar_storage2_str != undefined) {
-    calendar_storage2 = JSON.parse(calendar_storage2_str);
-}
+onStorageReady(function() {
+    var calendar_storage2_str = localStorage['calendar-storage2'];
+    if (calendar_storage2_str != undefined) {
+        calendar_storage2 = JSON.parse(calendar_storage2_str);
+    }
+});
 
 function save_calendar_storage2(obj, n, f) {
     if (obj['text'] == '' && obj['maxResults'] >= 9999 && obj['endTime'] - 86400000 == obj['startTime']) {

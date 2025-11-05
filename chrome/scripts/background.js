@@ -125,37 +125,52 @@ function updatedTab(tab) {
 
 console.log("loading...");
 
-// 初始化oid参数
-var oid = localStorage['oid'];
-if (oid == undefined)
-    oid = 1;
-else
-    oid++;
-localStorage['oid'] = oid;
-
-
-// 
-
+var oid;
 var DAY = 24 * 3600 * 1000;
 var date = new Date();
 date.setHours(23); date.setMinutes(59); date.setSeconds(59); date.setMilliseconds(999);
 
-var calendar_str = localStorage['calendar-storage'];
-
+var calendar_str;
 var calendar = {};
-
 var calendar_r = {};
-
-if (calendar_str) {
-    calendar = JSON.parse(calendar_str);
-}
-
 
 var MAX = Number.MAX_VALUE - 1;
 var urls_wait_load = new Array();
 
 var request, db;
-openDb();
+
+onStorageReady(function () {
+    initializeStorageState();
+});
+
+function initializeStorageState() {
+    oid = localStorage['oid'];
+    if (oid == undefined) {
+        oid = 1;
+    } else {
+        oid++;
+    }
+    localStorage['oid'] = oid;
+
+    calendar_str = localStorage['calendar-storage'];
+    calendar = {};
+    calendar_r = {};
+    if (calendar_str) {
+        try {
+            calendar = JSON.parse(calendar_str);
+        } catch (error) {
+            console.warn('Failed to parse calendar-storage', error);
+            calendar = {};
+        }
+    }
+
+    defaultConfig(false);
+
+    mostVisitedInit();
+    mostVisitedInit.periodical(3 * 60 * 1000);
+
+    openDb();
+}
 
 
 function openDb() {
@@ -304,11 +319,6 @@ var mostVisitedInit = function () {
 };
 
 
-// Default values
-
-defaultConfig(false);
-// updateFilter();
-
 // Listeners
 
 
@@ -407,8 +417,7 @@ chrome.history.onVisited.addListener(function(historyItem) {
  */
 // Startup
 
-mostVisitedInit();
-mostVisitedInit.periodical(3 * 60 * 1000);
+// mostVisitedInit will be called in initializeStorageState()
 
 if (getVersionType() == 'pageAction') {
     chrome.windows.getAll({}, function (wins) {

@@ -5,6 +5,7 @@
 <meta content="text/html; charset=utf-8" http-equiv="Content-Type">
 <title>Liner History | Tree Style History</title>
 <link rel="stylesheet" href="css/history.css">
+<script type="text/javascript" src="scripts/storage-adapter.js"></script>
 <script type="text/javascript" src="scripts/history-rtl.js"></script>
 <script type="text/javascript" src="scripts/moo.js"></script>
 <script type="text/javascript" src="scripts/func.js"></script>
@@ -27,9 +28,9 @@
 
 <div id="history-container">
   <table id="main-table">
-  	<tr>
+      <tr>
       <td><h1 class="lang" data-lang-string="linerHistory"></h1></td>
-  		<td id="search">
+          <td id="search">
         <form id="rh-search-form" action="#">
           <span id="rh-clear-search">&times;</span>
           <input id="rh-search" type="text" value="">
@@ -39,10 +40,10 @@
             <option value="recent" class="lang" data-lang-string="recentHistory"   style="display:none"></option>
           </select>
         </form>
-  		</td>
-  	</tr>
-  	<tr>
-  		<td colspan="2">
+          </td>
+      </tr>
+      <tr>
+          <td colspan="2">
             <a href="#" class="lang" data-lang-string="showCalendar" id='showCalendar'></a>
         <div id="rh-bar">
           <label id="rh-bar-uione"><input id="master-check-all" type="checkbox" name="checkall" value="false"></label>
@@ -57,8 +58,8 @@
             <div id="rh-views-search-insert"></div>
           </div>
         </div>
-  		</td>
-  	</tr>
+          </td>
+      </tr>
   </table>
   <div id="calendar">
     <a id="delete-range-toggle-button" href="#"></a>
