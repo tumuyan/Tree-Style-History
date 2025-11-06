@@ -142,6 +142,101 @@ function title_fix(text) {
 }
 
 
+// Escape HTML attribute values to prevent injection
+function escapeHtmlAttr(text) {
+    if (text === undefined || text === null) {
+        return '';
+    }
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/'/g, '&#39;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
+
+function isBookmarkletUrl(url) {
+    if (typeof url !== 'string') {
+        return false;
+    }
+    return /^javascript\s*:/i.test(url.trim());
+}
+
+
+function extractBookmarkletCode(url) {
+    if (!isBookmarkletUrl(url)) {
+        return '';
+    }
+    return url.replace(/^javascript\s*:\s*/i, '');
+}
+
+
+function decodeBookmarkletCode(code) {
+    if (!code) {
+        return '';
+    }
+    var decoded = code;
+    try {
+        decoded = decodeURIComponent(code);
+    } catch (e1) {
+        try {
+            decoded = decodeURI(code);
+        } catch (e2) {
+            decoded = code;
+        }
+    }
+    return decoded;
+}
+
+
+function executeBookmarklet(url, options) {
+    options = options || {};
+    var code = extractBookmarkletCode(url);
+    if (!code) {
+        if (options.onFailure) {
+            options.onFailure();
+        }
+        return;
+    }
+
+    var scriptToRun = options.decode === false ? code : decodeBookmarkletCode(code);
+
+    chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
+        if (!tabs || tabs.length === 0) {
+            if (options.onFailure) {
+                options.onFailure();
+            }
+            return;
+        }
+        var tabId = tabs[0].id;
+        try {
+            chrome.tabs.executeScript(tabId, { code: scriptToRun }, function () {
+                if (chrome.runtime.lastError) {
+                    console.error('Failed to execute bookmarklet:', chrome.runtime.lastError);
+                    if (options.onFailure) {
+                        options.onFailure(chrome.runtime.lastError);
+                    }
+                    if (options.fallbackToUpdate) {
+                        chrome.tabs.update(tabId, { url: url });
+                    }
+                } else if (options.onSuccess) {
+                    options.onSuccess();
+                }
+            });
+        } catch (err) {
+            console.error('Failed to execute bookmarklet:', err);
+            if (options.onFailure) {
+                options.onFailure(err);
+            }
+            if (options.fallbackToUpdate) {
+                chrome.tabs.update(tabId, { url: url });
+            }
+        }
+    });
+}
+
+
 // Get url vars
 
 function getUrlVars() {
@@ -288,6 +383,24 @@ Clipboard.copy = function (data) {
 function leftClick(url) {
 
     new Event(event).stop();
+
+    // Handle bookmarklets by executing them instead of navigating
+    if (isBookmarkletUrl(url)) {
+        executeBookmarklet(url, {
+            decode: true,
+            fallbackToUpdate: true,
+            onSuccess: function() {
+                // Close popup if needed
+                if (ctrlState != 'true' && (localStorage['rh-click'] === 'newtab' || localStorage['rh-click'] === 'current')) {
+                    window.close();
+                }
+            },
+            onFailure: function(err) {
+                console.warn('Bookmarklet execution failed:', err);
+            }
+        });
+        return;
+    }
 
     var ca = localStorage['rh-click'];
     var cs = ctrlState;
