@@ -171,6 +171,9 @@ function initializeStorageState() {
     setInterval(mostVisitedInit, 3 * 60 * 1000);
 
     openDb();
+    
+    // Initialize context menu after storage is ready
+    initContextMenu();
 }
 
 
@@ -933,34 +936,59 @@ function add_tab_history(visitItems, i, loadfrom, url_item) {
 
 }
 
-chrome.contextMenus.removeAll(() => {
-    const options = {
-        type: 'normal',
-        id: 'tree_style_history_' + getVersion(),
-        title: returnLang('searchSite'),
-        contexts: ["link", "page"],
-        visible: true,
+function handleContextMenuClick(info) {
+    let url = info.linkUrl;
+    if (url != undefined) {
+        window.open('history.html?' + url);
+        return;
     }
-
-    if (localStorage['use-contextmenu'] == 'yes') {
-        chrome.contextMenus.create(options, () => {
-            console.log('select ' + options.id);
-        });
-
-        chrome.contextMenus.onClicked.addListener((info) => {
-            // console.log(JSON.stringify(info));
-
-            let url = info.linkUrl;
-            if (url != undefined) {
-                window.open('history.html?' + url);
-            } else {
-                url = info.pageUrl;
-                if (url != undefined) {
-                    window.open('history.html?' + url);
-                }
-            }
-        })
+    url = info.pageUrl;
+    if (url != undefined) {
+        window.open('history.html?' + url);
     }
 }
 
-);
+function initContextMenu() {
+    if (!chrome.contextMenus) {
+        console.warn('Context menus API is not available.');
+        return;
+    }
+
+    chrome.contextMenus.removeAll(() => {
+        chrome.contextMenus.onClicked.removeListener(handleContextMenuClick);
+
+        const options = {
+            type: 'normal',
+            id: 'tree_style_history_' + getVersion(),
+            title: returnLang('searchSite'),
+            contexts: ["link", "page"],
+            visible: true,
+        };
+
+        if (localStorage['use-contextmenu'] === 'yes') {
+            chrome.contextMenus.create(options, () => {
+                if (chrome.runtime && chrome.runtime.lastError) {
+                    console.warn('Failed to create context menu:', chrome.runtime.lastError);
+                } else {
+                    console.log('Context menu ready:', options.id);
+                    chrome.contextMenus.onClicked.addListener(handleContextMenuClick);
+                }
+            });
+        }
+    });
+}
+
+if (chrome && chrome.storage && chrome.storage.onChanged) {
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+        if (areaName !== 'local' || !Object.prototype.hasOwnProperty.call(changes, 'use-contextmenu')) {
+            return;
+        }
+
+        const reinitMenu = () => initContextMenu();
+        if (typeof storageAdapter !== 'undefined' && storageAdapter && typeof storageAdapter.ready === 'function') {
+            storageAdapter.ready().then(reinitMenu);
+        } else {
+            reinitMenu();
+        }
+    });
+}

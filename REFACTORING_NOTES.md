@@ -77,6 +77,50 @@ localStorage['calendar-storage'] = JSON.stringify(calendar_r);
 - 更快的background页面初始化
 - 更清晰的依赖关系
 
+### 4. 修复右键菜单初始化问题
+
+**背景:** 原代码在 background.js 文件末尾直接执行右键菜单初始化，但此时 localStorage 可能还未初始化完成。
+
+**修改:**
+1. 将右键菜单初始化代码重构为独立函数 `initContextMenu()`
+2. 提取事件处理为 `handleContextMenuClick()` 函数
+3. 在 `initializeStorageState()` 中调用，确保 storage 已就绪
+4. 添加完善的错误处理和日志
+
+**示例代码:**
+```javascript
+function handleContextMenuClick(info) {
+    let url = info.linkUrl || info.pageUrl;
+    if (url) {
+        window.open('history.html?' + url);
+    }
+}
+
+function initContextMenu() {
+    chrome.contextMenus.removeAll(() => {
+        if (localStorage['use-contextmenu'] === 'yes') {
+            chrome.contextMenus.create({
+                type: 'normal',
+                id: 'tree_style_history_' + getVersion(),
+                title: returnLang('searchSite'),
+                contexts: ["link", "page"],
+            }, () => {
+                if (!chrome.runtime.lastError) {
+                    chrome.contextMenus.onClicked.addListener(handleContextMenuClick);
+                    console.log('Context menu ready');
+                }
+            });
+        }
+    });
+}
+```
+
+**优势:**
+- 确保在 storage 初始化后再创建菜单
+- 更好的错误处理
+- 避免重复注册监听器
+- 修复了原有的初始化时序问题
+
 ## 依赖关系分析
 
 ### Background页面当前的功能模块

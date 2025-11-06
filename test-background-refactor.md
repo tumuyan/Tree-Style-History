@@ -107,23 +107,34 @@ console.log('IndexedDB:', db ? 'Available' : 'Not available');
 
 ### 5. 检查文件加载
 
-在Background页面Console中检查加载的脚本：
+**方法1：查看 background.html 源代码**
 
+1. 在 Background 页面按 Ctrl+U 查看源代码，或者
+2. 直接在 Console 中运行：
 ```javascript
-// 查看所有加载的脚本
-performance.getEntriesByType('resource')
-  .filter(r => r.name.includes('.js'))
-  .forEach(r => console.log(r.name));
+// 查看页面的所有 script 标签
+Array.from(document.scripts).forEach(s => console.log(s.src));
 ```
 
 **应该看到:**
-- `storage-adapter.js` ✅
-- `background-utils.js` ✅
-- `background.js` ✅
+- `chrome-extension://.../scripts/storage-adapter.js` ✅
+- `chrome-extension://.../scripts/background-utils.js` ✅
+- `chrome-extension://.../scripts/background.js` ✅
 
 **不应该看到:**
 - `moo.js` ❌
 - `func.js` ❌
+
+**方法2：检查全局变量**
+
+```javascript
+// 检查 MooTools 特有的方法是否存在（应该不存在）
+console.log('MooTools periodical:', typeof (function(){}).periodical);
+// 期望: "undefined"
+
+console.log('MooTools JSON.encode:', typeof JSON.encode);
+// 期望: "undefined"
+```
 
 ### 6. 性能对比
 
@@ -141,6 +152,8 @@ performance.getEntriesByType('resource')
 - **总计:** ~5ms
 
 **提升:** ~77% faster
+
+> 注意：background 页面在重新加载扩展时会重新初始化，无法通过在刷新前后分别调用 `console.time`/`console.timeEnd` 这种方式测量加载时间。建议根据 Chrome DevTools 中的 Network/Performance 面板估算，或使用上述脚本体积对比作为参考。
 
 ### 7. 内存使用
 
@@ -266,17 +279,13 @@ localStorage['calendar-storage'] = JSON.encode(calendar_r);
 
 ## 性能提升验证
 
-在重构前后分别测试：
+由于 background 页面在刷新时会重置脚本上下文，无法在刷新前后复用同一个计时器。建议使用以下方式进行对比：
 
-```javascript
-// 在 Background Console 中运行
-console.time('script-load');
-// 重新加载扩展
-// 然后在新的Background Console中运行
-console.timeEnd('script-load');
-```
+1. 打开 Chrome DevTools (F12) → Network 面板，勾选 "Disable cache"，重新加载扩展后查看 `background.html` 以及三个脚本的加载耗时。
+2. 或者在 Performance 面板录制一次 background 页面的初始化过程，比较脚本执行时间。
+3. 如果仅需粗略评估，可根据脚本体积对比（从 ~185KB 降至 ~43KB）估算加载加速比例。
 
-**期望:** 新版本应该快 50-80%
+**参考:** 新版本理论上会快 50-80%，具体数值取决于设备和浏览器版本。
 
 ## 报告模板
 
