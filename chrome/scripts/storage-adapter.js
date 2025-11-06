@@ -156,37 +156,12 @@
     }
 
     function fetchFromStorage() {
-        const fallbackToStorage = () => {
-            chrome.storage.local.get(null, (items) => {
-                console.debug('storageAdapter: loading data from chrome.storage.local');
-                completeInitialization(items);
-            });
-        };
-
-        if (typeof chrome !== 'undefined' && chrome.runtime && typeof chrome.runtime.getBackgroundPage === 'function') {
-            try {
-                chrome.runtime.getBackgroundPage((bg) => {
-                    if (chrome.runtime.lastError || !bg || bg === globalObj || !bg.storageAdapter || !bg.storageAdapter._initialized) {
-                        fallbackToStorage();
-                        return;
-                    }
-
-                    try {
-                        const cloned = JSON.parse(JSON.stringify(bg.storageAdapter._cache || {}));
-                        console.debug('storageAdapter: using background cache for initialization');
-                        completeInitialization(cloned);
-                    } catch (error) {
-                        console.warn('storageAdapter: failed to clone background cache', error);
-                        fallbackToStorage();
-                    }
-                });
-                return;
-            } catch (error) {
-                console.warn('storageAdapter: getBackgroundPage failed', error);
-            }
-        }
-
-        fallbackToStorage();
+        // In MV3, always load from chrome.storage.local
+        // The background service worker doesn't persist across sessions
+        chrome.storage.local.get(null, (items) => {
+            console.debug('storageAdapter: loading data from chrome.storage.local');
+            completeInitialization(items);
+        });
     }
 
     chrome.storage.onChanged.addListener((changes, area) => {

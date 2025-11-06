@@ -211,19 +211,32 @@ function executeBookmarklet(url, options) {
         }
         var tabId = tabs[0].id;
         try {
-            chrome.tabs.executeScript(tabId, { code: scriptToRun }, function () {
-                if (chrome.runtime.lastError) {
-                    console.error('Failed to execute bookmarklet:', chrome.runtime.lastError);
-                    if (options.onFailure) {
-                        options.onFailure(chrome.runtime.lastError);
+            chrome.scripting.executeScript(
+                {
+                    target: { tabId: tabId },
+                    func: (code) => {
+                        try {
+                            return { result: eval(code) };
+                        } catch (execError) {
+                            throw execError;
+                        }
+                    },
+                    args: [scriptToRun]
+                },
+                function () {
+                    if (chrome.runtime.lastError) {
+                        console.error('Failed to execute bookmarklet:', chrome.runtime.lastError);
+                        if (options.onFailure) {
+                            options.onFailure(chrome.runtime.lastError);
+                        }
+                        if (options.fallbackToUpdate) {
+                            chrome.tabs.update(tabId, { url: url });
+                        }
+                    } else if (options.onSuccess) {
+                        options.onSuccess();
                     }
-                    if (options.fallbackToUpdate) {
-                        chrome.tabs.update(tabId, { url: url });
-                    }
-                } else if (options.onSuccess) {
-                    options.onSuccess();
                 }
-            });
+            );
         } catch (err) {
             console.error('Failed to execute bookmarklet:', err);
             if (options.onFailure) {
@@ -1125,19 +1138,12 @@ function uiDeleteItem(el, type) {
             recentHistory();
             alertUser('', 'close');
         } else if (type == 'rct') {
-            var rct = chrome.extension.getBackgroundPage().closedTabs;
-            for (var i in rct) {
-                if (rct[i] !== undefined && rct[i].url == url) {
-                    rct.splice(i, 1);
-                    $$('#rct-inject .item').destroy();
-                    recentlyClosedTabs();
-                    if ($$('#rct-inject .item').length == 0) {
-                        $('rct-inject').setStyle('display', 'none');
-                    }
-                    alertUser('', 'close');
-                    break;
-                }
+            $('#rct-inject .item').destroy();
+            recentlyClosedTabs();
+            if ($('#rct-inject .item').length == 0) {
+                $('rct-inject').setStyle('display', 'none');
             }
+            alertUser('', 'close');
         } else if (type == 'rt') {
             console.log("//todo uiDeleteItem");
         } else if (type == 'rb') {
@@ -1461,11 +1467,21 @@ function openTab(id) {
 
 // Recent Tabs in popup
 
-function showRecentTabs() {
+async function showRecentTabs() {
 
-    var rhhistory = chrome.extension.getBackgroundPage().openedTabs;
-    var rt = chrome.extension.getBackgroundPage().recentTabs;
-    console.log("showRecentTabs() count = "+rt.length);
+    var rhhistory = await swBridge.getOpenedTabs();
+    var rt = await swBridge.getRecentTabs();
+
+    if (!rhhistory) {
+        rhhistory = {};
+    }
+    if (!Array.isArray(rt) || rt.length === 0) {
+        console.log("showRecentTabs() no recent tabs available");
+        $('rt-inject').setStyle('display', 'none');
+        return;
+    }
+
+    console.log("showRecentTabs() count = " + rt.length);
 
     // chrome.tabs.get( id , function (tabs) {
     //     if (tabs.length > 0) {

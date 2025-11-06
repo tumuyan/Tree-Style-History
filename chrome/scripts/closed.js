@@ -386,12 +386,22 @@ document.addEvent('domready', function () {
     }
 
 
-    var db = chrome.extension.getBackgroundPage().db;
-    if (db != undefined)
+    var db;
+    swBridge.openDbConnection().then(function(connection) {
+        db = connection;
         pre_History(0, 0);
+    }).catch(function(error) {
+        console.error('Failed to open DB connection for closed history:', error);
+        alertLoadingHistory(true);
+    });
 
 
     function pre_History(loadfrom, loadto) {
+        if (!db) {
+            console.warn('pre_History called without DB connection for closed history');
+            alertLoadingHistory(true);
+            return;
+        }
         alertLoadingHistory(false);
 
         zNodes = [];

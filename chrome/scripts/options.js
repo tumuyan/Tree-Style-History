@@ -67,8 +67,13 @@ document.addEvent('domready', function () {
     });
 
     $('deleteCache').addEvent('click', function () {
-        var bg = chrome.extension.getBackgroundPage();
-        bg.deleteDb();
+        swBridge.requestDeleteDb().then(function(success) {
+            if (success) {
+                alert(returnLang('done'));
+            } else {
+                alert(returnLang('saveFail'));
+            }
+        });
     });
 
 

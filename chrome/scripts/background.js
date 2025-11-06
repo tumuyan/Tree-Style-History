@@ -7,12 +7,63 @@ var openedTabs = {};
 // 最近访问的tab的tabId构成的数组
 var recentTabs = [];
 
+const TAB_STATE_STORAGE_KEY = 'openedTabsCache';
+const RECENT_STATE_STORAGE_KEY = 'recentTabsCache';
+let tabStatePersistTimer = null;
+
+restoreTabState();
+
+function persistTabState() {
+    if (tabStatePersistTimer) {
+        clearTimeout(tabStatePersistTimer);
+    }
+    tabStatePersistTimer = setTimeout(() => {
+        try {
+            const storage = chrome.storage.session || chrome.storage.local;
+            storage.set({
+                [TAB_STATE_STORAGE_KEY]: openedTabs,
+                [RECENT_STATE_STORAGE_KEY]: recentTabs
+            });
+        } catch (error) {
+            console.warn('Failed to persist tab state', error);
+        }
+    }, 250);
+}
+
+function restoreTabState() {
+    try {
+        const storage = chrome.storage.session || chrome.storage.local;
+        storage.get([TAB_STATE_STORAGE_KEY, RECENT_STATE_STORAGE_KEY], (items) => {
+            if (chrome.runtime.lastError) {
+                console.warn('Failed to restore tab state', chrome.runtime.lastError);
+                return;
+            }
+            if (items[TAB_STATE_STORAGE_KEY]) {
+                openedTabs = items[TAB_STATE_STORAGE_KEY];
+            }
+            if (Array.isArray(items[RECENT_STATE_STORAGE_KEY])) {
+                recentTabs = items[RECENT_STATE_STORAGE_KEY];
+            }
+        });
+    } catch (error) {
+        console.warn('Error restoring tab state', error);
+    }
+}
+
+function openExtensionPage(pathWithQuery) {
+    try {
+        chrome.tabs.create({ url: chrome.runtime.getURL(pathWithQuery) });
+    } catch (error) {
+        console.warn('Failed to open extension page', pathWithQuery, error);
+    }
+}
 
 // Opened tab
 
 function openedTab(tab) {
     openedTabs[tab.id] = tab;
     addCloseRedord(tab.id, tab.url, tab.title, 0, -1);
+    persistTabState();
 }
 
 
@@ -29,6 +80,7 @@ function closedTab(id) {
         if (i >= 0) {
             recentTabs.splice(i, 1);
         }
+        persistTabState();
     }
 }
 
@@ -117,6 +169,7 @@ function updatedTab(tab) {
             }
             openedTabs[tab.id].title = tab.title;
             openedTabs[tab.id].url = tab.url;
+            persistTabState();
         }
     }
 }
@@ -174,7 +227,7 @@ function initializeStorageState() {
 
 
 function openDb() {
-    request = window.indexedDB.open("testDB", 6);
+    request = self.indexedDB.open("testDB", 6);
     request.onerror = function (event) {
         console.log("Error opening DB", event);
     }
@@ -237,17 +290,14 @@ function openDb() {
 function deleteDb() {
     db.close();
     localStorage['calendar-storage'] = '';
-    var DBDeleteRequest = window.indexedDB.deleteDatabase('testDB');
+    var DBDeleteRequest = self.indexedDB.deleteDatabase('testDB');
 
     DBDeleteRequest.onerror = function (event) {
-        // console.log('Error deleteDb');
-        alert(returnLang('saveFail'));
-
+        console.log('Error deleteDb', event);
     };
 
     DBDeleteRequest.onsuccess = function (event) {
-        // console.log('success deleteDb');
-        alert(returnLang('done'));
+        console.log('success deleteDb');
         openDb();
     };
 
@@ -325,13 +375,13 @@ var mostVisitedInit = function () {
 chrome.commands.onCommand.addListener(function (command) {
     console.log('Command:', command);
     if (command == "open_history2") {
-        window.open("history2.html");
+        openExtensionPage("history2.html");
     } else if (command == "open_history1") {
-        window.open("history.html");
+        openExtensionPage("history.html");
     } else if (command == "open_closed") {
-        window.open("closed.html");
+        openExtensionPage("closed.html");
     } else if (command == "open_bookmark") {
-        window.open("bookmark.html");
+        openExtensionPage("bookmark.html");
     }
 });
 
@@ -404,6 +454,7 @@ chrome.tabs.onActivated.addListener(function (activeInfo) {
         recentTabs.splice(i, 1);
     }
     recentTabs.unshift(activeInfo.tabId);
+    persistTabState();
 });
 
 
@@ -452,13 +503,13 @@ function loadDate(date, dateId) {
         console.log("loadDate done. dateId = " + dateId + ">" + localStorage['load-range']);
 
         localStorage['calendar-storage'] = JSON.encode(calendar_r);
-        chrome.browserAction.setBadgeText({ text: "Url" });
+        chrome.action.setBadgeText({ text: "Url" });
         loadHistory();
         return;
     }
 
 
-    chrome.browserAction.setBadgeText({ text: "D" + (localStorage['load-range'] - dateId) });
+    chrome.action.setBadgeText({ text: "D" + (localStorage['load-range'] - dateId) });
 
 
 
@@ -617,7 +668,7 @@ var visitItems_wait_remove = new Array();
 
 function removeHistory() {
 
-    chrome.browserAction.setBadgeText({ text: "Del" });
+    chrome.action.setBadgeText({ text: "Del" });
 
 
     var transaction = db.transaction(["VisitItem"], "readwrite");
@@ -636,7 +687,7 @@ function removeHistory() {
 
             if (visitItems_wait_remove.length < 1) {
                 console.log(" removeHistory() done.");
-                chrome.browserAction.setBadgeText({ text: " " });
+                chrome.action.setBadgeText({ text: " " });
             } else {
                 console.log(" removeHistory() removing " + visitItems_wait_remove.length);
                 removeVisitItem(0);
@@ -696,11 +747,11 @@ function getVisits(urls_p) {
         return;
     }
     if (urls_p >= urls_wait_load.length) {
-        chrome.browserAction.setBadgeText({ text: "" });
+        chrome.action.setBadgeText({ text: "" });
         console.log("getVisits done.");
         return;
     }
-    chrome.browserAction.setBadgeText({ text: (urls_wait_load.length - urls_p).toString() });
+    chrome.action.setBadgeText({ text: (urls_wait_load.length - urls_p).toString() });
 
     let url_item = urls_wait_load[urls_p];
     let details = { url: url_item.url };
@@ -951,11 +1002,11 @@ chrome.contextMenus.removeAll(() => {
 
             let url = info.linkUrl;
             if (url != undefined) {
-                window.open('history.html?' + url);
+                openExtensionPage('history.html?' + url);
             } else {
                 url = info.pageUrl;
                 if (url != undefined) {
-                    window.open('history.html?' + url);
+                    openExtensionPage('history.html?' + url);
                 }
             }
         })

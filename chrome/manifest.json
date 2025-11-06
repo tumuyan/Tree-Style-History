@@ -4,13 +4,13 @@
   "author": "Tumuyan",
   "version": "3.1.13",
   "update_url": "https://edge.microsoft.com/extensionwebstorebase/v1/crx",
-  "manifest_version": 2,
-  "minimum_chrome_version": "22.0",
+  "manifest_version": 3,
+  "minimum_chrome_version": "88",
   "default_locale": "en",
   "description": "__MSG_aboutText__",
   "options_page": "options.html",
   "background": {
-    "page": "background.html"
+    "service_worker": "background.js"
   },
   "permissions": [
     "storage",
@@ -19,8 +19,8 @@
     "history",
     "bookmarks",
     "sessions",
-    "chrome://favicon/",
-    "contextMenus"
+    "contextMenus",
+    "scripting"
   ],
   "icons": {
     "16": "images/tree-16.png",
@@ -28,7 +28,7 @@
     "48": "images/tree-48.png",
     "128": "images/tree-128.png"
   },
-  "browser_action": {
+  "action": {
     "default_icon": {
       "19": "images/tree-19.png",
       "38": "images/tree-38.png",

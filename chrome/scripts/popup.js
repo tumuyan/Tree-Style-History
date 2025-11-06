@@ -81,8 +81,8 @@ document.addEvent('domready', function () {
                 new Element('div', { id: 'mv-inject', html: '<div id="mv-inject-title" class="popup-title"><span>' + returnLang('mostVisited') + '</span></div>' }).inject('popup-insert', 'bottom');
             }
         }  else if (rhporder[o] == 'rt-order') {
-            // rt = recent tab
-            if ((localStorage['rt-itemsno'] * 1) > 0 && chrome.extension.getBackgroundPage().recentTabs.length > 0) {
+            // rt = recent tab - will check availability during showRecentTabs() call
+            if ((localStorage['rt-itemsno'] * 1) > 0) {
                new Element('div', { id: 'rt-inject', html: '<div id="rt-inject-title" class="popup-title"><span>' + returnLang('recentTabs') + '</span></div>' }).inject('popup-insert', 'bottom');
             }
         }
