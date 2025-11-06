@@ -292,14 +292,18 @@ document.addEvent('domready', function () {
                 if (filtUrl(hi[i].url) == false) {
 
                     var title = hi[i].title;
-                    var url = hi[i].url;
-                    var host = get_host(url);
+                    var originalUrl = hi[i].url;
+                    var url = originalUrl;
+                    var host = get_host(originalUrl);
                     var visits = hi[i].visitCount;
-                    var furl = 'chrome://favicon/' + hi[i].url;
+                    var isBookmarklet = isBookmarkletUrl(originalUrl);
+                    var furl = isBookmarklet ? 'images/blank.png' : 'chrome://favicon/' + originalUrl;
                     var bookmarkId = hi[i].bookmarkId || hi[i].id;
                     if (host == "#") {
-                        url = encodeURI(url);
-                        furl = 'chrome://favicon/';
+                        url = encodeURI(originalUrl);
+                        if (!isBookmarklet) {
+                            furl = 'chrome://favicon/';
+                        }
                     }
 
 
@@ -409,12 +413,14 @@ document.addEvent('domready', function () {
                                 var moreid = 'more-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                                 var errorid = 'error-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                                 var groupid = 'group-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
-                                var faviconSrc =rha[thisc.counter].favicon ? 'src="' + rha[thisc.counter].favicon + '"' : '';
+                                var faviconSrc = rha[thisc.counter].favicon ? 'src="' + escapeHtmlAttr(rha[thisc.counter].favicon) + '"' : '';
+                                var escapedHost = escapeHtmlAttr(host);
+                                var escapedHostDisplay = escapeHtmlAttr(host.replace('www.', ''));
                                 new Element('div', {
                                     title: host,
                                     rel: ibcv,
                                     'class': 'item-holder group-title ',
-                                    html: '<a href="#" class="group-title-toggle group-title-toggle-bookmark" id="' + toggleid + '" data-host="' + host + '" rel="' + host + '"></a><label class="group-title-toggle-count" rel="' + host + '"></label><input type="hidden"  style="width: 0; display:none;   padding: 0 0 0 0;  margin: 0 0 0 0;    visibility: hidden;  left: 0;"  class="group-title-checkbox" id="' + moreid + '" value="' + host + '"><img id="' + errorid + '" class="group-title-favicon" alt="Favicon" ' + faviconSrc + '><span id="' + groupid + '" data-host="' + rha[thisc.counter].host + '" class="group-title-host">' + host.replace('www.', '') + '</span>'
+                                    html: '<a href="#" class="group-title-toggle group-title-toggle-bookmark" id="' + toggleid + '" data-host="' + escapedHost + '" rel="' + escapedHost + '"></a><label class="group-title-toggle-count" rel="' + escapedHost + '"></label><input type="hidden"  style="width: 0; display:none;   padding: 0 0 0 0;  margin: 0 0 0 0;    visibility: hidden;  left: 0;"  class="group-title-checkbox" id="' + moreid + '" value="' + escapedHost + '"><img id="' + errorid + '" class="group-title-favicon" alt="Favicon" ' + faviconSrc + '><span id="' + groupid + '" data-host="' + escapedHost + '" class="group-title-host">' + escapedHostDisplay + '</span>'
                                 }).inject(into);
                                 $(toggleid).addEvent('click', function () {
                                     var host = this.getProperty('data-host');
@@ -439,12 +445,35 @@ document.addEvent('domready', function () {
                             }
 
                             var selectid = 'select-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
+                            var rawUrl = rha[thisc.counter].url || '';
+                            var rawTime = rha[thisc.counter].time || '';
+                            var displayTitleText = rha[thisc.counter].title || '';
+                            var escapedUrlAttr = escapeHtmlAttr(rawUrl);
+                            var escapedTimeAttr = escapeHtmlAttr(rawTime);
+                            var escapedDisplayTitle = escapeHtmlAttr(displayTitleText);
+
+                            var tooltipParts = [];
+                            if (displayTitleText) {
+                                tooltipParts.push(displayTitleText);
+                            }
+                            if (!isBookmarkletUrl(rawUrl) && rawUrl) {
+                                tooltipParts.push(rawUrl);
+                            }
+                            if (rawTime) {
+                                tooltipParts.push(rawTime);
+                            }
+                            var tooltipText = tooltipParts.join(' | ');
+                            if (!tooltipText) {
+                                tooltipText = isBookmarkletUrl(rawUrl) ? '[Bookmarklet]' : rawUrl;
+                            }
+                            var escapedTooltip = escapeHtmlAttr(tooltipText);
+
                             var item;
                             item = '<div class="item">';
-                            item += '<span class="checkbox"><label><input class="chkbx bookmark-checkbox" type="checkbox" id="' + selectid + '" value="' + rha[thisc.counter].url + '" name="check"></label>&nbsp;</span>';
-                            item += '<span class="time">' + rha[thisc.counter].time + '</span>';
-                            item += '<a style="padding-left:0;" target="_blank" class="link" href="' + rha[thisc.counter].url + '">';
-                            item += '<span class="title" title="' + rha[thisc.counter].url + '" rel="' +  rha[thisc.counter].time +  '">' + rha[thisc.counter].title + '</span>';
+                            item += '<span class="checkbox"><label><input class="chkbx bookmark-checkbox" type="checkbox" id="' + selectid + '" value="' + escapedUrlAttr + '" name="check"></label>&nbsp;</span>';
+                            item += '<span class="time">' + escapedTimeAttr + '</span>';
+                            item += '<a style="padding-left:0;" target="_blank" class="link" href="' + escapedUrlAttr + '">';
+                            item += '<span class="title" title="' + escapedTooltip + '" rel="' +  escapedTimeAttr +  '">' + escapedDisplayTitle + '</span>';
                             item += '</a>';
                             item += '</div>';
                             var itemHolder = new Element('div', {
@@ -457,6 +486,25 @@ document.addEvent('domready', function () {
                                     'background-color': $(into).getElement('div.item-holder[title="' + host + '"]').getStyle('background-color')
                                 }
                             }).set('html', item + '<div class="clearitem" style="clear:both;"></div>').inject($(into).getElement('div[rel="' + host + '"]'));
+                            var linkElement = itemHolder.getElement('a.link');
+                            if (linkElement) {
+                                linkElement.addEvent('click', function (e) {
+                                    var holder = this.getParent('div.item-holder');
+                                    var linkUrl = holder ? holder.getProperty('data-bookmark-url') : null;
+                                    if (linkUrl && isBookmarkletUrl(linkUrl)) {
+                                        if (e && e.stop) {
+                                            e.stop();
+                                        }
+                                        executeBookmarklet(linkUrl, {
+                                            decode: true,
+                                            fallbackToUpdate: true,
+                                            onFailure: function(err) {
+                                                console.warn('Bookmarklet execution failed:', err);
+                                            }
+                                        });
+                                    }
+                                });
+                            }
                             $(selectid).addEvent('click', function () {
                                 selectBookmarkItem(this, 'single');
                             });
@@ -486,23 +534,67 @@ document.addEvent('domready', function () {
 
                             var selectid = 'select-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                             var errorid = 'error-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
-                            var faviconSrc =rha[thisc.counter].favicon ? 'src="' + rha[thisc.counter].favicon + '"' : '';
+                            var rawUrl = rha[thisc.counter].url || '';
+                            var rawTime = rha[thisc.counter].time || '';
+                            var displayTitleText = rha[thisc.counter].title || '';
+                            var escapedUrlAttr = escapeHtmlAttr(rawUrl);
+                            var escapedTimeAttr = escapeHtmlAttr(rawTime);
+                            var escapedDisplayTitle = escapeHtmlAttr(displayTitleText);
+
+                            var tooltipParts = [];
+                            if (displayTitleText) {
+                                tooltipParts.push(displayTitleText);
+                            }
+                            if (!isBookmarkletUrl(rawUrl) && rawUrl) {
+                                tooltipParts.push(rawUrl);
+                            }
+                            if (rawTime) {
+                                tooltipParts.push(rawTime);
+                            }
+                            var tooltipText = tooltipParts.join(' | ');
+                            if (!tooltipText) {
+                                tooltipText = isBookmarkletUrl(rawUrl) ? '[Bookmarklet]' : rawUrl;
+                            }
+                            var escapedTooltip = escapeHtmlAttr(tooltipText);
+
+                            var faviconSrc = rha[thisc.counter].favicon ? 'src="' + escapeHtmlAttr(rha[thisc.counter].favicon) + '"' : '';
                             var item;
                             item = '<div class="item">';
-                            item += '<span class="checkbox"><label><input class="chkbx bookmark-checkbox" type="checkbox" id="' + selectid + '" value="' + rha[thisc.counter].url + '" name="check"></label>&nbsp;</span>';
-                            item += '<span class="time">' + rha[thisc.counter].time + '</span>';
-                            item += '<a target="_blank" class="link" href="' + rha[thisc.counter].url + '">';
+                            item += '<span class="checkbox"><label><input class="chkbx bookmark-checkbox" type="checkbox" id="' + selectid + '" value="' + escapedUrlAttr + '" name="check"></label>&nbsp;</span>';
+                            item += '<span class="time">' + escapedTimeAttr + '</span>';
+                            item += '<a target="_blank" class="link" href="' + escapedUrlAttr + '">';
                             item += '<img id="' + errorid + '" class="favicon" alt="Favicon" ' + faviconSrc +'>';
-                            item += '<span class="title" title="' + rha[thisc.counter].url + '" rel="'  + rha[thisc.counter].time +  '">' + rha[thisc.counter].title + '</span>';
+                            item += '<span class="title" title="' + escapedTooltip + '" rel="'  + escapedTimeAttr +  '">' + escapedDisplayTitle + '</span>';
                             item += '</a>';
                             item += '</div>';
-                            new Element('div', { 
+                            var itemHolder = new Element('div', { 
                                 'rel': ibcv, 
                                 'class': 'item-holder',
                                 'data-bookmark-id': rha[thisc.counter].bookmarkId,
                                 'data-bookmark-title': rha[thisc.counter].originalTitle,
                                 'data-bookmark-url': rha[thisc.counter].url
-                            }).set('html', item + '<div class="clearitem" style="clear:both;"></div>').inject(into);
+                            });
+                            itemHolder.set('html', item + '<div class="clearitem" style="clear:both;"></div>').inject(into);
+                            var linkElement = itemHolder.getElement('a.link');
+                            if (linkElement) {
+                                linkElement.addEvent('click', function (e) {
+                                    var holder = this.getParent('div.item-holder');
+                                    var linkUrl = holder ? holder.getProperty('data-bookmark-url') : null;
+                                    if (linkUrl && isBookmarkletUrl(linkUrl)) {
+                                        if (e && e.stop) {
+                                            e.stop();
+                                        }
+                                        executeBookmarklet(linkUrl, {
+                                            decode: true,
+                                            fallbackToUpdate: true,
+                                            onFailure: function(err) {
+                                                console.warn('Bookmarklet execution failed:', err);
+                                            }
+                                        });
+                                    }
+                                });
+                            }
+
 
                             if (ibcv == 'white') {
                                 ibcv = 'grey';
