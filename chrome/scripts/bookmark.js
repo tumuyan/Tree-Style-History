@@ -292,14 +292,18 @@ document.addEvent('domready', function () {
                 if (filtUrl(hi[i].url) == false) {
 
                     var title = hi[i].title;
-                    var url = hi[i].url;
-                    var host = get_host(url);
+                    var originalUrl = hi[i].url;
+                    var url = originalUrl;
+                    var host = get_host(originalUrl);
                     var visits = hi[i].visitCount;
-                    var furl = 'chrome://favicon/' + hi[i].url;
+                    var isBookmarklet = isBookmarkletUrl(originalUrl);
+                    var furl = isBookmarklet ? 'images/blank.png' : 'chrome://favicon/' + originalUrl;
                     var bookmarkId = hi[i].bookmarkId || hi[i].id;
                     if (host == "#") {
-                        url = encodeURI(url);
-                        furl = 'chrome://favicon/';
+                        url = encodeURI(originalUrl);
+                        if (!isBookmarklet) {
+                            furl = 'chrome://favicon/';
+                        }
                     }
 
 

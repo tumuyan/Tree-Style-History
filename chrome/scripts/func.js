@@ -1287,8 +1287,13 @@ function formatItem(data) {
         var ui = '<span class="ui-delete" data-function="' + type + '">&nbsp;</span>';
     }
 
-    if (favicon) {
-        item += '<img class="favicon" alt="Favicon" src="' + favicon + '">';
+    var faviconSrc = favicon;
+    if (isBookmarkletUrl(url)) {
+        faviconSrc = 'images/blank.png';
+    }
+
+    if (faviconSrc) {
+        item += '<img class="favicon" alt="Favicon" src="' + faviconSrc + '">';
     }
     else {
         item += '<img class="favicon" alt="Favicon">';
@@ -1571,7 +1576,7 @@ function recentBookmarks() {
 
                         var title = bm[i].title;
                         var url = bm[i].url;
-                        var furl = 'chrome://favicon/' + bm[i].url;
+                        var furl = isBookmarkletUrl(url) ? 'images/blank.png' : 'chrome://favicon/' + bm[i].url;
 
                         if (title == '') {
                             title = url;
