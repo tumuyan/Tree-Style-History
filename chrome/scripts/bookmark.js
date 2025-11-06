@@ -447,7 +447,23 @@ document.addEvent('domready', function () {
                             var escapedUrlAttr = escapeHtmlAttr(rawUrl);
                             var escapedTimeAttr = escapeHtmlAttr(rawTime);
                             var escapedDisplayTitle = escapeHtmlAttr(displayTitleText);
-                            var escapedTooltip = escapeHtmlAttr(rha[thisc.counter].url || '');
+
+                            var tooltipParts = [];
+                            if (displayTitleText) {
+                                tooltipParts.push(displayTitleText);
+                            }
+                            if (!isBookmarkletUrl(rawUrl) && rawUrl) {
+                                tooltipParts.push(rawUrl);
+                            }
+                            if (rawTime) {
+                                tooltipParts.push(rawTime);
+                            }
+                            var tooltipText = tooltipParts.join(' | ');
+                            if (!tooltipText) {
+                                tooltipText = isBookmarkletUrl(rawUrl) ? '[Bookmarklet]' : rawUrl;
+                            }
+                            var escapedTooltip = escapeHtmlAttr(tooltipText);
+
                             var item;
                             item = '<div class="item">';
                             item += '<span class="checkbox"><label><input class="chkbx bookmark-checkbox" type="checkbox" id="' + selectid + '" value="' + escapedUrlAttr + '" name="check"></label>&nbsp;</span>';
@@ -520,7 +536,23 @@ document.addEvent('domready', function () {
                             var escapedUrlAttr = escapeHtmlAttr(rawUrl);
                             var escapedTimeAttr = escapeHtmlAttr(rawTime);
                             var escapedDisplayTitle = escapeHtmlAttr(displayTitleText);
-                            var escapedTooltip = escapeHtmlAttr(rha[thisc.counter].url || '');
+
+                            var tooltipParts = [];
+                            if (displayTitleText) {
+                                tooltipParts.push(displayTitleText);
+                            }
+                            if (!isBookmarkletUrl(rawUrl) && rawUrl) {
+                                tooltipParts.push(rawUrl);
+                            }
+                            if (rawTime) {
+                                tooltipParts.push(rawTime);
+                            }
+                            var tooltipText = tooltipParts.join(' | ');
+                            if (!tooltipText) {
+                                tooltipText = isBookmarkletUrl(rawUrl) ? '[Bookmarklet]' : rawUrl;
+                            }
+                            var escapedTooltip = escapeHtmlAttr(tooltipText);
+
                             var faviconSrc = rha[thisc.counter].favicon ? 'src="' + escapeHtmlAttr(rha[thisc.counter].favicon) + '"' : '';
                             var item;
                             item = '<div class="item">';

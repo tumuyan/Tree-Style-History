@@ -1262,14 +1262,23 @@ function formatItem(data) {
         var extsep = '';
     }
 
-    var tip = '';
-    if (title == url) {
-        tip = title;
-    } else {
-        tip = title + ' | ' + url;
+    var tipParts = [];
+
+    if (title && title !== '') {
+        tipParts.push(title);
     }
-    if (time !== undefined) {
-        tip = tip + ' | ' + time;
+
+    if (!isBookmarkletUrl(url) && url && title !== url) {
+        tipParts.push(url);
+    }
+
+    if (time !== undefined && time !== null) {
+        tipParts.push(time);
+    }
+
+    var tip = tipParts.join(' | ');
+    if (!tip) {
+        tip = isBookmarkletUrl(url) ? '[Bookmarklet]' : (url || '');
     }
 
     if (type !== 'pi') {
@@ -1286,7 +1295,10 @@ function formatItem(data) {
     }
 
     item += '<span class="title" title="' + tip + '"><span class="edit-items-ui" data-url="' + url + '" data-title="' + tip.replace(/\'/g, "\\'") + '">' + ui + '</span>' + title + '</span>';
-    item += '<span ' + saext + ' class="extra-url"><span ' + sext + ' class="extra">' + returnLang("visits") + ': ' + visits + extsep + '</span><span ' + surl + ' class="url">' + url.replace(/^(.*?)\:\/\//, '').replace(/\/$/, '') + '</span></span>';
+    
+    // For bookmarklets, show simplified URL in the extra-url section
+    var urlDisplay = isBookmarkletUrl(url) ? 'javascript:...' : url.replace(/^(.*?)\:\/\//, '').replace(/\/$/, '');
+    item += '<span ' + saext + ' class="extra-url"><span ' + sext + ' class="extra">' + returnLang("visits") + ': ' + visits + extsep + '</span><span ' + surl + ' class="url">' + urlDisplay + '</span></span>';
 
  
 
