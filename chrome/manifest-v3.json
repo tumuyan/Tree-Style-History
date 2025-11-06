@@ -10,8 +10,7 @@
   "description": "__MSG_aboutText__",
   "options_page": "options.html",
   "background": {
-    "service_worker": "scripts/background-sw.js",
-    "type": "module"
+    "service_worker": "scripts/background-sw.js"
   },
   "permissions": [
     "storage",
