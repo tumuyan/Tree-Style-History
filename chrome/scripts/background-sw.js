@@ -49,7 +49,19 @@ onStorageReady(function () {
     initializeStorageState();
 });
 
+chrome.runtime.onInstalled.addListener(() => {
+    console.log('onInstalled event');
+    initializeStorageState();
+});
+
+chrome.runtime.onStartup.addListener(() => {
+    console.log('onStartup event');
+    initializeStorageState();
+});
+
 function initializeStorageState() {
+    console.log('Initializing storage state...');
+    
     oid = localStorage['oid'];
     if (oid == undefined) {
         oid = 1;
@@ -79,16 +91,37 @@ function initializeStorageState() {
     chrome.alarms.create('mostVisited', { periodInMinutes: 3 });
     
     // Initialize DB
-    dbManager.init().then(() => {
-        console.log('DB ready in service worker');
-        dbManager.updateClosedTabsStatus();
-        loadDate(date.getTime(), 0);
-    }).catch(error => {
-        console.error('Failed to initialize DB:', error);
-    });
+    if (typeof dbManager !== 'undefined') {
+        dbManager.init().then(() => {
+            console.log('DB ready in service worker');
+            dbManager.updateClosedTabsStatus();
+            loadDate(date.getTime(), 0);
+        }).catch(error => {
+            console.error('Failed to initialize DB:', error);
+        });
+    } else {
+        console.error('dbManager is not defined!');
+    }
     
     // Initialize context menu
     initContextMenu();
+    
+    // Initialize existing tabs
+    initializeExistingTabs();
+}
+
+// Initialize tracking for existing tabs when service worker starts
+function initializeExistingTabs() {
+    chrome.tabs.query({}, function(tabs) {
+        console.log('Initializing ' + tabs.length + ' existing tabs');
+        for (let tab of tabs) {
+            openedTabs[tab.id] = tab;
+            if (tab.active) {
+                recentTabs.unshift(tab.id);
+            }
+        }
+        console.log('Opened tabs count:', Object.keys(openedTabs).length);
+    });
 }
 
 // Handle alarms (replaces setInterval)

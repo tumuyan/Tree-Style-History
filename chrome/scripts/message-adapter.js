@@ -142,9 +142,10 @@
     const messageAdapter = new MessageAdapter();
 
     // Export to global scope
-    if (typeof window !== 'undefined') {
-        window.messageAdapter = messageAdapter;
+    const globalObj = typeof window !== 'undefined' ? window : self;
+    globalObj.messageAdapter = messageAdapter;
 
+    if (typeof window !== 'undefined') {
         // Provide backward compatibility wrapper for getBackgroundPage
         window.getBackgroundPage = function() {
             console.warn('getBackgroundPage() is deprecated. Use messageAdapter instead.');

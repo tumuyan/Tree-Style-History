@@ -398,4 +398,9 @@
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = dbManager;
     }
+
+    // Export to service worker global scope
+    if (typeof self !== 'undefined') {
+        self.dbManager = dbManager;
+    }
 })();
