@@ -1,0 +1,80 @@
+{
+  "name": "__MSG_name__",
+  "short_name": "__MSG_nameShort__",
+  "author": "Tumuyan",
+  "version": "3.1.13",
+  "update_url": "https://edge.microsoft.com/extensionwebstorebase/v1/crx",
+  "manifest_version": 3,
+  "minimum_chrome_version": "88",
+  "default_locale": "en",
+  "description": "__MSG_aboutText__",
+  "options_page": "options.html",
+  "background": {
+    "service_worker": "scripts/background-sw.js",
+    "type": "module"
+  },
+  "permissions": [
+    "storage",
+    "tabs",
+    "activeTab",
+    "history",
+    "bookmarks",
+    "sessions",
+    "contextMenus",
+    "alarms"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "icons": {
+    "16": "images/tree-16.png",
+    "32": "images/tree-32.png",
+    "48": "images/tree-48.png",
+    "128": "images/tree-128.png"
+  },
+  "action": {
+    "default_icon": {
+      "19": "images/tree-19.png",
+      "38": "images/tree-38.png",
+      "32": "images/tree-32.png",
+      "48": "images/tree-48.png",
+      "128": "images/tree-128.png"
+    },
+    "default_popup": "popup.html"
+  },
+  "commands": {
+    "open_history2": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+H",
+        "windows": "Ctrl+Shift+H",
+        "mac": "Command+Shift+H"
+      },
+      "description":"__MSG_treeOpen__"
+    },
+    "open_history1": {
+        "suggested_key": {
+          "default": "Alt+Shift+H",
+          "windows": "Alt+Shift+H",
+          "mac": "Alt+Shift+H"
+        },
+        "description": "__MSG_showAllHistory__"
+      },
+    "open_closed": {
+        "suggested_key": {
+          "default": "Alt+Shift+G",
+          "windows": "Alt+Shift+G",
+          "mac": "Alt+Shift+G"
+        },
+        "description": "__MSG_OpenClosedHistory__"
+      },
+    "open_bookmark": {
+        "suggested_key": {
+          "default": "Alt+Shift+O",
+          "windows": "Alt+Shift+O",
+          "mac": "Alt+Shift+O"
+        },
+        "description": "__MSG_OpenBookMark__"
+    }
+  }
+}
