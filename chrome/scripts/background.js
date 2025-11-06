@@ -167,7 +167,8 @@ function initializeStorageState() {
     defaultConfig(false);
 
     mostVisitedInit();
-    mostVisitedInit.periodical(3 * 60 * 1000);
+    // Replace MooTools .periodical() with standard setInterval
+    setInterval(mostVisitedInit, 3 * 60 * 1000);
 
     openDb();
 }
@@ -308,7 +309,7 @@ var mostVisitedInit = function () {
 
             }
 
-            localStorage['mv-cache'] = JSON.encode(mv);
+            localStorage['mv-cache'] = JSON.stringify(mv);
 
         } else {
             localStorage['mv-cache'] = 'false';
@@ -451,7 +452,7 @@ function loadDate(date, dateId) {
 
         console.log("loadDate done. dateId = " + dateId + ">" + localStorage['load-range']);
 
-        localStorage['calendar-storage'] = JSON.encode(calendar_r);
+        localStorage['calendar-storage'] = JSON.stringify(calendar_r);
         chrome.browserAction.setBadgeText({ text: "Url" });
         loadHistory();
         return;
