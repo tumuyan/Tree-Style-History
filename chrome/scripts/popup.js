@@ -82,8 +82,25 @@ document.addEvent('domready', function () {
             }
         }  else if (rhporder[o] == 'rt-order') {
             // rt = recent tab
-            if ((localStorage['rt-itemsno'] * 1) > 0 && chrome.extension.getBackgroundPage().recentTabs.length > 0) {
-               new Element('div', { id: 'rt-inject', html: '<div id="rt-inject-title" class="popup-title"><span>' + returnLang('recentTabs') + '</span></div>' }).inject('popup-insert', 'bottom');
+            if ((localStorage['rt-itemsno'] * 1) > 0) {
+                // Check recentTabs availability
+                try {
+                    if (typeof messageAdapter !== 'undefined') {
+                        messageAdapter.getBackgroundData('recentTabs').then(recentTabs => {
+                            if (recentTabs && recentTabs.length > 0) {
+                                new Element('div', { id: 'rt-inject', html: '<div id="rt-inject-title" class="popup-title"><span>' + returnLang('recentTabs') + '</span></div>' }).inject('popup-insert', 'bottom');
+                                if ($('rt-inject')) { showRecentTabs(); }
+                            }
+                        }).catch(err => console.warn('Failed to get recentTabs:', err));
+                    } else if (typeof chrome !== 'undefined' && chrome.extension && chrome.extension.getBackgroundPage) {
+                        const bg = chrome.extension.getBackgroundPage();
+                        if (bg && bg.recentTabs && bg.recentTabs.length > 0) {
+                            new Element('div', { id: 'rt-inject', html: '<div id="rt-inject-title" class="popup-title"><span>' + returnLang('recentTabs') + '</span></div>' }).inject('popup-insert', 'bottom');
+                        }
+                    }
+                } catch (err) {
+                    console.warn('Error accessing recentTabs:', err);
+                }
             }
         }
     }
