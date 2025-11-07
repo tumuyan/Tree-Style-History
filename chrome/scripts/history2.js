@@ -433,7 +433,7 @@ document.addEvent('domready', function () {
                         pId: parseInt(v.referringVisitId),
                         name: TimeToStr(v.visitTime, true, true) + " - " + v.title.replace(/[<>]/g, ' ') + ' ' + t,
                         // url: v.url,
-                        icon: 'chrome://favicon/' + v.url.replace(/(?<![\/])\/[^\/].+/, ""),
+                        icon: getFaviconUrl(v.url.replace(/(?<![\/])\/[^\/].+/, "")),
                         open: true,
                         transition: v.transition,
                         t: v.url //+ " "+v.referringVisitId + ">"+v.visitId
@@ -521,7 +521,7 @@ document.addEvent('domready', function () {
             let 
             name: timeStr(v.visitTime)+" - "+ v.title +' '+transition_value[v.transition] ,
         url: v.url,
-        icon: 'chrome://favicon/' + v.url,
+        icon: getFaviconUrl(v.url),
         open: true,
         t:v.url + " "+v.referringVisitId + ">"+v.visitId
         };

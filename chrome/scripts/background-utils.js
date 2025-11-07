@@ -23,6 +23,49 @@ function returnLang(str) {
 }
 
 
+// Get favicon URL with configurable service
+function getFaviconUrl(url) {
+    if (!url) {
+        return 'images/blank.png';
+    }
+
+    var faviconApi = localStorage['favicon-api'] || 'chrome';
+    var parsedUrl = null;
+
+    try {
+        parsedUrl = new URL(url);
+    } catch (e) {
+        parsedUrl = null;
+    }
+
+    var protocol = parsedUrl ? parsedUrl.protocol : '';
+    var hostname = parsedUrl ? parsedUrl.hostname : '';
+    var isHttpLike = /^https?:$/i.test(protocol);
+
+    if (faviconApi === 'chrome' || !isHttpLike || !hostname) {
+        return 'chrome://favicon/' + url;
+    }
+
+    if (faviconApi === 'google') {
+        return 'https://www.google.com/s2/favicons?domain=' + hostname + '&sz=32';
+    }
+
+    if (faviconApi === 'duckduckgo') {
+        return 'https://icons.duckduckgo.com/ip3/' + hostname + '.ico';
+    }
+
+    if (faviconApi === 'yandex') {
+        return 'https://favicon.yandex.net/favicon/' + hostname;
+    }
+
+    if (faviconApi === 'iconhorse') {
+        return 'https://icon.horse/icon/' + hostname;
+    }
+
+    return 'chrome://favicon/' + url;
+}
+
+
 // Time formatting
 
 function timeNow(st) {
@@ -124,7 +167,8 @@ var defaultValues = {
     "rhs-showsep": "no",
     "rhs-showext": "no",
     "rhs-showbg": "no",
-    "show-popup": "yes"
+    "show-popup": "yes",
+    "favicon-api": "chrome"
 };
 
 function defaultConfig(clean) {

@@ -355,6 +355,53 @@ function returnLang(str) {
 }
 
 
+// Get favicon URL with configurable service
+function getFaviconUrl(url) {
+    if (!url) {
+        return 'images/blank.png';
+    }
+
+    if (isBookmarkletUrl(url)) {
+        return 'images/blank.png';
+    }
+
+    var faviconApi = localStorage['favicon-api'] || 'chrome';
+    var parsedUrl = null;
+
+    try {
+        parsedUrl = new URL(url);
+    } catch (e) {
+        parsedUrl = null;
+    }
+
+    var protocol = parsedUrl ? parsedUrl.protocol : '';
+    var hostname = parsedUrl ? parsedUrl.hostname : '';
+    var isHttpLike = /^https?:$/i.test(protocol);
+
+    if (faviconApi === 'chrome' || !isHttpLike || !hostname) {
+        return 'chrome://favicon/' + url;
+    }
+
+    if (faviconApi === 'google') {
+        return 'https://www.google.com/s2/favicons?domain=' + hostname + '&sz=32';
+    }
+
+    if (faviconApi === 'duckduckgo') {
+        return 'https://icons.duckduckgo.com/ip3/' + hostname + '.ico';
+    }
+
+    if (faviconApi === 'yandex') {
+        return 'https://favicon.yandex.net/favicon/' + hostname;
+    }
+
+    if (faviconApi === 'iconhorse') {
+        return 'https://icon.horse/icon/' + hostname;
+    }
+
+    return 'chrome://favicon/' + url;
+}
+
+
 // Copy text
 
 Clipboard = {};
@@ -472,7 +519,8 @@ var defaultValues = {
     "rhs-showsep": "no",
     "rhs-showext": "no",
     "rhs-showbg": "no",
-    "show-popup": "yes"
+    "show-popup": "yes",
+    "favicon-api": "chrome"
 };
 
 function defaultConfig(clean) {
@@ -553,10 +601,11 @@ function loadOptions(full) {
     $$('#rhdate option[value="' + localStorage['rh-date'] + '"]').set('selected', 'selected');
     $$('#rhtime option[value="' + localStorage['rh-timeformat'] + '"]').set('selected', 'selected');
     $$('#rhsearch option[value="' + localStorage['rh-search'] + '"]').set('selected', 'selected');
-    $$('#rhshare option[value="' + localStorage['rh-share'] + '"]').set('selected', 'selected');
-    $$('#rmpath option[value="' + localStorage['rm-path'] + '"]').set('selected', 'selected');
-    $$('#contextmenu option[value="' + localStorage['use-contextmenu'] + '"]').set('selected', 'selected');
-    $$('#rhsshowurl option[value="' + localStorage['rhs-showurl'] + '"]').set('selected', 'selected');
+    $('#rhshare option[value="' + localStorage['rh-share'] + '"]').set('selected', 'selected');
+    $('#rmpath option[value="' + localStorage['rm-path'] + '"]').set('selected', 'selected');
+    $('#contextmenu option[value="' + localStorage['use-contextmenu'] + '"]').set('selected', 'selected');
+    $('#faviconApi option[value="' + (localStorage['favicon-api'] || 'chrome') + '"]').set('selected', 'selected');
+    $('#rhsshowurl option[value="' + localStorage['rhs-showurl'] + '"]').set('selected', 'selected');
     $$('#rhsshowsep option[value="' + localStorage['rhs-showsep'] + '"]').set('selected', 'selected');
     $$('#rhsshowext option[value="' + localStorage['rhs-showext'] + '"]').set('selected', 'selected');
     $$('#rhsshowbg option[value="' + localStorage['rhs-showbg'] + '"]').set('selected', 'selected');
@@ -741,6 +790,7 @@ function saveOptions(sync) {
     so['rm-click'] = $('rmclick').getSelected().get('value');
     so['rm-path'] = $('rmpath').getSelected().get('value');
     so['use-contextmenu'] = $('contextmenu').getSelected().get('value');
+    so['favicon-api'] = $('faviconApi').getSelected().get('value');
     so['rh-filtered'] = flil;
     for (var i in so) {
         localStorage[i] = so[i];
@@ -940,7 +990,7 @@ function popupSearch(q) {
                         var title = hi[i].title;
                         var url = hi[i].url;
                         var visits = hi[i].visitCount;
-                        var furl = 'chrome://favicon/' + hi[i].url;
+                        var furl = getFaviconUrl(hi[i].url);
                         if (title !== '') {
                             formatItem({ type: 'rh', title: title, url: url, favicon: furl, visits: visits }).inject('popup-search-insert');
                         }
@@ -1366,7 +1416,7 @@ function recentHistory() {
                         var title = hi[i].title;
                         var url = hi[i].url;
                         var visits = hi[i].visitCount;
-                        var furl = 'chrome://favicon/' + hi[i].url;
+                        var furl = getFaviconUrl(hi[i].url);
                         var test = (/^(file|chrome|chrome-extension|chrome-devtools)\:\/\//).test(url);
 
                         if (title == '') {
@@ -1495,7 +1545,7 @@ function showRecentTabs() {
                 var title = rhhistory[t].title;
                 var url = rhhistory[t].url;
                 var time = rhhistory[t].time;
-                var furl = 'chrome://favicon/' + rhhistory[t].url;
+                var furl = getFaviconUrl(rhhistory[t].url);
 
                 if (title == '') {
                     title = url;
@@ -1576,7 +1626,7 @@ function recentBookmarks() {
 
                         var title = bm[i].title;
                         var url = bm[i].url;
-                        var furl = isBookmarkletUrl(url) ? 'images/blank.png' : 'chrome://favicon/' + bm[i].url;
+                        var furl = getFaviconUrl(url);
 
                         if (title == '') {
                             title = url;
@@ -1929,7 +1979,7 @@ function history(w, q) {
                         var title = hi[i].title;
                         var url = hi[i].url;
                         var visits = hi[i].visitCount;
-                        var furl = 'chrome://favicon/' + hi[i].url;
+                        var furl = getFaviconUrl(hi[i].url);
 
                         if (title == '') {
                             title = url;
