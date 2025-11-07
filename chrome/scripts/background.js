@@ -294,7 +294,7 @@ var mostVisitedInit = function () {
 
                         var title = hi[i].title;
                         var url = hi[i].url;
-                        var furl = 'chrome://favicon/' + hi[i].url;
+                        var furl = getFaviconUrl(hi[i].url);
 
                         if (title == '') {
                             title = url;

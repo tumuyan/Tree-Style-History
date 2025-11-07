@@ -124,7 +124,8 @@ var defaultValues = {
     "rhs-showsep": "no",
     "rhs-showext": "no",
     "rhs-showbg": "no",
-    "show-popup": "yes"
+    "show-popup": "yes",
+    "favicon-service": "chrome"
 };
 
 function defaultConfig(clean) {
@@ -133,4 +134,59 @@ function defaultConfig(clean) {
             localStorage[v] = defaultValues[v];
         }
     }
+}
+
+function getFaviconUrl(url, options) {
+    options = options || {};
+    if (!url || typeof url !== 'string') {
+        return Object.prototype.hasOwnProperty.call(options, 'fallback') ? options.fallback : '';
+    }
+
+    var service = localStorage['favicon-service'] || defaultValues['favicon-service'] || 'chrome';
+    var trimmedUrl = url.trim();
+
+    if (!trimmedUrl) {
+        return Object.prototype.hasOwnProperty.call(options, 'fallback') ? options.fallback : '';
+    }
+
+    if (service === 'chrome') {
+        return 'chrome://favicon/' + trimmedUrl;
+    }
+
+    var parsedUrl = null;
+    try {
+        parsedUrl = new URL(trimmedUrl);
+    } catch (err) {
+        try {
+            parsedUrl = new URL('https://' + trimmedUrl);
+        } catch (err2) {
+            parsedUrl = null;
+        }
+    }
+
+    var fallback = Object.prototype.hasOwnProperty.call(options, 'fallback') ? options.fallback : 'images/blank.png';
+
+    if (!parsedUrl) {
+        return fallback;
+    }
+
+    var protocol = parsedUrl.protocol;
+    if (protocol !== 'http:' && protocol !== 'https:') {
+        return fallback;
+    }
+
+    var hostname = parsedUrl.hostname;
+    if (!hostname) {
+        return fallback;
+    }
+
+    if (service === 'google') {
+        return 'https://www.google.com/s2/favicons?sz=64&domain_url=' + encodeURIComponent(parsedUrl.origin + '/');
+    }
+
+    if (service === 'duckduckgo') {
+        return 'https://icons.duckduckgo.com/ip3/' + hostname + '.ico';
+    }
+
+    return 'chrome://favicon/' + trimmedUrl;
 }

@@ -476,7 +476,7 @@ document.addEvent('domready', function () {
                         pId: L2Id,
                         name: TimeToStr(v.closeTime, true, true) + " - " + v.title.replace(/[<>]/g, ' '),
                         url: v.url,
-                        icon: 'chrome://favicon/' + v.url.replace(/(?<![\/])\/[^\/].+/, ""),
+                        icon: getFaviconUrl(v.url.replace(/(?<![\/])\/[^\/].+/, "")),
                         // icon:'chrome://favicon/'+site,
                         open: true,
                         oid: v.oid,
@@ -613,13 +613,13 @@ document.addEvent('domready', function () {
     function refreshSearchTags() {
         /*     for()
         
-            let 
+            let
             name: timeStr(v.visitTime)+" - "+ v.title +' '+transition_value[v.transition] ,
-        url: v.url,
-        icon: 'chrome://favicon/' + v.url,
-        open: true,
-        t:v.url + " "+v.referringVisitId + ">"+v.visitId
-        };
+            url: v.url,
+            icon: getFaviconUrl(v.url),
+            open: true,
+            t:v.url + " "+v.referringVisitId + ">"+v.visitId
+            };
         
         tag[v.transition]=true;
          */
