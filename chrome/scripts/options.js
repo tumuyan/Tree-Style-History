@@ -43,12 +43,15 @@ document.addEvent('domready', function () {
         this.addClass('tab-current');
     });
 
-    // Load translated text
+   // Load translated text
 
     loadOptionsLang();
+    
+    // Initialize default options if not set
+    // 应该没用
+    // defaultConfig(false);
 
     // Load saved options
-
     loadOptions(true);
 
     // Save options
@@ -67,8 +70,15 @@ document.addEvent('domready', function () {
     });
 
     $('deleteCache').addEvent('click', function () {
-        var bg = chrome.extension.getBackgroundPage();
-        bg.deleteDb();
+        if (typeof messageAdapter !== 'undefined') {
+            messageAdapter.deleteDB().then(() => {
+                console.log('Database deleted successfully');
+            }).catch(err => {
+                console.error('Failed to delete database:', err);
+            });
+        } else {
+            console.warn('Message adapter not available');
+        }
     });
 
 

@@ -1135,19 +1135,8 @@ function uiDeleteItem(el, type) {
             recentHistory();
             alertUser('', 'close');
         } else if (type == 'rct') {
-            var rct = chrome.extension.getBackgroundPage().closedTabs;
-            for (var i in rct) {
-                if (rct[i] !== undefined && rct[i].url == url) {
-                    rct.splice(i, 1);
-                    $$('#rct-inject .item').destroy();
-                    recentlyClosedTabs();
-                    if ($$('#rct-inject .item').length == 0) {
-                        $('rct-inject').setStyle('display', 'none');
-                    }
-                    alertUser('', 'close');
-                    break;
-                }
-            }
+            console.warn('Removing recently closed entries is not supported.');
+            alertUser('', 'close');
         } else if (type == 'rt') {
             console.log("//todo uiDeleteItem");
         } else if (type == 'rb') {
@@ -1472,9 +1461,25 @@ function openTab(id) {
 // Recent Tabs in popup
 
 function showRecentTabs() {
+    if (typeof messageAdapter !== 'undefined') {
+        Promise.all([
+            messageAdapter.getBackgroundData('openedTabs'),
+            messageAdapter.getBackgroundData('recentTabs')
+        ]).then(([rhhistory, rt]) => {
+            showRecentTabsImpl(rhhistory, rt);
+        }).catch(err => {
+            console.error('Failed to get tab data:', err);
+        });
+    } else {
+        var rhhistory = chrome.extension.getBackgroundPage().openedTabs;
+        var rt = chrome.extension.getBackgroundPage().recentTabs;
+        showRecentTabsImpl(rhhistory, rt);
+    }
+}
 
-    var rhhistory = chrome.extension.getBackgroundPage().openedTabs;
-    var rt = chrome.extension.getBackgroundPage().recentTabs;
+function showRecentTabsImpl(rhhistory, rt) {
+    rhhistory = rhhistory || {};
+    rt = Array.isArray(rt) ? rt : [];
     console.log("showRecentTabs() count = "+rt.length);
 
     // chrome.tabs.get( id , function (tabs) {
@@ -2444,7 +2449,7 @@ function getFaviconUrl(url, options) {
         return 'images/blank.png';
     }
 
-    var service = localStorage['favicon-service'] || defaultValues['favicon-service'] || 'chrome';
+    var service = localStorage['favicon-service'] || defaultValues['favicon-service'];
     var trimmedUrl = url.trim();
 
     if (!trimmedUrl) {
