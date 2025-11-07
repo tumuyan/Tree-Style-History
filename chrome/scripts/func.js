@@ -2449,7 +2449,7 @@ function getFaviconUrl(url, options) {
         return 'images/blank.png';
     }
 
-    var service = localStorage['favicon-service'] || defaultValues['favicon-service'] || 'chrome';
+    var service = localStorage['favicon-service'] || defaultValues['favicon-service'];
     var trimmedUrl = url.trim();
 
     if (!trimmedUrl) {

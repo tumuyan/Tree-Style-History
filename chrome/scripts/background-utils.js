@@ -125,7 +125,7 @@ var defaultValues = {
     "rhs-showext": "no",
     "rhs-showbg": "no",
     "show-popup": "yes",
-    "favicon-service": "chrome"
+    "favicon-service": "duckduckgo"
 };
 
 function defaultConfig(clean) {
@@ -142,7 +142,7 @@ function getFaviconUrl(url, options) {
         return Object.prototype.hasOwnProperty.call(options, 'fallback') ? options.fallback : '';
     }
 
-    var service = localStorage['favicon-service'] || defaultValues['favicon-service'] || 'chrome';
+    var service = localStorage['favicon-service'] || defaultValues['favicon-service'];
     var trimmedUrl = url.trim();
 
     if (!trimmedUrl) {

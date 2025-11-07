@@ -43,12 +43,15 @@ document.addEvent('domready', function () {
         this.addClass('tab-current');
     });
 
-    // Load translated text
+   // Load translated text
 
     loadOptionsLang();
+    
+    // Initialize default options if not set
+    // 应该没用
+    // defaultConfig(false);
 
     // Load saved options
-
     loadOptions(true);
 
     // Save options
