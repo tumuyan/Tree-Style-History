@@ -367,9 +367,20 @@ document.addEvent('domready', function () {
     }
 
 
-    var db = chrome.extension.getBackgroundPage().db;
-    if (db != undefined)
-        pre_History(0, 0);
+    var db;
+
+    dbManager.ready(function(database) {
+        db = database;
+        if (db != undefined)
+            pre_History(0, 0);
+        else {
+            console.warn('IndexedDB is not available.');
+            alertLoadingHistory(true);
+        }
+    }).catch(function(error) {
+        console.error('Failed to initialize database:', error);
+        alertLoadingHistory(true);
+    });
 
     function pre_History(loadfrom, loadto) {
         alertLoadingHistory(false);
