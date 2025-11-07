@@ -473,7 +473,7 @@ var defaultValues = {
     "rhs-showext": "no",
     "rhs-showbg": "no",
     "show-popup": "yes",
-    "favicon-service": "chrome"
+    "favicon-service": "duckduckgo"
 };
 
 function defaultConfig(clean) {
@@ -557,12 +557,17 @@ function loadOptions(full) {
     $$('#rhshare option[value="' + localStorage['rh-share'] + '"]').set('selected', 'selected');
     $$('#rmpath option[value="' + localStorage['rm-path'] + '"]').set('selected', 'selected');
     $$('#contextmenu option[value="' + localStorage['use-contextmenu'] + '"]').set('selected', 'selected');
-    $('#rhsshowurl option[value="' + localStorage['rhs-showurl'] + '"]').set('selected', 'selected');
-    $('#rhsshowsep option[value="' + localStorage['rhs-showsep'] + '"]').set('selected', 'selected');
-    $('#rhsshowext option[value="' + localStorage['rhs-showext'] + '"]').set('selected', 'selected');
-    $('#rhsshowbg option[value="' + localStorage['rhs-showbg'] + '"]').set('selected', 'selected');
-    $('#lessItem option[value="' + localStorage['less-item'] + '"]').set('selected', 'selected');
-    $('#faviconService option[value="' + localStorage['favicon-service'] + '"]').set('selected', 'selected');
+    $$('#rhsshowurl option[value="' + localStorage['rhs-showurl'] + '"]').set('selected', 'selected');
+    $$('#rhsshowsep option[value="' + localStorage['rhs-showsep'] + '"]').set('selected', 'selected');
+    $$('#rhsshowext option[value="' + localStorage['rhs-showext'] + '"]').set('selected', 'selected');
+    $$('#rhsshowbg option[value="' + localStorage['rhs-showbg'] + '"]').set('selected', 'selected');
+    $$('#lessItem option[value="' + localStorage['less-item'] + '"]').set('selected', 'selected');
+    if ($('faviconService')) {
+        var faviconOption = $('faviconService').getElement('option[value="' + localStorage['favicon-service'] + '"]');
+        if (faviconOption) {
+            faviconOption.set('selected', 'selected');
+        }
+    }
     
     previewItem();
 
@@ -744,7 +749,9 @@ function saveOptions(sync) {
     so['rm-path'] = $('rmpath').getSelected().get('value');
     so['use-contextmenu'] = $('contextmenu').getSelected().get('value');
     so['rh-filtered'] = flil;
-    so['favicon-service'] = $('faviconService').getSelected().get('value');
+    if ($('faviconService')) {
+        so['favicon-service'] = $('faviconService').getSelected().get('value');
+    }
     for (var i in so) {
         localStorage[i] = so[i];
         console.log(i + '=' + so[i]);
