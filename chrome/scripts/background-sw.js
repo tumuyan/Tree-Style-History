@@ -633,4 +633,41 @@ function add_tab_history(visitItems, i, loadfrom, url_item) {
     }
 }
 
+// Message handler for MV3 compatibility
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (!message || !message.action) {
+        return;
+    }
+
+    switch (message.action) {
+        case 'getData':
+            if (message.key === 'recentTabs') {
+                sendResponse(recentTabs);
+            } else if (message.key === 'openedTabs') {
+                sendResponse(openedTabs);
+            } else {
+                sendResponse(undefined);
+            }
+            break;
+
+        case 'callFunction':
+            if (typeof message.function === 'string' && typeof self[message.function] === 'function') {
+                try {
+                    const result = self[message.function](...(message.args || []));
+                    sendResponse({ result });
+                } catch (error) {
+                    sendResponse({ error: error.message });
+                }
+            } else {
+                sendResponse({ error: 'Function not found' });
+            }
+            break;
+
+        default:
+            sendResponse(undefined);
+    }
+
+    return true;
+});
+
 console.log("Service Worker loaded");

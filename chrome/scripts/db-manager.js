@@ -24,7 +24,12 @@
             }
 
             this._readyPromise = new Promise((resolve, reject) => {
-                const request = window.indexedDB.open(DB_NAME, DB_VERSION);
+                const indexedDBInstance = (typeof indexedDB !== 'undefined') ? indexedDB : (typeof window !== 'undefined' ? window.indexedDB : null);
+                if (!indexedDBInstance) {
+                    reject(new Error('IndexedDB is not available in this environment.'));
+                    return;
+                }
+                const request = indexedDBInstance.open(DB_NAME, DB_VERSION);
 
                 request.onerror = (event) => {
                     console.error('Error opening DB', event);
@@ -138,7 +143,13 @@
                     this.isReady = false;
                 }
 
-                const deleteRequest = window.indexedDB.deleteDatabase(DB_NAME);
+                const indexedDBInstance = (typeof indexedDB !== 'undefined') ? indexedDB : (typeof window !== 'undefined' ? window.indexedDB : null);
+                if (!indexedDBInstance) {
+                    reject(new Error('IndexedDB is not available in this environment.'));
+                    return;
+                }
+
+                const deleteRequest = indexedDBInstance.deleteDatabase(DB_NAME);
 
                 deleteRequest.onerror = (event) => {
                     console.error('Error deleting DB', event);
