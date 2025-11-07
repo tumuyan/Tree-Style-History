@@ -107,6 +107,21 @@
     "option22tip": {
         "message": "不显示刷新页面的历史记录、没有跳转关系的重复记录，从而减少展示的历史记录"
     },
+    "faviconService": {
+        "message": "网站图标服务"
+    },
+    "helpFaviconService": {
+        "message": "选择用哪个 API 来加载历史记录条目的网站图标。"
+    },
+    "faviconServiceChrome": {
+        "message": "浏览器默认 (chrome://favicon/)"
+    },
+    "faviconServiceGoogle": {
+        "message": "Google 网站图标服务"
+    },
+    "faviconServiceDuckduckgo": {
+        "message": "DuckDuckGo 网站图标服务"
+    },
     "help1": {
         "message": "在弹窗中最多显示多少条最近访问历史"
     },

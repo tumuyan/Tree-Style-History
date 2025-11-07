@@ -107,6 +107,21 @@
     "option22tip": {
         "message": "Not show the record for refresh page, repeat urls without parent node and child node."
     },
+    "faviconService": {
+        "message": "Favicon service"
+    },
+    "helpFaviconService": {
+        "message": "Choose which API should be used to load favicons for history items."
+    },
+    "faviconServiceChrome": {
+        "message": "Browser default (chrome://favicon/)"
+    },
+    "faviconServiceGoogle": {
+        "message": "Google favicon service"
+    },
+    "faviconServiceDuckduckgo": {
+        "message": "DuckDuckGo favicon service"
+    },
     "help1": {
         "message": "The number of recent history items in the pop-up"
     },

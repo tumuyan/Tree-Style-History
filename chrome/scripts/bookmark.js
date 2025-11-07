@@ -297,13 +297,10 @@ document.addEvent('domready', function () {
                     var host = get_host(originalUrl);
                     var visits = hi[i].visitCount;
                     var isBookmarklet = isBookmarkletUrl(originalUrl);
-                    var furl = isBookmarklet ? 'images/blank.png' : 'chrome://favicon/' + originalUrl;
+                    var furl = getFaviconUrl(originalUrl);
                     var bookmarkId = hi[i].bookmarkId || hi[i].id;
                     if (host == "#") {
                         url = encodeURI(originalUrl);
-                        if (!isBookmarklet) {
-                            furl = 'chrome://favicon/';
-                        }
                     }
 
 
