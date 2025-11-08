@@ -232,8 +232,12 @@ function executeBookmarklet(url, options) {
             if (chrome.scripting && chrome.scripting.executeScript) {
                 chrome.scripting.executeScript({
                     target: { tabId: tabId },
+                    world: 'MAIN',
                     func: function (code) {
-                        (0, eval)(code);
+                        var script = document.createElement('script');
+                        script.textContent = code;
+                        (document.head || document.documentElement).appendChild(script);
+                        script.remove();
                     },
                     args: [scriptToRun]
                 }, function () {
