@@ -136,6 +136,43 @@ function defaultConfig(clean) {
     }
 }
 
+function isExtensionPageUrl(checkUrl) {
+    if (typeof checkUrl !== 'string') {
+        return false;
+    }
+    if (checkUrl.indexOf('chrome-extension://') !== 0) {
+        return false;
+    }
+
+    if (typeof chrome === 'undefined' || !chrome.runtime) {
+        return false;
+    }
+
+    var baseUrl = '';
+    if (typeof chrome.runtime.getURL === 'function') {
+        try {
+            baseUrl = chrome.runtime.getURL('');
+        } catch (error) {
+            baseUrl = '';
+        }
+    }
+    if (!baseUrl && chrome.runtime.id) {
+        baseUrl = 'chrome-extension://' + chrome.runtime.id + '/';
+    }
+    if (!baseUrl) {
+        return false;
+    }
+
+    if (baseUrl.charAt(baseUrl.length - 1) === '/') {
+        var baseWithoutSlash = baseUrl.slice(0, -1);
+        if (checkUrl === baseWithoutSlash) {
+            return true;
+        }
+    }
+
+    return checkUrl.indexOf(baseUrl) === 0;
+}
+
 function getFaviconUrl(url, options) {
     options = options || {};
     if (!url || typeof url !== 'string') {
@@ -147,6 +184,10 @@ function getFaviconUrl(url, options) {
 
     if (!trimmedUrl) {
         return Object.prototype.hasOwnProperty.call(options, 'fallback') ? options.fallback : '';
+    }
+
+    if (isExtensionPageUrl(trimmedUrl)) {
+        return 'images/tree-38.png';
     }
 
     if (service === 'chrome') {
@@ -171,6 +212,9 @@ function getFaviconUrl(url, options) {
     }
 
     var protocol = parsedUrl.protocol;
+    if (protocol === 'chrome-extension:' && isExtensionPageUrl(parsedUrl.href)) {
+        return 'images/tree-38.png';
+    }
     if (protocol !== 'http:' && protocol !== 'https:') {
         return fallback;
     }
