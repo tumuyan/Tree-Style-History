@@ -476,7 +476,7 @@ document.addEvent('domready', function () {
                         pId: L2Id,
                         name: TimeToStr(v.closeTime, true, true) + " - " + v.title.replace(/[<>]/g, ' '),
                         url: v.url,
-                        icon: getFaviconUrl(v.url.replace(/(?<![\/])\/[^\/].+/, "")),
+                        icon: getFaviconUrl(v.url),
                         // icon:'chrome://favicon/'+site,
                         open: true,
                         oid: v.oid,
