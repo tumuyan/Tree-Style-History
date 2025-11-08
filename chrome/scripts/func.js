@@ -212,15 +212,12 @@ function executeBookmarklet(url, options) {
         }
         var tabId = tabs[0].id;
         
-        // Use chrome.scripting.executeScript with MAIN world for Manifest V3
-        // Execute in MAIN world to access page's JavaScript context
+        // Use chrome.scripting.executeScript for Manifest V3
+        // Using default ISOLATED world to bypass CSP restrictions
+        // ISOLATED world can use 'code' property and bypasses page CSP while still able to manipulate DOM
         if (chrome.scripting && chrome.scripting.executeScript) {
-            // Use 'code' property instead of 'func' to bypass CSP restrictions
-            // When extensions inject code using chrome.scripting with 'code' property,
-            // it bypasses the page's CSP policies
             chrome.scripting.executeScript({
                 target: { tabId: tabId },
-                world: 'MAIN',
                 injectImmediately: true,
                 code: scriptToRun
             }, function () {
