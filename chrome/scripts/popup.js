@@ -86,16 +86,31 @@ document.addEvent('domready', function () {
                 // Check recentTabs availability
                 try {
                     if (typeof messageAdapter !== 'undefined') {
-                        messageAdapter.getBackgroundData('recentTabs').then(recentTabs => {
+                        // 获取recentTabs和openedTabs两个数据
+                        Promise.all([
+                            messageAdapter.getBackgroundData('recentTabs'),
+                            messageAdapter.getBackgroundData('openedTabs')
+                        ]).then(([recentTabs, openedTabs]) => {
                             if (recentTabs && recentTabs.length > 0) {
                                 new Element('div', { id: 'rt-inject', html: '<div id="rt-inject-title" class="popup-title"><span>' + returnLang('recentTabs') + '</span></div>' }).inject('popup-insert', 'bottom');
-                                if ($('rt-inject')) { showRecentTabs(); }
+                                if ($('rt-inject')) {
+                                    // 传递获取到的数据给showRecentTabs
+                                    showRecentTabs(openedTabs, recentTabs);
+                                }
                             }
-                        }).catch(err => console.warn('Failed to get recentTabs:', err));
+                        }).catch(err => console.warn('Failed to get tabs data:', err));
                     } else if (typeof chrome !== 'undefined' && chrome.extension && chrome.extension.getBackgroundPage) {
-                        const bg = chrome.extension.getBackgroundPage();
-                        if (bg && bg.recentTabs && bg.recentTabs.length > 0) {
-                            new Element('div', { id: 'rt-inject', html: '<div id="rt-inject-title" class="popup-title"><span>' + returnLang('recentTabs') + '</span></div>' }).inject('popup-insert', 'bottom');
+                        try {
+                            const bg = chrome.extension.getBackgroundPage();
+                            if (bg && bg.recentTabs && bg.recentTabs.length > 0) {
+                                new Element('div', { id: 'rt-inject', html: '<div id="rt-inject-title" class="popup-title"><span>' + returnLang('recentTabs') + '</span></div>' }).inject('popup-insert', 'bottom');
+                                if ($('rt-inject')) {
+                                    // 传递获取到的数据给showRecentTabs
+                                    showRecentTabs(bg.openedTabs, bg.recentTabs);
+                                }
+                            }
+                        } catch (err) {
+                            console.warn('Error accessing background page:', err);
                         }
                     }
                 } catch (err) {
@@ -136,7 +151,7 @@ document.addEvent('domready', function () {
     // -- Insert
     if ($('rh-inject')) { recentHistory(); }
     if ($('rct-inject')) { recentlyClosedTabs(); }
-    if ($('rt-inject')) { showRecentTabs(); }
+    // showRecentTabs()已在条件语句中调用，不需要在这里再次调用
     if ($('rb-inject')) { recentBookmarks(); }
     if ($('mv-inject')) { mostVisited(); }
 
