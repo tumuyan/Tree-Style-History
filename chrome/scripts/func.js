@@ -201,8 +201,6 @@ function executeBookmarklet(url, options) {
         return;
     }
 
-    var scriptToRun = options.decode === false ? code : decodeBookmarkletCode(code);
-
     chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
         if (!tabs || tabs.length === 0) {
             if (options.onFailure) {
@@ -211,57 +209,21 @@ function executeBookmarklet(url, options) {
             return;
         }
         var tabId = tabs[0].id;
-        var handleFailure = function (err) {
-            if (err) {
-                console.error('Failed to execute bookmarklet:', err);
-            }
-            if (options.onFailure) {
-                options.onFailure(err);
-            }
-            if (options.fallbackToUpdate && !isBookmarkletUrl(url)) {
-                chrome.tabs.update(tabId, { url: url });
-            }
-        };
-        var handleSuccess = function () {
-            if (options.onSuccess) {
-                options.onSuccess();
-            }
-        };
-        try {
-            // Use chrome.scripting.executeScript for Manifest V3
-            if (chrome.scripting && chrome.scripting.executeScript) {
-                chrome.scripting.executeScript({
-                    target: { tabId: tabId },
-                    world: 'MAIN',
-                    func: function (code) {
-                        var script = document.createElement('script');
-                        script.textContent = code;
-                        (document.head || document.documentElement).appendChild(script);
-                        script.remove();
-                    },
-                    args: [scriptToRun]
-                }, function () {
-                    if (chrome.runtime.lastError) {
-                        handleFailure(chrome.runtime.lastError);
-                    } else {
-                        handleSuccess();
-                    }
-                });
-            } else if (chrome.tabs && chrome.tabs.executeScript) {
-                // Fallback to chrome.tabs.executeScript for older Chrome versions
-                chrome.tabs.executeScript(tabId, { code: scriptToRun }, function () {
-                    if (chrome.runtime.lastError) {
-                        handleFailure(chrome.runtime.lastError);
-                    } else {
-                        handleSuccess();
-                    }
-                });
+        
+        // For bookmarklets, the most reliable way is to navigate to the javascript: URL
+        // This bypasses CSP restrictions and works like traditional bookmarklets
+        chrome.tabs.update(tabId, { url: url }, function () {
+            if (chrome.runtime.lastError) {
+                console.error('Failed to execute bookmarklet:', chrome.runtime.lastError);
+                if (options.onFailure) {
+                    options.onFailure(chrome.runtime.lastError);
+                }
             } else {
-                handleFailure(new Error('No available API to execute scripts.'));
+                if (options.onSuccess) {
+                    options.onSuccess();
+                }
             }
-        } catch (err) {
-            handleFailure(err);
-        }
+        });
     });
 }
 
