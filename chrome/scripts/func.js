@@ -1288,8 +1288,40 @@ function formatItem(data) {
     }
 
     var faviconSrc = favicon;
+    // 为不同类型的页面设置不同的图标
     if (isBookmarkletUrl(url)) {
-        faviconSrc = 'images/blank.png';
+        faviconSrc = 'images/iconmonstr-script-6.svg';
+    } 
+    // 检查是否是本扩展的设置页面
+    else if (url.indexOf("extension://") !== -1    ||  url.indexOf("edge://extensions") !== -1  ) {
+        // 检查是否是本扩展的页面
+        try {
+            var isOwnExtension = false;
+            if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) {
+                isOwnExtension = url.indexOf(chrome.runtime.id) !== -1;
+            }
+            // 本扩展的设置页面使用tree-38.png
+            faviconSrc = isOwnExtension ? 'images/tree-38.png' : 'images/Extension-icon-vector-04.svg';
+        } catch (e) {
+            // 如果无法确定，使用通用扩展图标
+            faviconSrc = 'images/Extension-icon-vector-04.svg';
+        }
+    }
+    // 浏览器自身页面
+    else if (url.indexOf("chrome://") === 0 || 
+             url.indexOf("about:") === 0 || 
+             url.indexOf("edge://") === 0 || 
+             url.indexOf("opera://") === 0 ||
+             url.indexOf("brave://") === 0) {
+        faviconSrc = 'images/Browser-icon-vector-03.svg';
+    }
+    // 本地文件
+    else if (url.indexOf("file://") === 0) {
+        faviconSrc = 'images/iconmonstr-file-3.svg';
+    }
+    // 其他扩展页面
+    else if(faviconSrc.indexOf("extension://") !== -1) {
+        faviconSrc = 'images/Extension-icon-vector-04.svg';
     }
 
     if (faviconSrc) {
@@ -2450,11 +2482,42 @@ function getFaviconUrl(url, options) {
         return Object.prototype.hasOwnProperty.call(options, 'fallback') ? options.fallback : '';
     }
 
+    // 为不同类型的页面设置不同的图标
     if (isBookmarkletUrl(url)) {
         if (Object.prototype.hasOwnProperty.call(options, 'bookmarkletFallback')) {
             return options.bookmarkletFallback;
         }
-        return 'images/blank.png';
+        return 'images/iconmonstr-script-6.svg';
+    }
+    
+    // 扩展页面
+    else if (url.indexOf('extension://') !== -1 || url.indexOf('edge://extensions') !== -1) {
+        // 检查是否是本扩展的页面
+        try {
+            var isOwnExtension = false;
+            if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) {
+                isOwnExtension = url.indexOf(chrome.runtime.id) !== -1;
+            }
+            // 本扩展的页面使用tree-38.png
+            return isOwnExtension ? 'images/tree-38.png' : 'images/Extension-icon-vector-04.svg';
+        } catch (e) {
+            // 如果无法确定，使用通用扩展图标
+            return 'images/Extension-icon-vector-04.svg';
+        }
+    }
+    
+    // 浏览器自身页面
+    else if (url.indexOf('chrome://') === 0 || 
+             url.indexOf('about:') === 0 || 
+             url.indexOf('edge://') === 0 || 
+             url.indexOf('opera://') === 0 ||
+             url.indexOf('brave://') === 0) {
+        return 'images/Browser-icon-vector-03.svg';
+    }
+    
+    // 本地文件
+    else if (url.indexOf('file://') === 0) {
+        return 'images/iconmonstr-file-3.svg';
     }
 
     var service = localStorage['favicon-service'] || defaultValues['favicon-service'];
