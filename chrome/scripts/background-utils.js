@@ -5,7 +5,8 @@
 // Version
 
 function getVersion() {
-    return '3.1.13';
+    // Directly get version from manifest.json
+    return chrome.runtime.getManifest().version;
 }
 
 
