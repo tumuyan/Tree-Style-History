@@ -83,39 +83,8 @@ document.addEvent('domready', function () {
         }  else if (rhporder[o] == 'rt-order') {
             // rt = recent tab
             if ((localStorage['rt-itemsno'] * 1) > 0) {
-                // Check recentTabs availability
-                try {
-                    if (typeof messageAdapter !== 'undefined') {
-                        // 获取recentTabs和openedTabs两个数据
-                        Promise.all([
-                            messageAdapter.getBackgroundData('recentTabs'),
-                            messageAdapter.getBackgroundData('openedTabs')
-                        ]).then(([recentTabs, openedTabs]) => {
-                            if (recentTabs && recentTabs.length > 0) {
-                                new Element('div', { id: 'rt-inject', html: '<div id="rt-inject-title" class="popup-title"><span>' + returnLang('recentTabs') + '</span></div>' }).inject('popup-insert', 'bottom');
-                                if ($('rt-inject')) {
-                                    // 传递获取到的数据给showRecentTabs
-                                    showRecentTabs(openedTabs, recentTabs);
-                                }
-                            }
-                        }).catch(err => console.warn('Failed to get tabs data:', err));
-                    } else if (typeof chrome !== 'undefined' && chrome.extension && chrome.extension.getBackgroundPage) {
-                        try {
-                            const bg = chrome.extension.getBackgroundPage();
-                            if (bg && bg.recentTabs && bg.recentTabs.length > 0) {
-                                new Element('div', { id: 'rt-inject', html: '<div id="rt-inject-title" class="popup-title"><span>' + returnLang('recentTabs') + '</span></div>' }).inject('popup-insert', 'bottom');
-                                if ($('rt-inject')) {
-                                    // 传递获取到的数据给showRecentTabs
-                                    showRecentTabs(bg.openedTabs, bg.recentTabs);
-                                }
-                            }
-                        } catch (err) {
-                            console.warn('Error accessing background page:', err);
-                        }
-                    }
-                } catch (err) {
-                    console.warn('Error accessing recentTabs:', err);
-                }
+                // 只创建HTML元素，不立即调用showRecentTabs函数
+                new Element('div', { id: 'rt-inject', html: '<div id="rt-inject-title" class="popup-title"><span>' + returnLang('recentTabs') + '</span></div>' }).inject('popup-insert', 'bottom');
             }
         }
     }
@@ -148,12 +117,52 @@ document.addEvent('domready', function () {
 
     // Popup init
 
-    // -- Insert
-    if ($('rh-inject')) { recentHistory(); }
-    if ($('rct-inject')) { recentlyClosedTabs(); }
-    // showRecentTabs()已在条件语句中调用，不需要在这里再次调用
-    if ($('rb-inject')) { recentBookmarks(); }
-    if ($('mv-inject')) { mostVisited(); }
+    // -- Insert - 按照rh-list-order的顺序填充数据
+    var rhporder = localStorage['rh-list-order'].split(',');
+    
+    for (var o in rhporder) {
+        if (rhporder[o] == 'rh-order' && $('rh-inject')) { recentHistory(); }
+        else if (rhporder[o] == 'rct-order' && $('rct-inject')) { recentlyClosedTabs(); }
+        else if (rhporder[o] == 'rb-order' && $('rb-inject')) { recentBookmarks(); }
+        else if (rhporder[o] == 'mv-order' && $('mv-inject')) { mostVisited(); }
+        else if (rhporder[o] == 'rt-order' && $('rt-inject')) { 
+            // 按照排序顺序调用showRecentTabs
+            try {
+                if (typeof messageAdapter !== 'undefined') {
+                    // 获取recentTabs和openedTabs两个数据
+                    Promise.all([
+                        messageAdapter.getBackgroundData('recentTabs'),
+                        messageAdapter.getBackgroundData('openedTabs')
+                    ]).then(([recentTabs, openedTabs]) => {
+                        if (recentTabs && recentTabs.length > 0) {
+                            // 传递获取到的数据给showRecentTabs
+                            showRecentTabs(openedTabs, recentTabs);
+                        } else {
+                            // 如果没有数据，隐藏rt-inject元素
+                            $('rt-inject').setStyle('display', 'none');
+                        }
+                    }).catch(err => console.warn('Failed to get tabs data:', err));
+                } else if (typeof chrome !== 'undefined' && chrome.extension && chrome.extension.getBackgroundPage) {
+                    try {
+                        const bg = chrome.extension.getBackgroundPage();
+                        if (bg && bg.recentTabs && bg.recentTabs.length > 0) {
+                            // 传递获取到的数据给showRecentTabs
+                            showRecentTabs(bg.openedTabs, bg.recentTabs);
+                        } else {
+                            // 如果没有数据，隐藏rt-inject元素
+                            $('rt-inject').setStyle('display', 'none');
+                        }
+                    } catch (err) {
+                        console.warn('Error accessing background page:', err);
+                        $('rt-inject').setStyle('display', 'none');
+                    }
+                }
+            } catch (err) {
+                console.warn('Error accessing recentTabs:', err);
+                $('rt-inject').setStyle('display', 'none');
+            }
+        }
+    }
 
     // $$("#rt-inject-title .item[target]").each(function (el, i) {
     //     if (i !== 0) {
