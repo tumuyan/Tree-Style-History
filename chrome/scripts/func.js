@@ -220,7 +220,10 @@ function executeBookmarklet(url, options) {
                 world: 'MAIN',
                 func: function (code) {
                     try {
-                        (new Function(code))();
+                        var script = document.createElement('script');
+                        script.textContent = '(function(){' + code + '})();';
+                        (document.head || document.documentElement).appendChild(script);
+                        script.remove();
                     } catch (e) {
                         console.error('Bookmarklet execution error:', e);
                         throw e;
