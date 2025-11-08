@@ -106,7 +106,7 @@ function TimeToStr(time, skip_date, skip_year, skip_clock) {
 
 
 var calendar_storage2 = {};
-onStorageReady(function() {
+onStorageReady(function () {
     var calendar_storage2_str = localStorage['calendar-storage2'];
     if (calendar_storage2_str != undefined) {
         calendar_storage2 = JSON.parse(calendar_storage2_str);
@@ -389,13 +389,13 @@ function leftClick(url) {
         executeBookmarklet(url, {
             decode: true,
             fallbackToUpdate: true,
-            onSuccess: function() {
+            onSuccess: function () {
                 // Close popup if needed
                 if (ctrlState != 'true' && (localStorage['rh-click'] === 'newtab' || localStorage['rh-click'] === 'current')) {
                     window.close();
                 }
             },
-            onFailure: function(err) {
+            onFailure: function (err) {
                 console.warn('Bookmarklet execution failed:', err);
             }
         });
@@ -548,8 +548,8 @@ function loadOptions(full) {
         }
     });
 
-    
-    $$('#showPopup option[value="' + localStorage['show-popup'] + '"]').set('selected','selected');
+
+    $$('#showPopup option[value="' + localStorage['show-popup'] + '"]').set('selected', 'selected');
     $$('#rhhistorypage option[value="' + localStorage['rh-historypage'] + '"]').set('selected', 'selected');
     $$('#rhdate option[value="' + localStorage['rh-date'] + '"]').set('selected', 'selected');
     $$('#rhtime option[value="' + localStorage['rh-timeformat'] + '"]').set('selected', 'selected');
@@ -568,7 +568,7 @@ function loadOptions(full) {
             faviconOption.set('selected', 'selected');
         }
     }
-    
+
     previewItem();
 
     $('rhsshowurl').addEvent('change', function () {
@@ -595,8 +595,8 @@ function loadOptions(full) {
     if (full)
         filteredDomainsList();
 
-        $$('#rhclick option[value="' + localStorage['rh-click'] + '"]').set('selected', 'selected');
-        $$('#rmclick option[value="' + localStorage['rm-click'] + '"]').set('selected', 'selected');
+    $$('#rhclick option[value="' + localStorage['rh-click'] + '"]').set('selected', 'selected');
+    $$('#rmclick option[value="' + localStorage['rm-click'] + '"]').set('selected', 'selected');
 
 }
 
@@ -728,7 +728,7 @@ function saveOptions(sync) {
     so['rt-itemsno'] = $('rtitemsno').get('value');
     so['rb-itemsno'] = $('rbitemsno').get('value');
     so['mv-itemsno'] = $('mvitemsno').get('value');
-    so['rh-list-order'] = rhlo[0].get('id') + ',' + rhlo[1].get('id') + ',' + rhlo[2].get('id') + ',' + rhlo[3].get('id') + ',' +  rhlo[4].get('id');
+    so['rh-list-order'] = rhlo[0].get('id') + ',' + rhlo[1].get('id') + ',' + rhlo[2].get('id') + ',' + rhlo[3].get('id') + ',' + rhlo[4].get('id');
     so['rh-historypage'] = $('rhhistorypage').getSelected().get('value');
     so['show-popup'] = $('showPopup').getSelected().get('value');
     so['rh-date'] = $('rhdate').getSelected().get('value');
@@ -1094,7 +1094,7 @@ function uiPinItem(el, type) {
                 } else if (type == 'rct') {
                     $$('#rct-inject .item').destroy();
                     recentlyClosedTabs();
-                }  else if (type == 'rt') {
+                } else if (type == 'rt') {
                     $$('#rt-inject .item').destroy();
                     showRecentTabs();
                 } else if (type == 'rb') {
@@ -1299,17 +1299,17 @@ function formatItem(data) {
     }
 
     item += '<span class="title" title="' + tip + '"><span class="edit-items-ui" data-url="' + url + '" data-title="' + tip.replace(/\'/g, "\\'") + '">' + ui + '</span>' + title + '</span>';
-    
+
     // For bookmarklets, show simplified URL in the extra-url section
     var urlDisplay = isBookmarkletUrl(url) ? 'javascript:...' : url.replace(/^(.*?)\:\/\//, '').replace(/\/$/, '');
     item += '<span ' + saext + ' class="extra-url"><span ' + sext + ' class="extra">' + returnLang("visits") + ': ' + visits + extsep + '</span><span ' + surl + ' class="url">' + urlDisplay + '</span></span>';
 
- 
 
-    var click =  function () {
+
+    var click = function () {
         leftClick(url);
     };
-  
+
 
     // switch tab
     if (data.tabId != undefined) {
@@ -1318,7 +1318,7 @@ function formatItem(data) {
         }
     } else if (data.sessionId != undefined) {
         click = function () {
-            chrome.sessions.restore(data.sessionId , function (session) { })
+            chrome.sessions.restore(data.sessionId, function (session) { })
         }
     }
 
@@ -1423,6 +1423,13 @@ function recentlyClosedTabs() {
                 }
 
                 var url = tab.url;
+                if (typeof url !== 'string') {
+                    continue;
+                }
+                if (url.indexOf('chrome-extension://') == 0) {
+                    continue;
+                }
+
                 var furl = tab.favIconUrl;
 
                 if (title == '') {
@@ -1480,7 +1487,7 @@ function showRecentTabs() {
 function showRecentTabsImpl(rhhistory, rt) {
     rhhistory = rhhistory || {};
     rt = Array.isArray(rt) ? rt : [];
-    console.log("showRecentTabs() count = "+rt.length);
+    console.log("showRecentTabs() count = " + rt.length);
 
     // chrome.tabs.get( id , function (tabs) {
     //     if (tabs.length > 0) {
@@ -1491,14 +1498,14 @@ function showRecentTabsImpl(rhhistory, rt) {
     //         console.log("showRecentTabs() openTab error, id="+id);
     //     }
     // });
- 
+
 
 
     var itemsno = localStorage['rt-itemsno'] * 1;
     var rcti = 0;
 
     if (itemsno > 0) {
- 
+
         for (i = 0; i < rt.length; i++) {
 
             if (rcti >= itemsno || i > 99) { break; }
@@ -1517,7 +1524,7 @@ function showRecentTabsImpl(rhhistory, rt) {
                 }
 
                 if (title !== undefined) {
-                    formatItem({ type: 'rt', title: title, url: url, favicon: furl, time: time , tabId: t }).inject('rt-inject', 'bottom');
+                    formatItem({ type: 'rt', title: title, url: url, favicon: furl, time: time, tabId: t }).inject('rt-inject', 'bottom');
                     rcti++;
                 }
 
@@ -1531,11 +1538,11 @@ function showRecentTabsImpl(rhhistory, rt) {
             $('rt-inject').setStyle('display', 'none');
         }
 
-            if (localStorage['rhs-showbg'] == 'yes') {
-                //isBookmarked('#rct-inject .item');
-                isPinned('#rt-inject .item');
-            }
- 
+        if (localStorage['rhs-showbg'] == 'yes') {
+            //isBookmarked('#rct-inject .item');
+            isPinned('#rt-inject .item');
+        }
+
 
     }
 
@@ -2037,12 +2044,12 @@ function history(w, q) {
                                     var moreid = 'more-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                                     var errorid = 'error-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                                     var groupid = 'group-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
-                                    var faviconSrc =rha[thisc.counter].favicon ? 'src="' + rha[thisc.counter].favicon + '"' : '';
+                                    var faviconSrc = rha[thisc.counter].favicon ? 'src="' + rha[thisc.counter].favicon + '"' : '';
                                     new Element('div', {
                                         title: rha[thisc.counter].host,
                                         rel: ibcv,
                                         'class': 'item-holder group-title ',
-                                        html: '<a href="#" class="group-title-toggle" id="' + toggleid + '" data-host="' + rha[thisc.counter].host + '" rel="' + rha[thisc.counter].host + '"></a><input type="checkbox" class="group-title-checkbox" id="' + moreid + '" value="' + rha[thisc.counter].host + '"><img id="' + errorid + '" class="group-title-favicon" alt="Favicon" ' + faviconSrc +'><span id="' + groupid + '" data-host="' + rha[thisc.counter].host + '" class="group-title-host">' + rha[thisc.counter].host.replace('www.', '') + '</span>'
+                                        html: '<a href="#" class="group-title-toggle" id="' + toggleid + '" data-host="' + rha[thisc.counter].host + '" rel="' + rha[thisc.counter].host + '"></a><input type="checkbox" class="group-title-checkbox" id="' + moreid + '" value="' + rha[thisc.counter].host + '"><img id="' + errorid + '" class="group-title-favicon" alt="Favicon" ' + faviconSrc + '><span id="' + groupid + '" data-host="' + rha[thisc.counter].host + '" class="group-title-host">' + rha[thisc.counter].host.replace('www.', '') + '</span>'
                                     }).inject(into);
                                     $(toggleid).addEvent('click', function () {
                                         var host = this.getProperty('data-host');
@@ -2111,7 +2118,7 @@ function history(w, q) {
                                 }
                                 var selectid = 'select-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                                 var errorid = 'error-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
-                                var faviconSrc =rha[thisc.counter].favicon ? 'src="' + rha[thisc.counter].favicon + '"' : '';
+                                var faviconSrc = rha[thisc.counter].favicon ? 'src="' + rha[thisc.counter].favicon + '"' : '';
                                 var item;
                                 item = '<div class="item">';
                                 item += '<span class="checkbox"><label><input class="chkbx" type="checkbox" id="' + selectid + '" value="' + rha[thisc.counter].url + '" name="check"></label>&nbsp;</span>';
