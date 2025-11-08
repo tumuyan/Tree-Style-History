@@ -215,34 +215,15 @@ function executeBookmarklet(url, options) {
         // Use chrome.scripting.executeScript with MAIN world for Manifest V3
         // Execute in MAIN world to access page's JavaScript context
         if (chrome.scripting && chrome.scripting.executeScript) {
+            // Use 'code' property instead of 'func' to bypass CSP restrictions
+            // When extensions inject code using chrome.scripting with 'code' property,
+            // it bypasses the page's CSP policies
             chrome.scripting.executeScript({
                 target: { tabId: tabId },
                 world: 'MAIN',
-                func: function (code) {
-                    try {
-                        // Use Blob URL to bypass CSP restrictions
-                        // This works because it's loaded as an external script
-                        var blob = new Blob(['(function(){' + code + '})();'], { type: 'text/javascript' });
-                        var url = URL.createObjectURL(blob);
-                        var script = document.createElement('script');
-                        script.src = url;
-                        script.onload = function() {
-                            URL.revokeObjectURL(url);
-                            script.remove();
-                        };
-                        script.onerror = function(e) {
-                            URL.revokeObjectURL(url);
-                            script.remove();
-                            console.error('Bookmarklet execution error:', e);
-                        };
-                        (document.head || document.documentElement).appendChild(script);
-                    } catch (e) {
-                        console.error('Bookmarklet execution error:', e);
-                        throw e;
-                    }
-                },
-                args: [scriptToRun]
-            }, function (results) {
+                injectImmediately: true,
+                code: scriptToRun
+            }, function () {
                 if (chrome.runtime.lastError) {
                     console.error('Failed to execute bookmarklet:', chrome.runtime.lastError);
                     if (options.onFailure) {
