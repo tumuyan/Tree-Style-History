@@ -201,6 +201,8 @@ function executeBookmarklet(url, options) {
         return;
     }
 
+    var scriptToRun = options.decode === false ? code : decodeBookmarkletCode(code);
+
     chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
         if (!tabs || tabs.length === 0) {
             if (options.onFailure) {
@@ -210,20 +212,55 @@ function executeBookmarklet(url, options) {
         }
         var tabId = tabs[0].id;
         
-        // For bookmarklets, the most reliable way is to navigate to the javascript: URL
-        // This bypasses CSP restrictions and works like traditional bookmarklets
-        chrome.tabs.update(tabId, { url: url }, function () {
-            if (chrome.runtime.lastError) {
-                console.error('Failed to execute bookmarklet:', chrome.runtime.lastError);
-                if (options.onFailure) {
-                    options.onFailure(chrome.runtime.lastError);
+        // Use chrome.scripting.executeScript with MAIN world for Manifest V3
+        // Execute in MAIN world to access page's JavaScript context
+        if (chrome.scripting && chrome.scripting.executeScript) {
+            chrome.scripting.executeScript({
+                target: { tabId: tabId },
+                world: 'MAIN',
+                func: function (code) {
+                    try {
+                        (new Function(code))();
+                    } catch (e) {
+                        console.error('Bookmarklet execution error:', e);
+                        throw e;
+                    }
+                },
+                args: [scriptToRun]
+            }, function (results) {
+                if (chrome.runtime.lastError) {
+                    console.error('Failed to execute bookmarklet:', chrome.runtime.lastError);
+                    if (options.onFailure) {
+                        options.onFailure(chrome.runtime.lastError);
+                    }
+                } else {
+                    if (options.onSuccess) {
+                        options.onSuccess();
+                    }
                 }
+            });
+        } else {
+            // Fallback for older Chrome versions (Manifest V2)
+            if (chrome.tabs && chrome.tabs.executeScript) {
+                chrome.tabs.executeScript(tabId, { code: scriptToRun }, function () {
+                    if (chrome.runtime.lastError) {
+                        console.error('Failed to execute bookmarklet:', chrome.runtime.lastError);
+                        if (options.onFailure) {
+                            options.onFailure(chrome.runtime.lastError);
+                        }
+                    } else {
+                        if (options.onSuccess) {
+                            options.onSuccess();
+                        }
+                    }
+                });
             } else {
-                if (options.onSuccess) {
-                    options.onSuccess();
+                console.error('No available API to execute bookmarklet');
+                if (options.onFailure) {
+                    options.onFailure(new Error('No available API to execute scripts'));
                 }
             }
-        });
+        }
     });
 }
 
@@ -1315,17 +1352,17 @@ function formatItem(data) {
     }
 
     if (faviconSrc) {
-        item += '<img class="favicon" alt="Favicon" src="' + faviconSrc + '">';
+        item += '<img class="favicon" alt="Favicon" src="' + escapeHtmlAttr(faviconSrc) + '">';
     }
     else {
         item += '<img class="favicon" alt="Favicon">';
     }
 
-    item += '<span class="title" title="' + tip + '"><span class="edit-items-ui" data-url="' + url + '" data-title="' + tip.replace(/\'/g, "\\'") + '">' + ui + '</span>' + title + '</span>';
+    item += '<span class="title" title="' + escapeHtmlAttr(tip) + '"><span class="edit-items-ui" data-url="' + escapeHtmlAttr(url) + '" data-title="' + escapeHtmlAttr(tip) + '">' + ui + '</span>' + title + '</span>';
 
     // For bookmarklets, show simplified URL in the extra-url section
     var urlDisplay = isBookmarkletUrl(url) ? 'javascript:...' : url.replace(/^(.*?)\:\/\//, '').replace(/\/$/, '');
-    item += '<span ' + saext + ' class="extra-url"><span ' + sext + ' class="extra">' + returnLang("visits") + ': ' + visits + extsep + '</span><span ' + surl + ' class="url">' + urlDisplay + '</span></span>';
+    item += '<span ' + saext + ' class="extra-url"><span ' + sext + ' class="extra">' + returnLang("visits") + ': ' + visits + extsep + '</span><span ' + surl + ' class="url">' + escapeHtmlAttr(urlDisplay) + '</span></span>';
 
 
 
