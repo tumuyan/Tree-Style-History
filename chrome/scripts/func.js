@@ -220,10 +220,22 @@ function executeBookmarklet(url, options) {
                 world: 'MAIN',
                 func: function (code) {
                     try {
+                        // Use Blob URL to bypass CSP restrictions
+                        // This works because it's loaded as an external script
+                        var blob = new Blob(['(function(){' + code + '})();'], { type: 'text/javascript' });
+                        var url = URL.createObjectURL(blob);
                         var script = document.createElement('script');
-                        script.textContent = '(function(){' + code + '})();';
+                        script.src = url;
+                        script.onload = function() {
+                            URL.revokeObjectURL(url);
+                            script.remove();
+                        };
+                        script.onerror = function(e) {
+                            URL.revokeObjectURL(url);
+                            script.remove();
+                            console.error('Bookmarklet execution error:', e);
+                        };
                         (document.head || document.documentElement).appendChild(script);
-                        script.remove();
                     } catch (e) {
                         console.error('Bookmarklet execution error:', e);
                         throw e;
