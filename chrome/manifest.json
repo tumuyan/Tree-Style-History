@@ -20,7 +20,8 @@
     "bookmarks",
     "sessions",
     "contextMenus",
-    "alarms"
+    "alarms",
+    "scripting"
   ],
   "host_permissions": [
     "http://*/*",

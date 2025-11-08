@@ -211,28 +211,52 @@ function executeBookmarklet(url, options) {
             return;
         }
         var tabId = tabs[0].id;
-        try {
-            chrome.tabs.executeScript(tabId, { code: scriptToRun }, function () {
-                if (chrome.runtime.lastError) {
-                    console.error('Failed to execute bookmarklet:', chrome.runtime.lastError);
-                    if (options.onFailure) {
-                        options.onFailure(chrome.runtime.lastError);
-                    }
-                    if (options.fallbackToUpdate) {
-                        chrome.tabs.update(tabId, { url: url });
-                    }
-                } else if (options.onSuccess) {
-                    options.onSuccess();
-                }
-            });
-        } catch (err) {
-            console.error('Failed to execute bookmarklet:', err);
+        var handleFailure = function (err) {
+            if (err) {
+                console.error('Failed to execute bookmarklet:', err);
+            }
             if (options.onFailure) {
                 options.onFailure(err);
             }
-            if (options.fallbackToUpdate) {
+            if (options.fallbackToUpdate && !isBookmarkletUrl(url)) {
                 chrome.tabs.update(tabId, { url: url });
             }
+        };
+        var handleSuccess = function () {
+            if (options.onSuccess) {
+                options.onSuccess();
+            }
+        };
+        try {
+            // Use chrome.scripting.executeScript for Manifest V3
+            if (chrome.scripting && chrome.scripting.executeScript) {
+                chrome.scripting.executeScript({
+                    target: { tabId: tabId },
+                    func: function (code) {
+                        (0, eval)(code);
+                    },
+                    args: [scriptToRun]
+                }, function () {
+                    if (chrome.runtime.lastError) {
+                        handleFailure(chrome.runtime.lastError);
+                    } else {
+                        handleSuccess();
+                    }
+                });
+            } else if (chrome.tabs && chrome.tabs.executeScript) {
+                // Fallback to chrome.tabs.executeScript for older Chrome versions
+                chrome.tabs.executeScript(tabId, { code: scriptToRun }, function () {
+                    if (chrome.runtime.lastError) {
+                        handleFailure(chrome.runtime.lastError);
+                    } else {
+                        handleSuccess();
+                    }
+                });
+            } else {
+                handleFailure(new Error('No available API to execute scripts.'));
+            }
+        } catch (err) {
+            handleFailure(err);
         }
     });
 }
