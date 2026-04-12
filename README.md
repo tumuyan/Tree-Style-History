@@ -62,12 +62,16 @@ https://jingyan.baidu.com/article/ca2d939dfa5762ab6d31ce10.html
 https://github.com/tumuyan/Tree-Style-History/issues/1  
 
 
-**Chrome和Edge都要求浏览器扩展适配manifest v3，但是由于我无法把此扩展更新到manifest v3，此扩展即将无法使用**
-
 ![screenshot](screen.jpg)
 
-## Changlog
 
+## Prompt
+这是一个Chrome浏览器扩展，chrome/scripts/目录下的如下js文件可以忽略:  
+moo.js 是MooTools 框架文件，jquery-*.js 是jquery库文件，jquery.ztree.exhide.js jquery.ztree.core.js 和 fuzzysearch.js是树状显示内容的库ztree的文件。
+chrome/scripts/目录下 background-utils.js 文件是被 background-sw.js 引用的文件，内容基本由 func.js 精简而来。
+
+## Changlog
+3.2.0 (2025/11/10) 修复了一些bug。在AI的协助下已经升级到manifest v3，切换默认分支到mv3-3（因为这是我第3次尝试把扩展升级到mv3）。由于MV3的限制，一些功能的体验会劣化。如：部分页面无法正常显示favicon，在弹窗中点击小书签可能不触发功能。  
 
 3.1.13 (2024/04/29) 调整popup窗口所能显示的项目数量的上限，处理favicon 为空的情况。
 
