@@ -47,17 +47,17 @@ document.addEventListener('DOMContentLoaded', function () {
 
     $('date-select-day').addEventListener('change', function () {
         calendar2('selected', '');
-        //   history('yes', '');
+        //   historyView('yes', '');
         loadHistory('yes', '');
     });
     $('date-select-month').addEventListener('change', function () {
         calendar2('selected', '');
-        //   history('yes', '');
+        //   historyView('yes', '');
         loadHistory('yes', '');
     });
     $('date-select-year').addEventListener('change', function () {
         calendar2('selected', '');
-        //   history('yes', '');
+        //   historyView('yes', '');
         loadHistory('yes', '');
     });
 
@@ -190,7 +190,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         selectedLinks[i].removeAttribute('id');
                     }
                     cel.id = 'selected';
-                    //   history('yes', '');
+                    //   historyView('yes', '');
                     loadHistory('yes', '');
                 });
                 $('calendar-days').appendChild(a);
@@ -216,7 +216,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         selectedLinks[i].removeAttribute('id');
                     }
                     cel.id = 'selected';
-                    //   history('yes', '');
+                    //   historyView('yes', '');
                     loadHistory('yes', '');
                 });
                 $('calendar-days').appendChild(a);

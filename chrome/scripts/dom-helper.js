@@ -51,3 +51,6 @@ function getStyle(el, prop) {
     var camelProp = prop.replace(/-([a-z])/g, function (m, c) { return c.toUpperCase(); });
     return el.style[camelProp] || window.getComputedStyle(el)[camelProp];
 }
+
+// --- Exports ---
+export { $, $$, createElement, emptyElement, getStyle };

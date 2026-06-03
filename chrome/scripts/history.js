@@ -46,13 +46,13 @@ document.addEventListener('DOMContentLoaded', function(){
       }
       var gahv = getActiveHistory();
       if(gahv == 'history'){
-        history('yes', '');
+        historyView('yes', '');
       }else if(gahv == 'search'){
         var gahviv = $('rh-search').value;
         if(gahviv.length > 0){
-          history('search', gahviv);
+          historyView('search', gahviv);
         }else{
-          history('yes', '');
+          historyView('yes', '');
         }
       }
     });
@@ -69,13 +69,13 @@ document.addEventListener('DOMContentLoaded', function(){
       }
       var gahv = getActiveHistory();
       if(gahv == 'history'){
-        history('yes', '');
+        historyView('yes', '');
       }else if(gahv == 'search'){
         var gahviv = $('rh-search').value;
         if(gahviv.length > 0){
-          history('search', gahviv);
+          historyView('search', gahviv);
         }else{
-          history('yes', '');
+          historyView('yes', '');
         }
       }
     });
@@ -90,13 +90,13 @@ document.addEventListener('DOMContentLoaded', function(){
       }
       var gahv = getActiveHistory();
       if(gahv == 'history'){
-        history('yes', '');
+        historyView('yes', '');
       }else if(gahv == 'search'){
         var gahviv = $('rh-search').value;
         if(gahviv.length > 0){
-          history('search', gahviv);
+          historyView('search', gahviv);
         }else{
-          history('yes', '');
+          historyView('yes', '');
         }
       }
     });
@@ -147,15 +147,15 @@ document.addEventListener('DOMContentLoaded', function(){
     
     $('date-select-day').addEventListener('change', function(){
       calendar('selected', '');
-      history('yes', '');
+      historyView('yes', '');
     });
     $('date-select-month').addEventListener('change', function(){
       calendar('selected', '');
-      history('yes', '');
+      historyView('yes', '');
     });
     $('date-select-year').addEventListener('change', function(){
       calendar('selected', '');
-      history('yes', '');
+      historyView('yes', '');
     });
     
     // Calendar init
@@ -177,7 +177,7 @@ document.addEventListener('DOMContentLoaded', function(){
 //                         $('rh-what').getSelected().get('value');
 //                             $jq('#rh-what').val("current");
                                 $("rh-search").value =searchStr;
-                                history('search', searchStr);
+                                historyView('search', searchStr);
                     }
                 }else{
                  searchStr='';
@@ -187,7 +187,7 @@ document.addEventListener('DOMContentLoaded', function(){
             }
 
             if(searchStr=='')
-                 history('current', '');
+                 historyView('current', '');
     
     // Calendar range toggle
     
@@ -216,7 +216,7 @@ document.addEventListener('DOMContentLoaded', function(){
     $('rh-what').addEventListener('change', function(){
       var sv = $('rh-search').value;
       if(sv.length + sv.replace(/[0-9a-zA-Z]+/g,'').length >= 2){
-        history('search', sv);
+        historyView('search', sv);
       }
     });
     $('rh-search').addEventListener('keyup', function(){
@@ -224,7 +224,7 @@ document.addEventListener('DOMContentLoaded', function(){
       if(sv.length + sv.replace(/[0-9a-zA-Z]+/g,'').length >= 2){
           if(sv!=searchStr){
             sv==searchStr;
-            history('search', sv);
+            historyView('search', sv);
          }
         $('rh-views-insert').style.display = 'none';
         $('rh-views-search-insert').style.display = 'block';
@@ -248,9 +248,6 @@ document.addEventListener('DOMContentLoaded', function(){
     // Range date
     
     var rdp = [$('delete-range-one'), $('delete-range-two')];
-    for(r=0;r<rdp.length;r++){
-      new DatePicker(rdp[r], {format: derhdf});
-    }
   
     // Assign events
   

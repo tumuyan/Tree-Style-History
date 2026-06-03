@@ -201,6 +201,8 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
 
+    var prh;
+
     function bookmark(w, q) {
 
         if (w != 'search')
