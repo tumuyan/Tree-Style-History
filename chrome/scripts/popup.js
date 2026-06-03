@@ -1,5 +1,5 @@
 
-document.addEvent('domready', function () {
+document.addEventListener('DOMContentLoaded', function () {
     onStorageReady(function () {
 
         // Updated/Installed
@@ -44,13 +44,13 @@ document.addEvent('domready', function () {
 
     // Ctrl listener
 
-    $(document.body).addEvent('keydown', function (e) {
-        if (e.event.keyCode == 17 && ctrlState == 'false') {
+    document.body.addEventListener('keydown', function (e) {
+        if (e.keyCode == 17 && ctrlState == 'false') {
             ctrlState = 'true';
         }
     });
-    $(document.body).addEvent('keyup', function (e) {
-        if (e.event.keyCode == 17) {
+    document.body.addEventListener('keyup', function (e) {
+        if (e.keyCode == 17) {
             ctrlState = 'false';
         }
     });
@@ -62,29 +62,35 @@ document.addEvent('domready', function () {
     for (var o in rhporder) {
         if (rhporder[o] == 'rh-order') {
             if ((localStorage['rh-itemsno'] * 1) > 0) {
-                new Element('div', { id: 'rh-inject', html: '<div id="rh-inject-title" class="popup-title"><span>' + returnLang('recentHistory') + '    - <a href="#"  id="show-all-history" target="_blank">' + returnLang('more') + '🕑</a></span></div>' }).inject('popup-insert', 'bottom');
+                var el = createElement('div', { id: 'rh-inject', html: '<div id="rh-inject-title" class="popup-title"><span>' + returnLang('recentHistory') + '    - <a href="#"  id="show-all-history" target="_blank">' + returnLang('more') + '🕑</a></span></div>' });
+                $('popup-insert').appendChild(el);
             }
         } else if (rhporder[o] == 'rct-order') {
             if ((localStorage['rct-itemsno'] * 1) > 0 ) {
                 if (navigator.userAgent.toLowerCase().indexOf('edg') > 0) {
-                    new Element('div', { id: 'rct-inject', html: '<div id="rct-inject-title" class="popup-title"><span>' + returnLang('recentlyClosedTabs') + '    - <a href="#"  id="show-all-closed" target="_blank">' + returnLang('more') + '...</a></span></div>' }).inject('popup-insert', 'bottom');
+                    var el = createElement('div', { id: 'rct-inject', html: '<div id="rct-inject-title" class="popup-title"><span>' + returnLang('recentlyClosedTabs') + '    - <a href="#"  id="show-all-closed" target="_blank">' + returnLang('more') + '...</a></span></div>' });
+                    $('popup-insert').appendChild(el);
                 } else {
-                    new Element('div', { id: 'rct-inject', html: '<div id="rct-inject-title" class="popup-title"><span>' + returnLang('recentlyClosedTabs') + '</span></div>' }).inject('popup-insert', 'bottom');
+                    var el = createElement('div', { id: 'rct-inject', html: '<div id="rct-inject-title" class="popup-title"><span>' + returnLang('recentlyClosedTabs') + '</span></div>' });
+                    $('popup-insert').appendChild(el);
                 }
             }
         } else if (rhporder[o] == 'rb-order') {
             if ((localStorage['rb-itemsno'] * 1) > 0) {
-                new Element('div', { id: 'rb-inject', html: '<div id="rb-inject-title" class="popup-title"><span>' + returnLang('recentBookmarks') + '    - <a href="#"  id="show-all-bookmark" target="_blank">' + returnLang('more') + '...</a></span></div>' }).inject('popup-insert', 'bottom');
+                var el = createElement('div', { id: 'rb-inject', html: '<div id="rb-inject-title" class="popup-title"><span>' + returnLang('recentBookmarks') + '    - <a href="#"  id="show-all-bookmark" target="_blank">' + returnLang('more') + '...</a></span></div>' });
+                $('popup-insert').appendChild(el);
             }
         } else if (rhporder[o] == 'mv-order') {
             if ((localStorage['mv-itemsno'] * 1) > 0) {
-                new Element('div', { id: 'mv-inject', html: '<div id="mv-inject-title" class="popup-title"><span>' + returnLang('mostVisited') + '</span></div>' }).inject('popup-insert', 'bottom');
+                var el = createElement('div', { id: 'mv-inject', html: '<div id="mv-inject-title" class="popup-title"><span>' + returnLang('mostVisited') + '</span></div>' });
+                $('popup-insert').appendChild(el);
             }
         }  else if (rhporder[o] == 'rt-order') {
             // rt = recent tab
             if ((localStorage['rt-itemsno'] * 1) > 0) {
                 // 只创建HTML元素，不立即调用showRecentTabs函数
-                new Element('div', { id: 'rt-inject', html: '<div id="rt-inject-title" class="popup-title"><span>' + returnLang('recentTabs') + '</span></div>' }).inject('popup-insert', 'bottom');
+                var el = createElement('div', { id: 'rt-inject', html: '<div id="rt-inject-title" class="popup-title"><span>' + returnLang('recentTabs') + '</span></div>' });
+                $('popup-insert').appendChild(el);
             }
         }
     }
@@ -92,7 +98,8 @@ document.addEvent('domready', function () {
     // Assign events
 
     if ($('show-all-history') != undefined)
-        $('show-all-history').addEvent('click', function () {
+        $('show-all-history').addEventListener('click', function (e) {
+            e.preventDefault();
             if (localStorage['rm-click'] == 'this')
                 chromeURL('/history2.html');
             else
@@ -100,7 +107,8 @@ document.addEvent('domready', function () {
         });
 
     if ($('show-all-bookmark') != undefined)
-        $('show-all-bookmark').addEvent('click', function () {
+        $('show-all-bookmark').addEventListener('click', function (e) {
+            e.preventDefault();
             if (localStorage['rm-click'] == 'this')
                 chromeURL('/bookmark.html');
             else
@@ -108,7 +116,8 @@ document.addEvent('domready', function () {
         });
 
     if ($('show-all-closed') != undefined)
-        $('show-all-closed').addEvent('click', function () {
+        $('show-all-closed').addEventListener('click', function (e) {
+            e.preventDefault();
             if (localStorage['rm-click'] == 'this')
                 chromeURL('/closed.html');
             else
@@ -139,7 +148,7 @@ document.addEvent('domready', function () {
                             showRecentTabs(openedTabs, recentTabs);
                         } else {
                             // 如果没有数据，隐藏rt-inject元素
-                            $('rt-inject').setStyle('display', 'none');
+                            $('rt-inject').style.display = 'none';
                         }
                     }).catch(err => console.warn('Failed to get tabs data:', err));
                 } else if (typeof chrome !== 'undefined' && chrome.extension && chrome.extension.getBackgroundPage) {
@@ -150,16 +159,16 @@ document.addEvent('domready', function () {
                             showRecentTabs(bg.openedTabs, bg.recentTabs);
                         } else {
                             // 如果没有数据，隐藏rt-inject元素
-                            $('rt-inject').setStyle('display', 'none');
+                            $('rt-inject').style.display = 'none';
                         }
                     } catch (err) {
                         console.warn('Error accessing background page:', err);
-                        $('rt-inject').setStyle('display', 'none');
+                        $('rt-inject').style.display = 'none';
                     }
                 }
             } catch (err) {
                 console.warn('Error accessing recentTabs:', err);
-                $('rt-inject').setStyle('display', 'none');
+                $('rt-inject').style.display = 'none';
             }
         }
     }
@@ -175,51 +184,53 @@ document.addEvent('domready', function () {
     
 
     // -- Functions
-    $$('.favicon').addEvent('error', function () {
-        this.setProperty('src', 'images/blank.png');
+    Array.from($$('.favicon')).forEach(function(el) {
+        el.addEventListener('error', function () {
+            this.src = 'images/blank.png';
+        });
     });
 
     // -- Width
-    $(document.body).setStyle('width', localStorage['rh-width']);
+    document.body.style.width = localStorage['rh-width'];
 
     // -- Titles
-    $$('.popup-title').each(function (el, i) {
+    Array.from($$('.popup-title')).forEach(function (el, i) {
         if (i !== 0) {
-            el.setStyle('margin-top', '6px');
+            el.style.marginTop = '6px';
         }
     });
 
     // -- Search
     if (localStorage['rh-search'] == 'yes') {
-        $('popup-search-input').addEvent('keyup', function () {
-            var sv = this.get('value');
+        $('popup-search-input').addEventListener('keyup', function () {
+            var sv = this.value;
             if (sv.length + sv.replace(/[0-9a-zA-Z]+/g, '').length >= 2) {
                 popupSearch(sv);
-                $('popup-insert').setStyle('display', 'none');
-                $('popup-search-insert').setStyle('display', 'block');
+                $('popup-insert').style.display = 'none';
+                $('popup-search-insert').style.display = 'block';
             } else {
-                $('popup-insert').setStyle('display', 'block');
-                $('popup-search-insert').setStyle('display', 'none');
+                $('popup-insert').style.display = 'block';
+                $('popup-search-insert').style.display = 'none';
             }
         });
-        $('popup-search-clear').addEvent('click', function () {
-            $('popup-search-input').set('value', '');
+        $('popup-search-clear').addEventListener('click', function () {
+            $('popup-search-input').value = '';
             $('popup-search-input').focus();
-            $('popup-insert').setStyle('display', 'block');
-            $('popup-search-insert').setStyle('display', 'none');
-            $('popup-search-insert').set('text', '');
+            $('popup-insert').style.display = 'block';
+            $('popup-search-insert').style.display = 'none';
+            $('popup-search-insert').textContent = '';
         });
         $('popup-search-input').focus();
     } else {
-        $('popup-header').setStyle('display', 'none');
+        $('popup-header').style.display = 'none';
         if ($$('.popup-title').length > 0) {
-            $$('.popup-title')[0].setStyle('margin-top', '10px');
+            $$('.popup-title')[0].style.marginTop = '10px';
         }
     }
 
     // -- Alert holder
-    $('alert-holder').addEvent('click', function () {
-        this.setStyle('display', 'none');
+    $('alert-holder').addEventListener('click', function () {
+        this.style.display = 'none';
     });
 
     // -- Scrollbar fix

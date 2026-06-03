@@ -1,46 +1,55 @@
 
-document.addEvent('domready', function () {
+document.addEventListener('DOMContentLoaded', function () {
     onStorageReady(function () {
 
         // Fade in
 
-    var optionsFx = new Fx.Morph('options', { duration: 250 });
+    var optsEl = $('options');
+    optsEl.style.transition = 'margin-left 0.25s, opacity 0.25s';
+    optsEl.style.opacity = '1';
     if (chrome.i18n.getMessage("@@bidi_dir") == 'rtl' && chrome.i18n.getMessage("@@ui_locale") !== 'en') {
         var oo = {
             'margin-right': [150, 180],
             'opacity': [0, 1]
         };
+        optsEl.style.marginRight = oo['margin-right'][1] + 'px';
     } else {
         var oo = {
             'margin-left': [150, 180],
             'opacity': [0, 1]
         };
+        optsEl.style.marginLeft = oo['margin-left'][1] + 'px';
     }
-    optionsFx.start(oo);
 
 
-    $("version").set('text',getVersion());
+    $("version").textContent = getVersion();
 
     // URL Vars
 
     var vars = getUrlVars();
 
     if (vars['p'] == undefined) {
-        $('tab-options-content').setStyle('display', 'block');
-        $('tab-options').addClass('tab-current');
+        $('tab-options-content').style.display = 'block';
+        $('tab-options').classList.add('tab-current');
     } else {
-        $('tab-' + vars['p'] + '-content').setStyle('display', 'block');
-        $('tab-' + vars['p']).addClass('tab-current');
+        $('tab-' + vars['p'] + '-content').style.display = 'block';
+        $('tab-' + vars['p']).classList.add('tab-current');
     }
 
     // Options tabs
 
-    $$('.tab').addEvent('click', function (e) {
-        e.stop();
-        $$('.tab-content').setStyle('display', 'none');
-        $$('.tab').removeClass('tab-current');
-        $(this.get('id') + '-content').setStyle('display', 'block');
-        this.addClass('tab-current');
+    Array.from($$('.tab')).forEach(function(tab) {
+        tab.addEventListener('click', function (e) {
+            e.preventDefault();
+            Array.from($$('.tab-content')).forEach(function(tc) {
+                tc.style.display = 'none';
+            });
+            Array.from($$('.tab')).forEach(function(t) {
+                t.classList.remove('tab-current');
+            });
+            $(this.id + '-content').style.display = 'block';
+            this.classList.add('tab-current');
+        });
     });
 
    // Load translated text
@@ -56,12 +65,12 @@ document.addEvent('domready', function () {
 
     // Save options
 
-    $('save').addEvent('click', function () {
+    $('save').addEventListener('click', function () {
         saveOptions(false);
     });
 
-    $('defaultConfig').set('value', returnLang('defaultConfig'));
-    $('defaultConfig').addEvent('click', function () {
+    $('defaultConfig').value = returnLang('defaultConfig');
+    $('defaultConfig').addEventListener('click', function () {
         defaultConfig(true);
         location.reload();
         // loadOptions();
@@ -69,7 +78,7 @@ document.addEvent('domready', function () {
         // window.open('options.html');
     });
 
-    $('deleteCache').addEvent('click', function () {
+    $('deleteCache').addEventListener('click', function () {
         if (typeof messageAdapter !== 'undefined') {
             messageAdapter.deleteDB().then(() => {
                 console.log('Database deleted successfully');
@@ -83,22 +92,22 @@ document.addEvent('domready', function () {
 
 
     // $('shortcuts').set('value', returnLang('shortcuts'));
-    $('shortcuts').addEvent('click', function () {
+    $('shortcuts').addEventListener('click', function () {
         chromeURL('chrome://extensions/shortcuts');
     });
 
-    $('saveUpload').set('value', returnLang('saveUpload'));
-    $('saveUpload').addEvent('click', function () {
+    $('saveUpload').value = returnLang('saveUpload');
+    $('saveUpload').addEventListener('click', function () {
         saveOptions(true);
     });
 
-    $('downloadConfig').set('value', returnLang('downloadConfig'));
-    $('downloadConfig').addEvent('click', function () {
+    $('downloadConfig').value = returnLang('downloadConfig');
+    $('downloadConfig').addEventListener('click', function () {
         downloadOptions();
     });
 
-    $('downloadConfig2').set('value', returnLang('downloadConfig2'));
-    $('downloadConfig2').addEvent('click', function () {
+    $('downloadConfig2').value = returnLang('downloadConfig2');
+    $('downloadConfig2').addEventListener('click', function () {
     });
 
     // Sliders
@@ -123,20 +132,20 @@ document.addEvent('domready', function () {
 
     // Assign events
 
-    $('flist-add-b').addEvent('click', function () { addFilteredItem(); });
-    $('flist-add-i').addEvent('keyup', function (event) { if (event.keyCode == 13) { addFilteredItem(); } });
-    $('advance-options').addEvent('submit', function () { return false; });
+    $('flist-add-b').addEventListener('click', function () { addFilteredItem(); });
+    $('flist-add-i').addEventListener('keyup', function (event) { if (event.keyCode == 13) { addFilteredItem(); } });
+    $('advance-options').addEventListener('submit', function () { return false; });
 
-    $('deleteList').addEvent('click', function () { $('flist-table').set('html',''); });
+    $('deleteList').addEventListener('click', function () { $('flist-table').innerHTML = ''; });
 
-    $('mergeList').addEvent('click', function () {mergeList(); });
+    $('mergeList').addEventListener('click', function () {mergeList(); });
     
     
 
     // var UserAgent = navigator.userAgent.toLowerCase();
     // if(UserAgent.indexOf('edg')>0)
     {
-        $('select_history_page').set('style','display:none');
+        $('select_history_page').style.display = 'none';
     }
 
     });

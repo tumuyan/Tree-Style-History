@@ -146,11 +146,11 @@
         const elapsed = (typeof duration === 'number' && typeof duration.toFixed === 'function') ? duration.toFixed(2) : duration;
         console.debug(`storageAdapter: initialized with ${cacheSize} keys in ${elapsed}ms`);
         
-        callbacks.forEach((cb) => {
+        callbacks.forEach((cb, idx) => {
             try {
                 cb();
             } catch (err) {
-                console.error('storageAdapter callback error', err);
+                console.error('storageAdapter callback error [' + idx + ']', err, (cb.name || 'anonymous'));
             }
         });
     }

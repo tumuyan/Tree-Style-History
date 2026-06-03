@@ -1,62 +1,59 @@
-document.addEvent('domready', function () {
+document.addEventListener('DOMContentLoaded', function () {
     onStorageReady(function () {
 
-        // Fade in
+        // Fade in using CSS transition
 
-    var historyFx = new Fx.Morph('history-container', { duration: 250 });
-    if (chrome.i18n.getMessage("@@bidi_dir") == 'rtl' && chrome.i18n.getMessage("@@ui_locale") !== 'en') {
-        var ho = {
-            'margin-right': [150, 180],
-            'opacity': [0, 1]
-        };
-    } else {
-        var ho = {
-            'margin-left': [150, 180],
-            'opacity': [0, 1]
-        };
+    var historyContainer = $('history-container');
+    if (historyContainer) {
+        historyContainer.style.transition = 'margin-left 0.25s, margin-right 0.25s, opacity 0.25s';
+        if (chrome.i18n.getMessage("@@bidi_dir") == 'rtl' && chrome.i18n.getMessage("@@ui_locale") !== 'en') {
+            historyContainer.style.marginRight = '180px';
+        } else {
+            historyContainer.style.marginLeft = '180px';
+        }
+        historyContainer.style.opacity = '1';
     }
-    historyFx.start(ho);
 
     // Language
     
     // Set button labels
     if ($('delete-bookmark-button')) {
-        $('delete-bookmark-button').set('value', returnLang('deleteBookmarks'));
+        $('delete-bookmark-button').value = returnLang('deleteBookmarks');
     }
     if ($('edit-bookmark-button')) {
-        $('edit-bookmark-button').set('value', returnLang('editBookmark'));
+        $('edit-bookmark-button').value = returnLang('editBookmark');
     }
 
     // Toggle history
 
     if (localStorage['rh-group'] == 'no') {
-        $('rh-bar-group').setStyle('background-position', 'right center');
+        $('rh-bar-group').style.backgroundPosition = 'right center';
     }
     if (localStorage['rh-orderby'] == 'title') {
-        $('rh-bar-orderby').setStyle('background-position', 'right center');
-        $('rh-bar-orderby').set('title', returnLang('orderByTime') ); 
+        $('rh-bar-orderby').style.backgroundPosition = 'right center';
+        $('rh-bar-orderby').title = returnLang('orderByTime'); 
     } else {       
-         $('rh-bar-orderby').set('title', returnLang('orderByTitle') );   
+         $('rh-bar-orderby').title = returnLang('orderByTitle');   
     }
-    $('rh-bar-order').set('title', returnLang('order') ); 
+    $('rh-bar-order').title = returnLang('order'); 
     if (localStorage['rh-order'] == 'asc') {
-        $('rh-bar-order').setStyle('background-position', 'right center');
+        $('rh-bar-order').style.backgroundPosition = 'right center';
     }    
-    $('rh-bar-group').set('title', returnLang('group') );   
-    $('rh-bar-group').addEvent('click', function () {
+    $('rh-bar-group').title = returnLang('group');   
+    $('rh-bar-group').addEventListener('click', function () {
         var rhgv = localStorage['rh-group'];
         if (rhgv == 'yes') {
-            $('rh-bar-group').setStyle('background-position', 'right center');
+            $('rh-bar-group').style.backgroundPosition = 'right center';
             localStorage['rh-group'] = 'no';
         } else if (rhgv == 'no') {
-            $('rh-bar-group').setStyle('background-position', 'left center');
+            $('rh-bar-group').style.backgroundPosition = 'left center';
             localStorage['rh-group'] = 'yes';
         }
         var gahv = getActiveHistory();
         if (gahv == 'history') {
             bookmark('yes', '');
         } else if (gahv == 'search') {
-            var gahviv = $('rh-search').get('value');
+            var gahviv = $('rh-search').value;
             if (gahviv.length > 0) {
                 bookmark('search', gahviv);
             } else {
@@ -64,22 +61,22 @@ document.addEvent('domready', function () {
             }
         }
     });
-    $('rh-bar-orderby').addEvent('click', function () {
+    $('rh-bar-orderby').addEventListener('click', function () {
         var rhgv = localStorage['rh-orderby'];
         if (rhgv == 'date') {
-            $('rh-bar-orderby').setStyle('background-position', 'right center');
-            $('rh-bar-orderby').set('title', returnLang('orderByTime') );  
+            $('rh-bar-orderby').style.backgroundPosition = 'right center';
+            $('rh-bar-orderby').title = returnLang('orderByTime');  
             localStorage['rh-orderby'] = 'title';
         } else if (rhgv == 'title') {
-            $('rh-bar-orderby').setStyle('background-position', 'left center');
-            $('rh-bar-orderby').set('title', returnLang('orderByTitle') );       
+            $('rh-bar-orderby').style.backgroundPosition = 'left center';
+            $('rh-bar-orderby').title = returnLang('orderByTitle');       
             localStorage['rh-orderby'] = 'date';
         }
         var gahv = getActiveHistory();
         if (gahv == 'history') {
             bookmark('yes', '');
         } else if (gahv == 'search') {
-            var gahviv = $('rh-search').get('value');
+            var gahviv = $('rh-search').value;
             if (gahviv.length > 0) {
                 bookmark('search', gahviv);
             } else {
@@ -87,20 +84,20 @@ document.addEvent('domready', function () {
             }
         }
     });
-    $('rh-bar-order').addEvent('click', function () {
+    $('rh-bar-order').addEventListener('click', function () {
         var rhgv = localStorage['rh-order'];
         if (rhgv == 'desc') {
-            $('rh-bar-order').setStyle('background-position', 'right center');
+            $('rh-bar-order').style.backgroundPosition = 'right center';
             localStorage['rh-order'] = 'asc';
         } else if (rhgv == 'asc') {
-            $('rh-bar-order').setStyle('background-position', 'left center');
+            $('rh-bar-order').style.backgroundPosition = 'left center';
             localStorage['rh-order'] = 'desc';
         }
         var gahv = getActiveHistory();
         if (gahv == 'history') {
             bookmark('yes', '');
         } else if (gahv == 'search') {
-            var gahviv = $('rh-search').get('value');
+            var gahviv = $('rh-search').value;
             if (gahviv.length > 0) {
                 bookmark('search', gahviv);
             } else {
@@ -112,13 +109,13 @@ document.addEvent('domready', function () {
 
     // Shift listener
 
-    $(document.body).addEvent('keydown', function (e) {
-        if (e.event.keyCode == 16 && shiftState == 'false') {
+    document.body.addEventListener('keydown', function (e) {
+        if (e.keyCode == 16 && shiftState == 'false') {
             shiftState = 'true';
         }
     });
-    $(document.body).addEvent('keyup', function (e) {
-        if (e.event.keyCode == 16) {
+    document.body.addEventListener('keyup', function (e) {
+        if (e.keyCode == 16) {
             shiftState = 'false';
         }
     });
@@ -129,7 +126,7 @@ document.addEvent('domready', function () {
     var searchStr = location.search;
 
     if (searchStr.length > 1) {
-        $("rh-search").set('value', searchStr);
+        $("rh-search").value = searchStr;
         bookmark('search', searchStr);
     } else {
         searchStr - '';
@@ -142,19 +139,19 @@ document.addEvent('domready', function () {
     // Search events
 
 
-    $('rh-search').addEvent('keyup', function () {
-        var sv = this.get('value');
+    $('rh-search').addEventListener('keyup', function () {
+        var sv = this.value;
         if (sv.length + sv.replace(/[0-9a-zA-Z]+/g, '').length >= 2) {
             if (sv != searchStr) {
                 sv == searchStr;
                 bookmark('search', sv);
             }
-            $('rh-views-insert').setStyle('display', 'none');
-            $('rh-views-search-insert').setStyle('display', 'block');
+            $('rh-views-insert').style.display = 'none';
+            $('rh-views-search-insert').style.display = 'block';
 
         } else {
-            $('rh-views-insert').setStyle('display', 'block');
-            $('rh-views-search-insert').setStyle('display', 'none');
+            $('rh-views-insert').style.display = 'block';
+            $('rh-views-search-insert').style.display = 'none';
         }
     });
     $('rh-search').focus();
@@ -163,11 +160,11 @@ document.addEvent('domready', function () {
 
     // Assign events
 
-    $('master-check-all').addEvent('click', function () { selectBookmarkItem(this, 'all'); });
-    $('delete-bookmark-button').set('value', returnLang('deleteBookmarks'));
-    $('delete-bookmark-button').addEvent('click', function() { deleteBookmarkItems(); });
-    $('edit-bookmark-button').set('value', returnLang('editBookmark'));
-    $('edit-bookmark-button').addEvent('click', function() { editBookmarkItem(); });
+    $('master-check-all').addEventListener('click', function () { selectBookmarkItem(this, 'all'); });
+    $('delete-bookmark-button').value = returnLang('deleteBookmarks');
+    $('delete-bookmark-button').addEventListener('click', function() { deleteBookmarkItems(); });
+    $('edit-bookmark-button').value = returnLang('editBookmark');
+    $('edit-bookmark-button').addEventListener('click', function() { editBookmarkItem(); });
 
 
 
@@ -215,16 +212,16 @@ document.addEvent('domready', function () {
 
         if (w == 'search') {
             var into = 'rh-views-search-insert';
-            $('rh-views-search-insert').setStyle('display', 'block');
-            $('rh-views-insert').setStyle('display', 'none');
+            $('rh-views-search-insert').style.display = 'block';
+            $('rh-views-insert').style.display = 'none';
         } else {
             var into = 'rh-views-insert';
-            $('rh-views-search-insert').setStyle('display', 'none');
-            $('rh-views-insert').setStyle('display', 'block');
-            $('rh-search').set('value', '');
+            $('rh-views-search-insert').style.display = 'none';
+            $('rh-views-insert').style.display = 'block';
+            $('rh-search').value = '';
         }
 
-        $(into).set('text', returnLang('loading'));
+        $(into).textContent = returnLang('loading');
 
         /*  可以进行排序的内容有：
                 按照网站分组
@@ -243,7 +240,7 @@ document.addEvent('domready', function () {
                     //            alertLoadingHistory(true);
                 } else {
                     // $('calendar-total-value').set('text', '0');
-                    $(into).set('html', '<div class="no-results"><span>' + returnLang('noResults') + '</span></div>');
+                    $(into).innerHTML = '<div class="no-results"><span>' + returnLang('noResults') + '</span></div>';
                 }
             })
 
@@ -268,7 +265,7 @@ document.addEvent('domready', function () {
                 if (hi.length > 0) {
                     showData(hi, into);
                 } else {
-                    $(into).set('html', '<div class="no-results"><span>' + returnLang('noResults') + '</span></div>');
+                    $(into).innerHTML = '<div class="no-results"><span>' + returnLang('noResults') + '</span></div>';
                 }
 
             })
@@ -333,7 +330,7 @@ document.addEvent('domready', function () {
 
         if (rha.length > 0) {
 
-            $('master-check-all').set('disabled', 'disabled');
+            $('master-check-all').disabled = 'disabled';
 
             if (into == 'rh-views-insert') {
                 var rhat = rha.length;
@@ -384,28 +381,30 @@ document.addEvent('domready', function () {
                 rha.reverse();
             }
 
-            $(into).set('text', '');
+            $(into).textContent = '';
 
             var ibcv = 'grey';
             var Counter = { counter: 0 };
 
             if (grp == 'yes') {  // 注意此处回调耗时操作
-                prh = (function () {
+                prh = setInterval((function () {
                     var thisc = this;
                     if (thisc.counter == rha.length) {
                         clearInterval(prh);
                         //isBookmarked('#rh-views .item .link');
                         alertLoadingHistory(true);
-                        $(document.body).getElement('#rh-bar-uione input').set('checked', false);
+                        var uioneInput = document.body.querySelector('#rh-bar-uione input');
+                        if (uioneInput) uioneInput.checked = false;
                         selectedItem = undefined;
-                        new Tips('.title', { className: 'tip-holder' });
-                        if ($$('#' + into + ' div.group-title').length > 0) { toggleGroup($$('#' + into + ' div.group-title')[0].get('title')); }
-                        $('master-check-all').removeProperty('disabled');
+                        // Tips removed - native title provides tooltip
+                        var gts = $$('#' + into + ' div.group-title');
+                        if (gts.length > 0) { toggleGroup(gts[0].getAttribute('title')); }
+                        $('master-check-all').removeAttribute('disabled');
                     } else {
                         
                         var host = rha[thisc.counter].host;
                         if (host !== undefined) {
-                            if (!$(into).getElement('div[rel="' + host + '"]')) {
+                            if (!$(into).querySelector('div[rel="' + host + '"]')) {
                                 var toggleid = 'toggle-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                                 var moreid = 'more-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                                 var errorid = 'error-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
@@ -413,27 +412,29 @@ document.addEvent('domready', function () {
                                 var faviconSrc = rha[thisc.counter].favicon ? 'src="' + escapeHtmlAttr(rha[thisc.counter].favicon) + '"' : '';
                                 var escapedHost = escapeHtmlAttr(host);
                                 var escapedHostDisplay = escapeHtmlAttr(host.replace('www.', ''));
-                                new Element('div', {
+                                var groupEl = createElement('div', {
                                     title: host,
                                     rel: ibcv,
                                     'class': 'item-holder group-title ',
                                     html: '<a href="#" class="group-title-toggle group-title-toggle-bookmark" id="' + toggleid + '" data-host="' + escapedHost + '" rel="' + escapedHost + '"></a><label class="group-title-toggle-count" rel="' + escapedHost + '"></label><input type="hidden"  style="width: 0; display:none;   padding: 0 0 0 0;  margin: 0 0 0 0;    visibility: hidden;  left: 0;"  class="group-title-checkbox" id="' + moreid + '" value="' + escapedHost + '"><img id="' + errorid + '" class="group-title-favicon" alt="Favicon" ' + faviconSrc + '><span id="' + groupid + '" data-host="' + escapedHost + '" class="group-title-host">' + escapedHostDisplay + '</span>'
-                                }).inject(into);
-                                $(toggleid).addEvent('click', function () {
-                                    var host = this.getProperty('data-host');
+                                });
+                                $(into).appendChild(groupEl);
+                                $(toggleid).addEventListener('click', function () {
+                                    var host = this.getAttribute('data-host');
                                     toggleGroup(host);
                                 });
-                                $(moreid).addEvent('click', function () {
+                                $(moreid).addEventListener('click', function () {
                                     getMoreItems(this);
                                 });
-                                $(errorid).addEvent('error', function () {
-                                    this.setProperty('src', 'images/blank.png');
+                                $(errorid).addEventListener('error', function () {
+                                    this.src = 'images/blank.png';
                                 });
-                                $(groupid).addEvent('click', function () {
-                                    var host = this.getProperty('data-host');
+                                $(groupid).addEventListener('click', function () {
+                                    var host = this.getAttribute('data-host');
                                     toggleGroup(host);
                                 })
-                                new Element('div', { 'class': 'group-holder', rel: host, styles: { 'display': 'none' } }).inject(into);
+                                var groupHolder = createElement('div', { 'class': 'group-holder', rel: host, styles: { 'display': 'none' } });
+                                $(into).appendChild(groupHolder);
                                 if (ibcv == 'white') {
                                     ibcv = 'grey';
                                 } else {
@@ -473,25 +474,27 @@ document.addEvent('domready', function () {
                             item += '<span class="title" title="' + escapedTooltip + '" rel="' +  escapedTimeAttr +  '">' + escapedDisplayTitle + '</span>';
                             item += '</a>';
                             item += '</div>';
-                            var itemHolder = new Element('div', {
-                                'rel': $(into).getElement('div.item-holder[title="' + host + '"]').get('rel'),
+                            var existingHolder = $(into).querySelector('div.item-holder[title="' + host + '"]');
+                            var itemHolder = createElement('div', {
+                                'rel': existingHolder.getAttribute('rel'),
                                 'class': 'item-holder',
                                 'data-bookmark-id': rha[thisc.counter].bookmarkId,
                                 'data-bookmark-title': rha[thisc.counter].originalTitle,
                                 'data-bookmark-url': rha[thisc.counter].url,
                                 styles: {
-                                    'background-color': $(into).getElement('div.item-holder[title="' + host + '"]').getStyle('background-color')
+                                    'background-color': getStyle(existingHolder, 'background-color')
                                 }
-                            }).set('html', item + '<div class="clearitem" style="clear:both;"></div>').inject($(into).getElement('div[rel="' + host + '"]'));
-                            var linkElement = itemHolder.getElement('a.link');
+                            });
+                            itemHolder.innerHTML = item + '<div class="clearitem" style="clear:both;"></div>';
+                            var groupDiv = $(into).querySelector('div[rel="' + host + '"]');
+                            groupDiv.appendChild(itemHolder);
+                            var linkElement = itemHolder.querySelector('a.link');
                             if (linkElement) {
-                                linkElement.addEvent('click', function (e) {
-                                    var holder = this.getParent('div.item-holder');
-                                    var linkUrl = holder ? holder.getProperty('data-bookmark-url') : null;
+                                linkElement.addEventListener('click', function (e) {
+                                    var holder = this.closest('div.item-holder');
+                                    var linkUrl = holder ? holder.getAttribute('data-bookmark-url') : null;
                                     if (linkUrl && isBookmarkletUrl(linkUrl)) {
-                                        if (e && e.stop) {
-                                            e.stop();
-                                        }
+                                        e.preventDefault();
                                         executeBookmarklet(linkUrl, {
                                             decode: true,
                                             fallbackToUpdate: true,
@@ -502,30 +505,32 @@ document.addEvent('domready', function () {
                                     }
                                 });
                             }
-                            $(selectid).addEvent('click', function () {
+                            $(selectid).addEventListener('click', function () {
                                 selectBookmarkItem(this, 'single');
                             });
 
-                            var size = $(into).getElement('div[rel="' + host + '"]').childNodes.length;
-                            var label = $(into).getElement('label[rel="' + host + '"]');
+                            var size = $(into).querySelector('div[rel="' + host + '"]').childNodes.length;
+                            var label = $(into).querySelector('label[rel="' + host + '"]');
                             if (label != undefined)
-                                label.set("text", size);
+                                label.textContent = size;
                         }
                     }
                     thisc.counter++;
-                }).periodical(5, Counter);
+                }).bind(Counter), 5);
             } else if (grp == 'no') {
-                prh = (function () {
+                prh = setInterval((function () {
                     var thisc = this;
                     if (thisc.counter == rha.length) {
                         clearInterval(prh);
                         //isBookmarked('#rh-views .item .link');
                         alertLoadingHistory(true);
-                        $(document.body).getElement('#rh-bar-uione input').set('checked', false);
+                        var uioneInput = document.body.querySelector('#rh-bar-uione input');
+                        if (uioneInput) uioneInput.checked = false;
                         selectedItem = undefined;
-                        new Tips('.title', { className: 'tip-holder' });
-                        if ($$('#' + into + ' div.group-title').length > 0) { toggleGroup($$('#' + into + ' div.group-title')[0].get('title')); }
-                        $('master-check-all').removeProperty('disabled');
+                        // Tips removed - native title provides tooltip
+                        var gts = $$('#' + into + ' div.group-title');
+                        if (gts.length > 0) { toggleGroup(gts[0].getAttribute('title')); }
+                        $('master-check-all').removeAttribute('disabled');
                     } else {
                         if (rha[thisc.counter] !== undefined) {
 
@@ -564,23 +569,22 @@ document.addEvent('domready', function () {
                             item += '<span class="title" title="' + escapedTooltip + '" rel="'  + escapedTimeAttr +  '">' + escapedDisplayTitle + '</span>';
                             item += '</a>';
                             item += '</div>';
-                            var itemHolder = new Element('div', { 
+                            var itemHolder = createElement('div', { 
                                 'rel': ibcv, 
                                 'class': 'item-holder',
                                 'data-bookmark-id': rha[thisc.counter].bookmarkId,
                                 'data-bookmark-title': rha[thisc.counter].originalTitle,
                                 'data-bookmark-url': rha[thisc.counter].url
                             });
-                            itemHolder.set('html', item + '<div class="clearitem" style="clear:both;"></div>').inject(into);
-                            var linkElement = itemHolder.getElement('a.link');
+                            itemHolder.innerHTML = item + '<div class="clearitem" style="clear:both;"></div>';
+                            $(into).appendChild(itemHolder);
+                            var linkElement = itemHolder.querySelector('a.link');
                             if (linkElement) {
-                                linkElement.addEvent('click', function (e) {
-                                    var holder = this.getParent('div.item-holder');
-                                    var linkUrl = holder ? holder.getProperty('data-bookmark-url') : null;
+                                linkElement.addEventListener('click', function (e) {
+                                    var holder = this.closest('div.item-holder');
+                                    var linkUrl = holder ? holder.getAttribute('data-bookmark-url') : null;
                                     if (linkUrl && isBookmarkletUrl(linkUrl)) {
-                                        if (e && e.stop) {
-                                            e.stop();
-                                        }
+                                        e.preventDefault();
                                         executeBookmarklet(linkUrl, {
                                             decode: true,
                                             fallbackToUpdate: true,
@@ -598,31 +602,31 @@ document.addEvent('domready', function () {
                             } else {
                                 ibcv = 'white';
                             }
-                            $(selectid).addEvent('click', function () {
+                            $(selectid).addEventListener('click', function () {
                                 selectBookmarkItem(this, 'single');
                             });
-                            $(errorid).addEvent('error', function () {
-                                this.setProperty('src', 'images/blank.png');
+                            $(errorid).addEventListener('error', function () {
+                                this.src = 'images/blank.png';
                             });
                         }
                     }
                     thisc.counter++;
-                }).periodical(5, Counter);
+                }).bind(Counter), 5);
             }
             alertLoadingHistory(true);
         } else {
             alertLoadingHistory(true);
             // $('calendar-total-value').set('text', '0');
-            $(into).set('html', '<div class="no-results"><span>' + returnLang('noResults') + '</span></div>');
+            $(into).innerHTML = '<div class="no-results"><span>' + returnLang('noResults') + '</span></div>';
         }
 
     }
 
 
     function getActiveBookmark() {
-        if ($('rh-views-insert').getStyle('display') == 'block') {
+        if (getStyle($('rh-views-insert'), 'display') == 'block') {
             return 'history';
-        } else if ($('rh-views-search-insert').getStyle('display') == 'block') {
+        } else if (getStyle($('rh-views-search-insert'), 'display') == 'block') {
             return 'search';
         }
     }
@@ -639,44 +643,57 @@ document.addEvent('domready', function () {
         var itemSelectedColor = '#ffcbd3';
         
         if (w == 'single') {
-            if (el.get('checked') == true) {
-                el.getParent('div.item-holder').setStyle('background-color', itemSelectedColor);
-            } else if (el.get('checked') == false) {
-                var iurl = el.get('value');
-                $$(into + ' .chkbx').each(function (ele) {
-                    if (ele.get('value') == iurl) {
-                        if (ele.getParent('div.item-holder').get('rel') == 'white') {
-                            ele.getParent('div.item-holder').setStyle('background-color', '#fff');
-                        } else {
-                            ele.getParent('div.item-holder').setStyle('background-color', '#f1f1f1');
+            if (el.checked == true) {
+                var parent = el.closest('div.item-holder');
+                if (parent) parent.style.backgroundColor = itemSelectedColor;
+            } else if (el.checked == false) {
+                var iurl = el.value;
+                var items = $$(into + ' .chkbx');
+                for (var i = 0; i < items.length; i++) {
+                    (function(ele) {
+                        if (ele.value == iurl) {
+                            var parent = ele.closest('div.item-holder');
+                            if (parent.getAttribute('rel') == 'white') {
+                                parent.style.backgroundColor = '#fff';
+                            } else {
+                                parent.style.backgroundColor = '#f1f1f1';
+                            }
                         }
-                    }
-                });
+                    })(items[i]);
+                }
             }
             if ($$(into + ' .chkbx').length == $$(into + ' .chkbx:checked').length) {
-                $('master-check-all').set('checked', true);
-                $('master-check-all').set('value', 'true');
+                $('master-check-all').checked = true;
+                $('master-check-all').value = 'true';
             } else {
-                $('master-check-all').set('checked', false);
-                $('master-check-all').set('value', 'false');
+                $('master-check-all').checked = false;
+                $('master-check-all').value = 'false';
             }
         } else if (w == 'all') {
-            if (el.get('value') == 'false') {
-                $$(into + ' .chkbx').each(function (ele) {
-                    ele.set('checked', true);
-                    ele.getParent('div.item-holder').setStyle('background-color', itemSelectedColor);
-                });
-                el.set('value', 'true');
+            if (el.value == 'false') {
+                var items = $$(into + ' .chkbx');
+                for (var i = 0; i < items.length; i++) {
+                    (function(ele) {
+                        ele.checked = true;
+                        var parent = ele.closest('div.item-holder');
+                        if (parent) parent.style.backgroundColor = itemSelectedColor;
+                    })(items[i]);
+                }
+                el.value = 'true';
             } else {
-                $$(into + ' .chkbx').each(function (ele) {
-                    ele.set('checked', false);
-                    if (ele.getParent('div.item-holder').get('rel') == 'white') {
-                        ele.getParent('div.item-holder').setStyle('background-color', '#fff');
-                    } else {
-                        ele.getParent('div.item-holder').setStyle('background-color', '#fafafa');
-                    }
-                });
-                el.set('value', 'false');
+                var items = $$(into + ' .chkbx');
+                for (var i = 0; i < items.length; i++) {
+                    (function(ele) {
+                        ele.checked = false;
+                        var parent = ele.closest('div.item-holder');
+                        if (parent.getAttribute('rel') == 'white') {
+                            parent.style.backgroundColor = '#fff';
+                        } else {
+                            parent.style.backgroundColor = '#fafafa';
+                        }
+                    })(items[i]);
+                }
+                el.value = 'false';
             }
         }
         
@@ -690,15 +707,15 @@ document.addEvent('domready', function () {
         var checkedCount = checkedItems.length;
         
         if (checkedCount > 0) {
-            $('delete-bookmark-button').setStyle('display', 'inline-block');
+            $('delete-bookmark-button').style.display = 'inline-block';
         } else {
-            $('delete-bookmark-button').setStyle('display', 'none');
+            $('delete-bookmark-button').style.display = 'none';
         }
         
         if (checkedCount == 1) {
-            $('edit-bookmark-button').setStyle('display', 'inline-block');
+            $('edit-bookmark-button').style.display = 'inline-block';
         } else {
-            $('edit-bookmark-button').setStyle('display', 'none');
+            $('edit-bookmark-button').style.display = 'none';
         }
     }
 
@@ -714,29 +731,31 @@ document.addEvent('domready', function () {
                 var deleteCount = 0;
                 var totalCount = checkedItems.length;
                 
-                checkedItems.each(function(el) {
-                    var holder = el.getParent('div.item-holder');
-                    var bookmarkId = holder.getProperty('data-bookmark-id');
-                    
-                    if (bookmarkId) {
-                        chrome.bookmarks.remove(bookmarkId, function() {
+                for (var i = 0; i < checkedItems.length; i++) {
+                    (function(el) {
+                        var holder = el.closest('div.item-holder');
+                        var bookmarkId = holder.getAttribute('data-bookmark-id');
+                        
+                        if (bookmarkId) {
+                            chrome.bookmarks.remove(bookmarkId, function() {
+                                deleteCount++;
+                                holder.remove();
+                                
+                                if (deleteCount == totalCount) {
+                                    $('master-check-all').checked = false;
+                                    $('master-check-all').value = 'false';
+                                    updateBookmarkButtons();
+                                    alertLoadingHistory(true);
+                                }
+                            });
+                        } else {
                             deleteCount++;
-                            holder.destroy();
-                            
                             if (deleteCount == totalCount) {
-                                $('master-check-all').set('checked', false);
-                                $('master-check-all').set('value', 'false');
-                                updateBookmarkButtons();
                                 alertLoadingHistory(true);
                             }
-                        });
-                    } else {
-                        deleteCount++;
-                        if (deleteCount == totalCount) {
-                            alertLoadingHistory(true);
                         }
-                    }
-                });
+                    })(checkedItems[i]);
+                }
             }
         }
     }
@@ -744,8 +763,8 @@ document.addEvent('domready', function () {
 
     function resetBookmarkSelectionState() {
         if ($('master-check-all')) {
-            $('master-check-all').set('checked', false);
-            $('master-check-all').set('value', 'false');
+            $('master-check-all').checked = false;
+            $('master-check-all').value = 'false';
         }
         selectedItem = undefined;
         updateBookmarkButtons();
@@ -754,7 +773,7 @@ document.addEvent('domready', function () {
 
     function refreshBookmarkView() {
         var activeView = getActiveBookmark();
-        var query = $('rh-search') ? $('rh-search').get('value') : '';
+        var query = $('rh-search') ? $('rh-search').value : '';
         if (activeView === 'search' && query && (query.length + query.replace(/[0-9a-zA-Z]+/g, '').length >= 2)) {
             bookmark('search', query);
         } else {
@@ -769,14 +788,14 @@ document.addEvent('domready', function () {
 
 
     function getBookmarkDataFromCheckbox(checkbox) {
-        var holder = checkbox.getParent('div.item-holder');
+        var holder = checkbox.closest('div.item-holder');
         if (!holder) {
             return null;
         }
         return {
-            id: holder.getProperty('data-bookmark-id'),
-            title: holder.getProperty('data-bookmark-title'),
-            url: holder.getProperty('data-bookmark-url'),
+            id: holder.getAttribute('data-bookmark-id'),
+            title: holder.getAttribute('data-bookmark-title'),
+            url: holder.getAttribute('data-bookmark-url'),
             holder: holder
         };
     }

@@ -1,39 +1,39 @@
-document.addEvent('domready', function () {
+document.addEventListener('DOMContentLoaded', function () {
     onStorageReady(function () {
 
         //释放jquery中$定义，并直接使用jQuery代替平时的$
     var $jq = jQuery.noConflict();
 
-    // Fade in  
-    var historyFx = new Fx.Morph('history-container', { duration: 250 });
-    if (chrome.i18n.getMessage("@@bidi_dir") == 'rtl' && chrome.i18n.getMessage("@@ui_locale") !== 'en') {
-        var ho = {
-            'margin-right': [150, 180],
-            'opacity': [0, 1]
-        };
-    } else {
-        var ho = {
-            'margin-left': [150, 180],
-            'opacity': [0, 1]
-        };
+    // Fade in using CSS transition
+    var historyContainer = $('history-container');
+    if (historyContainer) {
+        historyContainer.style.transition = 'margin-left 0.25s, margin-right 0.25s, opacity 0.25s';
+        if (chrome.i18n.getMessage("@@bidi_dir") == 'rtl' && chrome.i18n.getMessage("@@ui_locale") !== 'en') {
+            historyContainer.style.marginRight = '180px';
+        } else {
+            historyContainer.style.marginLeft = '180px';
+        }
+        historyContainer.style.opacity = '1';
     }
-    historyFx.start(ho);
 
     // Shift listener
-    $(document.body).addEvent('keydown', function (e) {
-        if (e.event.keyCode == 16 && shiftState == 'false') {
+    document.body.addEventListener('keydown', function (e) {
+        if (e.keyCode == 16 && shiftState == 'false') {
             shiftState = 'true';
         }
     });
-    $(document.body).addEvent('keyup', function (e) {
-        if (e.event.keyCode == 16) {
+    document.body.addEventListener('keyup', function (e) {
+        if (e.keyCode == 16) {
             shiftState = 'false';
         }
     });
 
-    $$('#showCalendar').addEvent('click', function (e) {
-        showCalendar();
-    });
+    var calBtns = $$('#showCalendar');
+    for (var i = 0; i < calBtns.length; i++) {
+        calBtns[i].addEventListener('click', function (e) {
+            showCalendar();
+        });
+    }
 
     // updateFilter();
 
@@ -41,21 +41,21 @@ document.addEvent('domready', function () {
     var derhdf = localStorage['rh-date'];
     derhdf = derhdf.replace('dd', 'dsdi').replace('mm', 'dsmi').replace('yyyy', 'dsyi');
     derhdf = derhdf.split('/');
-    $(derhdf[0]).set('html', '<select class="select" id="date-select-day"></select>');
-    $(derhdf[1]).set('html', '<select class="select" id="date-select-month"><option value="01">01</option><option value="02">02</option><option value="03">03</option><option value="04">04</option><option value="05">05</option><option value="06">06</option><option value="07">07</option><option value="08">08</option><option value="09">09</option><option value="10">10</option><option value="11">11</option><option value="12">12</option></select>');
-    $(derhdf[2]).set('html', '<select class="select" id="date-select-year"></select>');
+    $(derhdf[0]).innerHTML = '<select class="select" id="date-select-day"></select>';
+    $(derhdf[1]).innerHTML = '<select class="select" id="date-select-month"><option value="01">01</option><option value="02">02</option><option value="03">03</option><option value="04">04</option><option value="05">05</option><option value="06">06</option><option value="07">07</option><option value="08">08</option><option value="09">09</option><option value="10">10</option><option value="11">11</option><option value="12">12</option></select>';
+    $(derhdf[2]).innerHTML = '<select class="select" id="date-select-year"></select>';
 
-    $('date-select-day').addEvent('change', function () {
+    $('date-select-day').addEventListener('change', function () {
         calendar2('selected', '');
         //   history('yes', '');
         loadHistory('yes', '');
     });
-    $('date-select-month').addEvent('change', function () {
+    $('date-select-month').addEventListener('change', function () {
         calendar2('selected', '');
         //   history('yes', '');
         loadHistory('yes', '');
     });
-    $('date-select-year').addEvent('change', function () {
+    $('date-select-year').addEventListener('change', function () {
         calendar2('selected', '');
         //   history('yes', '');
         loadHistory('yes', '');
@@ -78,12 +78,12 @@ document.addEvent('domready', function () {
         if (w == 'current') {
             var cdateo = new Date();
         } else if ('selected') {
-            var mcheck = dayarray[($('date-select-month').getSelected().get('value') * 1 - 1)];
-            var dcheck = ($('date-select-day').getSelected().get('value') * 1);
+            var mcheck = dayarray[($('date-select-month').value * 1 - 1)];
+            var dcheck = ($('date-select-day').value * 1);
             if (mcheck < dcheck) {
-                var cdateo = new Date(($('date-select-year').getSelected().get('value') * 1), ($('date-select-month').getSelected().get('value') * 1 - 1), mcheck, 23, 59, 59, 999);
+                var cdateo = new Date(($('date-select-year').value * 1), ($('date-select-month').value * 1 - 1), mcheck, 23, 59, 59, 999);
             } else {
-                var cdateo = new Date(($('date-select-year').getSelected().get('value') * 1), ($('date-select-month').getSelected().get('value') * 1 - 1), ($('date-select-day').getSelected().get('value') * 1), 23, 59, 59, 999);
+                var cdateo = new Date(($('date-select-year').value * 1), ($('date-select-month').value * 1 - 1), ($('date-select-day').value * 1), 23, 59, 59, 999);
             }
         }
 
@@ -93,7 +93,7 @@ document.addEvent('domready', function () {
             cdateo.setDate(cdateo.getDate() + 1);
         }
 
-        $('date-select-day').set('html', '');
+        $('date-select-day').innerHTML = '';
         var ydatec = new Date().getFullYear();
         var mdatec = cdateo.getMonth();
         var ddatec = cdateo.getDate();
@@ -102,18 +102,28 @@ document.addEvent('domready', function () {
         if (w == 'current') {
             for (i = 0; i < yeararray.length; i++) {
                 if (i == 0) {
-                    new Element('option', { 'value': yeararray[i], 'selected': 'selected', 'text': yeararray[i] }).inject('date-select-year');
+                    var opt = document.createElement('option');
+                    opt.value = yeararray[i];
+                    opt.selected = true;
+                    opt.textContent = yeararray[i];
+                    $('date-select-year').appendChild(opt);
                 } else {
-                    new Element('option', { 'value': yeararray[i], 'text': yeararray[i] }).inject('date-select-year');
+                    var opt = document.createElement('option');
+                    opt.value = yeararray[i];
+                    opt.textContent = yeararray[i];
+                    $('date-select-year').appendChild(opt);
                 }
             }
         }
 
-        $$('#date-select-month option').each(function (el) {
-            if ((mdatec) + 1 == (el.get('value') * 1)) {
-                el.set('selected', 'selected');
-            }
-        });
+        var monthOptions = $$('#date-select-month option');
+        for (var i = 0; i < monthOptions.length; i++) {
+            (function(el) {
+                if ((mdatec) + 1 == (el.value * 1)) {
+                    el.selected = true;
+                }
+            })(monthOptions[i]);
+        }
 
         for (i = 0; i <= dayarray.length; i++) {
             if (mdatec == i) {
@@ -123,13 +133,20 @@ document.addEvent('domready', function () {
                         if (ia.length == 1) {
                             ia = '0' + ia;
                         }
-                        new Element('option', { 'value': ia, 'selected': 'selected', 'text': ia }).inject('date-select-day');
+                        var opt = document.createElement('option');
+                        opt.value = ia;
+                        opt.selected = true;
+                        opt.textContent = ia;
+                        $('date-select-day').appendChild(opt);
                     } else {
                         ia = ia + '';
                         if (ia.length == 1) {
                             ia = '0' + ia;
                         }
-                        new Element('option', { 'value': ia, 'text': ia }).inject('date-select-day');
+                        var opt = document.createElement('option');
+                        opt.value = ia;
+                        opt.textContent = ia;
+                        $('date-select-day').appendChild(opt);
                     }
                 }
             }
@@ -138,64 +155,78 @@ document.addEvent('domready', function () {
         var fday = new Date(ydatec, mdatec, 1, 23, 59, 59, 999).getDay();
         var lday = new Date(ydatec, mdatec, dayarray[mdatec], 23, 59, 59, 999).getDay();
 
-        $('calendar-days').set('text', '');
+        $('calendar-days').textContent = '';
 
         for (ii = 0; ii < dayarray[mdatec]; ii++) {
             if (ii == 0) {
                 for (d = 0; d < fday; d++) {
-                    new Element('span', { html: '&nbsp;', 'class': 'day' }).inject('calendar-days');
+                    var sp = document.createElement('span');
+                    sp.innerHTML = '&nbsp;';
+                    sp.className = 'day';
+                    $('calendar-days').appendChild(sp);
                 }
             }
             if ((ii + 1) == ddatec) {
-                new Element('a', {
-                    id: 'selected',
-                    href: '#',
-                    rel: (ii + 1) + '|' + (mdatec + 1) + '|' + ydatec,
-                    text: (ii + 1),
-                    'class': 'day',
-                    events: {
-                        click: function () {
-                            var cel = this;
-                            $$('#date-select-day option').each(function (el) {
-                                if (el.get('value').toInt() == cel.get('text').toInt()) {
-                                    el.set('selected', 'selected');
-                                } else {
-                                    el.set('selected', '');
-                                }
-                            });
-                            $$('#calendar-days a#selected').removeProperty('id');
-                            cel.set('id', 'selected');
-                            //   history('yes', '');
-                            loadHistory('yes', '');
-                        }
+                var a = document.createElement('a');
+                a.id = 'selected';
+                a.href = '#';
+                a.rel = (ii + 1) + '|' + (mdatec + 1) + '|' + ydatec;
+                a.textContent = (ii + 1);
+                a.className = 'day';
+                a.addEventListener('click', function () {
+                    var cel = this;
+                    var dayOptions = $$('#date-select-day option');
+                    for (var i = 0; i < dayOptions.length; i++) {
+                        (function(el) {
+                            if (parseInt(el.value, 10) == parseInt(cel.textContent, 10)) {
+                                el.selected = true;
+                            } else {
+                                el.selected = false;
+                            }
+                        })(dayOptions[i]);
                     }
-                }).inject('calendar-days');
+                    var selectedLinks = $$('#calendar-days a#selected');
+                    for (var i = 0; i < selectedLinks.length; i++) {
+                        selectedLinks[i].removeAttribute('id');
+                    }
+                    cel.id = 'selected';
+                    //   history('yes', '');
+                    loadHistory('yes', '');
+                });
+                $('calendar-days').appendChild(a);
             } else {
-                new Element('a', {
-                    href: '#',
-                    text: (ii + 1),
-                    'class': 'day',
-                    events: {
-                        click: function () {
-                            var cel = this;
-                            $$('#date-select-day option').each(function (el) {
-                                if (el.get('value').toInt() == cel.get('text').toInt()) {
-                                    el.set('selected', 'selected');
-                                } else {
-                                    el.set('selected', '');
-                                }
-                            });
-                            $$('#calendar-days a#selected').removeProperty('id');
-                            cel.set('id', 'selected');
-                            //   history('yes', '');
-                            loadHistory('yes', '');
-                        }
+                var a = document.createElement('a');
+                a.href = '#';
+                a.textContent = (ii + 1);
+                a.className = 'day';
+                a.addEventListener('click', function () {
+                    var cel = this;
+                    var dayOptions = $$('#date-select-day option');
+                    for (var i = 0; i < dayOptions.length; i++) {
+                        (function(el) {
+                            if (parseInt(el.value, 10) == parseInt(cel.textContent, 10)) {
+                                el.selected = true;
+                            } else {
+                                el.selected = false;
+                            }
+                        })(dayOptions[i]);
                     }
-                }).inject('calendar-days');
+                    var selectedLinks = $$('#calendar-days a#selected');
+                    for (var i = 0; i < selectedLinks.length; i++) {
+                        selectedLinks[i].removeAttribute('id');
+                    }
+                    cel.id = 'selected';
+                    //   history('yes', '');
+                    loadHistory('yes', '');
+                });
+                $('calendar-days').appendChild(a);
             }
             if ((ii + 1) == dayarray[mdatec]) {
                 for (d = 0; d < (6 - lday); d++) {
-                    new Element('span', { html: '&nbsp;', 'class': 'day' }).inject('calendar-days');
+                    var sp = document.createElement('span');
+                    sp.innerHTML = '&nbsp;';
+                    sp.className = 'day';
+                    $('calendar-days').appendChild(sp);
                 }
             }
         }
@@ -206,9 +237,9 @@ document.addEvent('domready', function () {
 
     function loadHistory(w, q) {
         if (w == 'yes') {
-            var day = ($('date-select-day').getSelected().get('value') * 1);
-            var month = ($('date-select-month').getSelected().get('value') * 1 - 1);
-            var year = ($('date-select-year').getSelected().get('value') * 1);
+            var day = ($('date-select-day').value * 1);
+            var month = ($('date-select-month').value * 1 - 1);
+            var year = ($('date-select-year').value * 1);
             var today = new Date(year, month, day, 23, 59, 59, 999);
             var today0 = new Date(year, month, day, 0, 0, 0, 0);
 
@@ -490,10 +521,10 @@ document.addEvent('domready', function () {
                         // $('search-tag').set('text','');
                         // $('calendar-total-value').set('text', '0');
                     }
-                    $('calendar-total-value').set('text', zNodes.length);
+                    $('calendar-total-value').textContent = zNodes.length;
 
                     // $('header-text').set('text',new Date(loadfrom-DAY*t).toLocaleString()+' - '+new Date(loadto).toLocaleString());
-                    $('header-text').set('text', timeStr2(new Date(loadfrom - DAY * t), false) + ' ~ ' + timeStr2(new Date(loadto), true));
+                    $('header-text').textContent = timeStr2(new Date(loadfrom - DAY * t), false) + ' ~ ' + timeStr2(new Date(loadto), true);
                     refreshSearchTags();
                     // 
                     alertLoadingHistory(true);
@@ -532,15 +563,16 @@ document.addEvent('domready', function () {
 
 
 
-        $$('#search-tag a').each(function (e) {
-
-            if (tag[e.get('text')]) {
-                e.set('style', '');
-                // e1.set('style','display:show');
-            } else {
-                e.set('style', 'display:none');
-            }
-        });
+        var searchTagLinks = $$('#search-tag a');
+        for (var i = 0; i < searchTagLinks.length; i++) {
+            (function(e) {
+                if (tag[e.textContent]) {
+                    e.style.cssText = '';
+                } else {
+                    e.style.cssText = 'display:none';
+                }
+            })(searchTagLinks[i]);
+        }
 
     }
 
