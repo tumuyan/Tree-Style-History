@@ -170,7 +170,7 @@
                     const transaction = db.transaction(['VisitItem'], 'readwrite');
                     const store = transaction.objectStore('VisitItem');
 
-                    const request = store.add(visitItem);
+                    const request = store.put(visitItem);
 
                     request.onsuccess = () => resolve(visitItem);
                     request.onerror = (event) => reject(event);
