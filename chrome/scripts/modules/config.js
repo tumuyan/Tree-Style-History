@@ -271,26 +271,93 @@ function downloadOptions() {
 // Load slider
 
 function loadSlider(id, min, max, current) {
-    $(id).style.textAlign = 'right';
-    $(id).value = parseInt(localStorage[current], 10);
-    $(id).addEventListener('blur', function () {
-        var cval = $(id).value * 1;
-        if (cval >= min && cval <= max) {
-            $(id).value = cval;
-        } else {
-            $(id).value = min;
+    var input = $(id);
+    var slider = $(id + '-slider');
+    var handle = $(id + '-slider-handle');
+    if (!input || !slider || !handle) return;
+
+    input.style.textAlign = 'right';
+    input.value = parseInt(localStorage[current], 10);
+
+    function getHandleWidth() {
+        return handle.offsetWidth || 10;
+    }
+
+    function updateSliderPosition() {
+        var val = parseInt(input.value, 10);
+        if (isNaN(val)) val = min;
+        var percent = max > min ? (val - min) / (max - min) : 0;
+        if (percent < 0) percent = 0;
+        if (percent > 1) percent = 1;
+        var sliderWidth = slider.clientWidth;
+        var handleWidth = getHandleWidth();
+        var maxLeft = Math.max(sliderWidth - handleWidth, 0);
+        handle.style.marginLeft = Math.round(percent * maxLeft) + 'px';
+    }
+
+    function updateValue(val) {
+        if (isNaN(val)) val = min;
+        if (val < min) val = min;
+        if (val > max) val = max;
+        input.value = val;
+        updateSliderPosition();
+    }
+
+    function getValueFromMouse(clientX) {
+        var rect = slider.getBoundingClientRect();
+        var handleWidth = getHandleWidth();
+        var trackWidth = Math.max(rect.width - handleWidth, 1);
+        var offsetX = clientX - rect.left - handleWidth / 2;
+        var percent = offsetX / trackWidth;
+        if (percent < 0) percent = 0;
+        if (percent > 1) percent = 1;
+        return Math.round(min + percent * (max - min));
+    }
+
+    // Initialize slider position after layout
+    setTimeout(updateSliderPosition, 0);
+
+    // Input events
+    input.addEventListener('blur', function () {
+        var cval = parseInt(input.value, 10);
+        if (isNaN(cval) || cval < min) {
+            input.value = min;
+        } else if (cval > max) {
+            input.value = max;
             alert(min + '-' + max);
         }
+        updateSliderPosition();
     });
-    $(id).addEventListener('keydown', function (e) {
-        if (e.keyCode == 40 && ($(id).value * 1) > min) {
-            $(id).value = ($(id).value * 1) - 1;
+
+    input.addEventListener('keydown', function (e) {
+        var val = parseInt(input.value, 10);
+        if (isNaN(val)) val = min;
+        if (e.keyCode == 40 && val > min) {
+            input.value = --val;
+            updateSliderPosition();
+        } else if (e.keyCode == 38 && val < max) {
+            input.value = ++val;
+            updateSliderPosition();
         }
     });
-    $(id).addEventListener('keydown', function (e) {
-        if (e.keyCode == 38 && ($(id).value * 1) < max) {
-            $(id).value = ($(id).value * 1) + 1;
-        }
+
+    // Slider mouse events
+    var isDragging = false;
+
+    slider.addEventListener('mousedown', function (e) {
+        updateValue(getValueFromMouse(e.clientX));
+        isDragging = true;
+        e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', function (e) {
+        if (!isDragging) return;
+        updateValue(getValueFromMouse(e.clientX));
+        e.preventDefault();
+    });
+
+    document.addEventListener('mouseup', function () {
+        isDragging = false;
     });
 }
 

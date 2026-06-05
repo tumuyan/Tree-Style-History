@@ -7,9 +7,9 @@ import {
 import { filtUrl, updateFilter } from './config.js';
 
 // Left click
-function leftClick(url) {
-
-    window.event.preventDefault();
+function leftClick(url, event) {
+    event = event || window.event;
+    if (event) event.preventDefault();
 
     // Handle bookmarklets by executing them instead of navigating
     if (isBookmarkletUrl(url)) {
@@ -31,7 +31,7 @@ function leftClick(url) {
 
     var ca = localStorage['rh-click'];
     var cs = window.ctrlState;
-    if (cs == 'true' || window.event.button == 1) {
+    if (cs == 'true' || (event && event.button == 1)) {
         chrome.tabs.create({
             url: url,
             selected: false
@@ -195,15 +195,15 @@ function formatItem(data) {
 
 
 
-    var click = function () {
-        leftClick(url);
+    var click = function (e) {
+        leftClick(url, e);
     };
 
 
     // switch tab
     if (data.tabId != undefined) {
-        click = function () {
-            openTab(data.tabId);
+        click = function (e) {
+            openTab(data.tabId, e);
         }
     } else if (data.sessionId != undefined) {
         click = function () {
@@ -214,7 +214,7 @@ function formatItem(data) {
 
     var el = createElement('a', {
         'class': 'item',
-        target: '_blank',
+        target: '_blank', // Note: no href attribute, so no default navigation — preventDefault() is unnecessary
         styles: sobj,
         html: item
     });

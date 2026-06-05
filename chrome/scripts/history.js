@@ -183,7 +183,7 @@ document.addEventListener('DOMContentLoaded', function(){
                  searchStr='';
                  }
             }else{
-                searchStr-'';
+                searchStr='';
             }
 
             if(searchStr=='')
@@ -223,7 +223,7 @@ document.addEventListener('DOMContentLoaded', function(){
       var sv = this.value;
       if(sv.length + sv.replace(/[0-9a-zA-Z]+/g,'').length >= 2){
           if(sv!=searchStr){
-            sv==searchStr;
+            searchStr=sv;
             historyView('search', sv);
          }
         $('rh-views-insert').style.display = 'none';

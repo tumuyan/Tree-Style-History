@@ -59,7 +59,7 @@ function TimeToStr(time, skip_date, skip_year, skip_clock) {
         }
         datestr = datestr.replace('yyyy/', '').replace('/yyyy', '');
     } else {
-        datestr = datestr.replace('yyyy', currentTime.year);
+        datestr = datestr.replace('yyyy', currentTime.getFullYear());
     }
     return datestr + ' ' + hours + ':' + minutes + te;
 }
