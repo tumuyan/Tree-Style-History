@@ -1,6 +1,10 @@
 
+var _popupStartTime = window._htmlStartTime || ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now());
+
 document.addEventListener('DOMContentLoaded', function () {
     onStorageReady(function () {
+        const storageReadyTime = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+        console.info('[Popup] Storage ready at', (storageReadyTime - _popupStartTime).toFixed(1) + 'ms');
 
         // Updated/Installed
 
@@ -237,4 +241,7 @@ document.addEventListener('DOMContentLoaded', function () {
     //popup_scrollbar_fix.periodical(250);
 
     });
+
+    const popupEndTime = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    console.info('[Popup] Total popup load time:', (popupEndTime - _popupStartTime).toFixed(1) + 'ms');
 });

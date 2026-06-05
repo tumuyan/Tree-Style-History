@@ -4,6 +4,17 @@
 (function () {
     const globalObj = typeof window !== 'undefined' ? window : self;
 
+    // === Popup timing tracking ===
+    const _pageStartTime = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    if (globalObj.document) {
+        globalObj.document.addEventListener('DOMContentLoaded', function _onDCL() {
+            var elapsed = ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - _pageStartTime;
+            console.info('[Popup] HTML load → DOMContentLoaded:', elapsed.toFixed(1) + 'ms');
+            globalObj.document.removeEventListener('DOMContentLoaded', _onDCL);
+        });
+    }
+    globalObj._htmlStartTime = _pageStartTime;
+
     const toStorageString = (value) => {
         if (typeof value === 'string') {
             return value;
@@ -50,28 +61,29 @@
         _initializing: false,
         _initCallbacks: [],
         _resolveReady: null,
+        _initStartTime: 0,
         readyPromise: null,
 
         init(callback) {
-            if (callback) {
-                if (this._initialized) {
-                    callback();
-                    return this.readyPromise;
-                } else {
-                    this._initCallbacks.push(callback);
-                }
-            }
-
             if (this._initialized) {
+                if (callback) callback();
                 return this.readyPromise;
             }
 
             if (this._initializing) {
+                if (callback) this._initCallbacks.push(callback);
                 return this.readyPromise;
             }
 
-            console.debug('storageAdapter: starting initialization...');
+            this._initStartTime = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+            console.info('[StorageAdapter] === Initialization START ===');
+            console.info('[StorageAdapter] Service Worker context:', typeof globalObj.location !== 'undefined' ? globalObj.location.protocol : 'unknown');
             this._initializing = true;
+
+            if (callback) {
+                this._initCallbacks.push(callback);
+            }
+
             fetchFromStorage();
 
             return this.readyPromise;
@@ -143,8 +155,13 @@
         
         const cacheSize = Object.keys(adapter._cache).length;
         const duration = now() - startTime;
+        const totalDuration = adapter._initStartTime ? now() - adapter._initStartTime : duration;
         const elapsed = (typeof duration === 'number' && typeof duration.toFixed === 'function') ? duration.toFixed(2) : duration;
-        console.debug(`storageAdapter: initialized with ${cacheSize} keys in ${elapsed}ms`);
+        const totalElapsed = (typeof totalDuration === 'number' && typeof totalDuration.toFixed === 'function') ? totalDuration.toFixed(2) : totalDuration;
+        console.info(`[StorageAdapter] === Initialization COMPLETE ===`);
+        console.info(`[StorageAdapter]   Cache keys: ${cacheSize}`);
+        console.info(`[StorageAdapter]   Normalize time: ${elapsed}ms`);
+        console.info(`[StorageAdapter]   Total init time: ${totalElapsed}ms`);
         
         callbacks.forEach((cb, idx) => {
             try {
@@ -157,8 +174,12 @@
 
     function fetchFromStorage() {
         const fallbackToStorage = () => {
+            console.info('[StorageAdapter] Path: COLD START (fallback to chrome.storage.local)');
+            const now = (typeof performance !== 'undefined' && performance.now) ? performance.now.bind(performance) : Date.now;
+            const t0 = now();
             chrome.storage.local.get(null, (items) => {
-                console.debug('storageAdapter: loading data from chrome.storage.local');
+                const elapsed = (now() - t0).toFixed(2);
+                console.info(`[StorageAdapter] chrome.storage.local.get(null) completed in ${elapsed}ms`);
                 completeInitialization(items);
             });
         };
@@ -166,24 +187,37 @@
         if (typeof chrome !== 'undefined' && chrome.runtime && typeof chrome.runtime.getBackgroundPage === 'function') {
             try {
                 chrome.runtime.getBackgroundPage((bg) => {
-                    if (chrome.runtime.lastError || !bg || bg === globalObj || !bg.storageAdapter || !bg.storageAdapter._initialized) {
+                    const reasons = [];
+                    if (chrome.runtime.lastError) reasons.push('lastError: ' + chrome.runtime.lastError.message);
+                    if (!bg) reasons.push('bg is falsy');
+                    if (bg && bg === globalObj) reasons.push('bg === globalObj (SW not available)');
+                    if (bg && !bg.storageAdapter) reasons.push('bg.storageAdapter missing');
+                    if (bg && bg.storageAdapter && !bg.storageAdapter._initialized) reasons.push('bg.storageAdapter not initialized');
+
+                    if (reasons.length > 0) {
+                        console.info('[StorageAdapter] Path: COLD START (getBackgroundPage rejected)');
+                        console.info('[StorageAdapter]   Reasons:', reasons.join('; '));
                         fallbackToStorage();
                         return;
                     }
 
+                    console.info('[StorageAdapter] Path: HOT START (background cache)');
                     try {
                         const cloned = JSON.parse(JSON.stringify(bg.storageAdapter._cache || {}));
-                        console.debug('storageAdapter: using background cache for initialization');
+                        const keyCount = Object.keys(cloned).length;
+                        console.info(`[StorageAdapter]   Retrieved ${keyCount} keys from background page cache`);
                         completeInitialization(cloned);
                     } catch (error) {
-                        console.warn('storageAdapter: failed to clone background cache', error);
+                        console.warn('[StorageAdapter] Failed to clone background cache, falling back', error);
                         fallbackToStorage();
                     }
                 });
                 return;
             } catch (error) {
-                console.warn('storageAdapter: getBackgroundPage failed', error);
+                console.warn('[StorageAdapter] getBackgroundPage threw exception', error);
             }
+        } else {
+            console.info('[StorageAdapter] chrome.runtime.getBackgroundPage not available');
         }
 
         fallbackToStorage();
