@@ -301,15 +301,15 @@ function saveOptions(sync) {
 
     var so = {};
 
-    //  弹窗顺序    so['rh-list-order']
+    //  弹出顺序    so['rh-list-order']
     var rhlo = $$('#rhlistorder li');
 
-    // ???
+    // 获取最常访问列表项
     var mli = $$('#mvlist tr td:first-child');
 
-    //  在最近访问历史中过滤指定域名。
-    // chrome.storage.sync 提供一个 key 8K，最大512个 key，总数据量100K（即不可能512个 key 都装满）的存储。
-    // 因此需要对域名分组保存。每组100个域名（平均每个域名不超过80byte，100个不超过8k),预留10组的空间（不超过80k）
+    // 在最近访问历史中过滤指定域名。
+    // chrome.storage.sync 提供一个 key 8K，最多 12 个 key，总数据量 100K（即不可能 12 个 key 都装满）的存储。
+    // 因此需要对域名分组保存。每组 100 个域名（平均每个域名不超过 10byte，100 个不超过 8k），预留 10 组空间（不超过 80k）。
     var fli = $$('#flist tr td:first-child');
     var mlil = '';
     var flil = '';
@@ -543,7 +543,7 @@ function addList(item) {
     return false;
 }
 
-// 合并当且列表和在线列表（但是不保存）
+// 合并本地列表和在线列表（但是不保存）
 function mergeList() {
     chrome.storage.sync.get(null, function (result) {
 

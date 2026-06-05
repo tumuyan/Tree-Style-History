@@ -95,7 +95,9 @@ function initializeStorageState() {
         dbManager.init().then(() => {
             console.log('DB ready in service worker');
             dbManager.updateClosedTabsStatus();
-            loadDate(date.getTime(), 0);
+            loadDate(date.getTime(), 0).catch(error => {
+                console.error('loadDate error:', error);
+            });
         }).catch(error => {
             console.error('Failed to initialize DB:', error);
         });
@@ -280,7 +282,9 @@ chrome.tabs.onUpdated.addListener(function (id, info, tab) {
     if (info.status == "complete") {
         console.log("chrome.tabs.onUpdated v " + tab.openerTabId + " -> " + tab.id + "; " + 
             openerJson[tab.id.toString()] + " -> " + tab.url + "; title=" + tab.title);
-        visitTab(tab);
+        visitTab(tab).catch(error => {
+            console.error("visitTab error:", error);
+        });
     }
 
     updatedTab(tab);
@@ -359,8 +363,8 @@ if (chrome && chrome.storage && chrome.storage.onChanged) {
     });
 }
 
-// Load date function
-function loadDate(date, dateId) {
+// Load date function — refactored from recursive callback to async/await
+async function loadDate(date, dateId) {
     if (dateId > localStorage['load-range']) {
         console.log("loadDate done. dateId = " + dateId + ">" + localStorage['load-range']);
         localStorage['calendar-storage'] = JSON.stringify(calendar_r);
@@ -382,57 +386,61 @@ function loadDate(date, dateId) {
 
     if (calendar[qday]) {
         console.log("skip dday=" + dday + ":" + calendar[dday] + " qday=" + qday + ":" + calendar[qday]);
-        add_urls([], date, dateId, 0);
+        await add_urls([], date, dateId);
     } else {
         console.log("load dday=" + dday + ":" + calendar[dday] + " qday=" + qday + ":" + calendar[qday]);
         let obj = { text: '', maxResults: 0, startTime: date - (24 * 3600 * 1000), endTime: date };
-        chrome.history.search(obj, function (hi) {
+        
+        try {
+            let hi = await new Promise(resolve => chrome.history.search(obj, resolve));
             if (hi.length > 0) {
                 hi.sort(function (a, b) { return b.visitCount - a.visitCount });
                 save_calendar_storage2(obj, hi.length, false);
             }
-            add_urls(hi, date, dateId, 0);
-        });
+            await add_urls(hi, date, dateId);
+        } catch (error) {
+            console.error("loadDate search error:", error);
+            await add_urls([], date, dateId);
+        }
     }
 }
 
-// Add URLs function
-function add_urls(urls, date_ms, dateId, i) {
+// Add URLs function — refactored from recursive .then() to async/await + loop
+async function add_urls(urls, date_ms, dateId) {
     let h_len = urls.length;
 
-    if (i >= h_len) {
-        if (h_len < 1)
-            console.log("dateId=" + dateId + " loadDate(" + (new Date(date_ms)).toString() + ") no data");
-        else
-            console.log("dateId=" + dateId + " loadDate(" + (new Date(date_ms)).toString() + ") done");
-        loadDate(date_ms - DAY, dateId + 1);
-    } else if (urls[i] != undefined) {
-        if ((/^(http|https|ftp|ftps|file|chrome|chrome-extension|chrome-devtools)\:\/\/(.*)/).test(urls[i].title) == false && 
-            (/^(ftp|ftps|file|chrome|chrome-extension)\:\/\/(.*)/).test(urls[i].url) == false) {
-            
-            var title = urls[i].title;
-            var url = urls[i].url;
+    if (h_len > 0) {
+        for (let i = 0; i < h_len; i++) {
+            if (urls[i] != undefined && 
+                (/^(http|https|ftp|ftps|file|chrome|chrome-extension|chrome-devtools)\:\/\/(.*)/).test(urls[i].title) == false && 
+                (/^(ftp|ftps|file|chrome|chrome-extension)\:\/\/(.*)/).test(urls[i].url) == false) {
+                
+                var title = urls[i].title;
+                var url = urls[i].url;
 
-            if (title == '') {
-                title = url;
+                if (title == '') {
+                    title = url;
+                }
+
+                try {
+                    await dbManager.putURL({
+                        id: urls[i].id,
+                        url: url,
+                        lastVisitTime: urls[i].lastVisitTime,
+                        visitCount: urls[i].visitCount,
+                        title: title
+                    });
+                } catch (error) {
+                    console.log("add_url Error :( " + url, error);
+                }
             }
-
-            dbManager.putURL({
-                id: urls[i].id,
-                url: url,
-                lastVisitTime: urls[i].lastVisitTime,
-                visitCount: urls[i].visitCount,
-                title: title
-            }).then(() => {
-                add_urls(urls, date_ms, dateId, i + 1);
-            }).catch(error => {
-                console.log("add_url Error :( " + url, error);
-                add_urls(urls, date_ms, dateId, i + 1);
-            });
-        } else {
-            add_urls(urls, date_ms, dateId, i + 1);
         }
+        console.log("dateId=" + dateId + " loadDate(" + (new Date(date_ms)).toString() + ") done");
+    } else {
+        console.log("dateId=" + dateId + " loadDate(" + (new Date(date_ms)).toString() + ") no data");
     }
+
+    await loadDate(date_ms - DAY, dateId + 1);
 }
 
 // Load history function
@@ -445,96 +453,86 @@ function loadHistory() {
         urls_wait_load = urls.filter(url => {
             return !url.loadto || url.loadto < url.lastVisitTime;
         });
-        getVisits(0);
+        processVisits();
     }).catch(error => {
         console.error('loadHistory() Error:', error);
     });
 }
 
-// Get visits function
-function getVisits(urls_p) {
-    if (urls_p >= MAX) {
-        console.log("visitTab done.");
-        return;
-    }
-    if (urls_p >= urls_wait_load.length) {
-        chrome.action.setBadgeText({ text: "" });
-        console.log("getVisits done.");
-        return;
-    }
-    chrome.action.setBadgeText({ text: (urls_wait_load.length - urls_p).toString() });
+// Process visits - async/await refactored from getVisits/add_history/update_urls
+async function processVisits() {
+    for (let urls_p = 0; urls_p < urls_wait_load.length && urls_p < MAX; urls_p++) {
+        chrome.action.setBadgeText({ text: (urls_wait_load.length - urls_p).toString() });
 
-    let url_item = urls_wait_load[urls_p];
-    let details = { url: url_item.url };
-    chrome.history.getVisits(details, function (h) {
-        let h_len = h.length;
-        if (h_len < 1) {
-            console.log("getVisits() no data, url=" + details.url);
-            getVisits(urls_p + 1);
-        } else {
-            h.sort(function (a, b) { return b.visitTime - a.visitTime });
-            let loadfrom = (new Date()).getTime() - DAY * localStorage["load-range"];
-            add_history(urls_p, 0, h, loadfrom, url_item);
-        }
-    });
-}
+        const url_item = urls_wait_load[urls_p];
 
-// Add history function
-function add_history(urls_p, i, visitItems, loadfrom, url_item) {
-    if (visitItems.length > i) {
-        let visitTime = visitItems[i].visitTime;
-        let visitId = visitItems[i].visitId;
-        let refer = visitItems[i].referringVisitId;
-        let transition = visitItems[i].transition;
-
-        if (transition == "typed" || transition == "auto_bookmark" || 
-            transition == "keyword" || transition == "keyword_generated") {
-            console.log("change refer " + visitItems[i].referringVisitId + "->0 cause transition=" + transition);
-            refer = 0;
+        let h;
+        try {
+            h = await new Promise(resolve => {
+                chrome.history.getVisits({ url: url_item.url }, resolve);
+            });
+        } catch (e) {
+            console.log("getVisits() error, url=" + url_item.url, e);
+            continue;
         }
 
-        if (refer == undefined) refer = 0;
-
-        if (visitTime < loadfrom) {
-            console.log("add_history() time=" + visitTime + " < " + loadfrom + ", url=" + url_item.url);
-            update_urls(url_item, loadfrom, visitItems[0].visitTime, urls_p);
-            return;
+        if (h.length < 1) {
+            console.log("getVisits() no data, url=" + url_item.url);
+            continue;
         }
 
-        dbManager.putVisitItem({
-            visitId: visitId,
-            referringVisitId: refer,
-            url: url_item.url,
-            visitTime: visitTime,
-            title: url_item.title,
-            transition: transition,
-        }).then(() => {
-            console.log("Success :) " + refer + " -> " + visitId + " [" + url_item.visitCount + "] " + url_item.url);
-            add_history(urls_p, i + 1, visitItems, loadfrom, url_item);
-        }).catch(error => {
-            console.log("Error :( [" + visitId + "] " + url_item.url, error);
-            add_history(urls_p, i + 1, visitItems, loadfrom, url_item);
-        });
-    } else {
-        update_urls(url_item, loadfrom, visitItems[0].visitTime, urls_p);
+        h.sort((a, b) => b.visitTime - a.visitTime);
+        const loadfrom = (new Date()).getTime() - DAY * localStorage["load-range"];
+
+        for (const v of h) {
+            if (v.visitTime < loadfrom) {
+                console.log("add_history() time=" + v.visitTime + " < " + loadfrom + ", url=" + url_item.url);
+                break;
+            }
+
+            const transition = v.transition;
+            let refer = v.referringVisitId;
+
+            if (transition == "typed" || transition == "auto_bookmark" || 
+                transition == "keyword" || transition == "keyword_generated") {
+                console.log("change refer " + v.referringVisitId + "->0 cause transition=" + transition);
+                refer = 0;
+            }
+
+            if (refer == undefined) refer = 0;
+
+            try {
+                await dbManager.putVisitItem({
+                    visitId: v.visitId,
+                    referringVisitId: refer,
+                    url: url_item.url,
+                    visitTime: v.visitTime,
+                    title: url_item.title,
+                    transition: transition,
+                });
+                console.log("Success :) " + refer + " -> " + v.visitId + " [" + url_item.visitCount + "] " + url_item.url);
+            } catch (error) {
+                console.log("Error :( [" + v.visitId + "] " + url_item.url, error);
+            }
+        }
+
+        // Update URL record (always with first visit time, matching original behavior)
+        url_item.loadfrom = loadfrom;
+        url_item.loadto = h[0].visitTime;
+
+        try {
+            await dbManager.putURL(url_item);
+        } catch (error) {
+            console.error("update_urls Error :(", error);
+        }
     }
+
+    chrome.action.setBadgeText({ text: "" });
+    console.log("getVisits done.");
 }
 
-// Update URLs function
-function update_urls(u, loadfrom, loadto, urls_p) {
-    u.loadfrom = loadfrom;
-    u.loadto = loadto;
-    
-    dbManager.putURL(u).then(() => {
-        getVisits(urls_p + 1);
-    }).catch(error => {
-        console.error("update_urls Error :(", error);
-        getVisits(urls_p + 1);
-    });
-}
-
-// Visit tab function
-function visitTab(tab) {
+// Visit tab function — refactored from callback to async/await
+async function visitTab(tab) {
     let url = tab.url;
 
     if (url == undefined || url == "") return;
@@ -549,16 +547,19 @@ function visitTab(tab) {
             date = date + DAY;
 
         let details = { url: tab.url };
-        chrome.history.getVisits(details, function (h) {
-            let h_len = h.length;
-            if (h_len < 1) {
+        
+        try {
+            let h = await new Promise(resolve => chrome.history.getVisits(details, resolve));
+            if (h.length < 1) {
                 console.log("visitTab(" + tab.id + ") no data, url=" + tab.url);
             } else {
                 h.sort(function (a, b) { return b.visitTime - a.visitTime });
                 let loadfrom = (new Date()).getTime() - 1000000;
                 add_tab_history(h, 0, loadfrom, { id: tab.id, url: tab.url, title: tab.title, lastVisitTime: now });
             }
-        });
+        } catch (error) {
+            console.error("visitTab() error:", error);
+        }
     }
 }
 
