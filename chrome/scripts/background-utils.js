@@ -189,5 +189,17 @@ function getFaviconUrl(url, options) {
         return 'https://icons.duckduckgo.com/ip3/' + hostname + '.ico';
     }
 
+    if (service === 'favicon_im') {
+        return 'https://favicon.im/' + hostname;
+    }
+
+    if (service === 'faviconkit') {
+        return 'https://ico.faviconkit.net/' + hostname + '?sz=64';
+    }
+
+    if (service === 'faviconsnap') {
+        return 'https://faviconsnap.com/api/favicon?url=' + encodeURIComponent(parsedUrl.origin + '/') + '&size=64';
+    }
+
     return 'chrome://favicon/' + trimmedUrl;
 }

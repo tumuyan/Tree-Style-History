@@ -122,6 +122,15 @@
     "faviconServiceDuckduckgo": {
         "message": "DuckDuckGo favicon service"
     },
+    "faviconServiceFaviconIm": {
+        "message": "Favicon.im (recommended)"
+    },
+    "faviconServiceFaviconkit": {
+        "message": "FaviconKit"
+    },
+    "faviconServiceFaviconsnap": {
+        "message": "FaviconSnap"
+    },
     "help1": {
         "message": "The number of recent history items in the pop-up"
     },

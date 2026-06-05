@@ -122,6 +122,15 @@
     "faviconServiceDuckduckgo": {
         "message": "DuckDuckGo 网站图标服务"
     },
+    "faviconServiceFaviconIm": {
+        "message": "Favicon.im（推荐）"
+    },
+    "faviconServiceFaviconkit": {
+        "message": "FaviconKit"
+    },
+    "faviconServiceFaviconsnap": {
+        "message": "FaviconSnap"
+    },
     "help1": {
         "message": "在弹窗中最多显示多少条最近访问历史"
     },

@@ -99,6 +99,7 @@ input[type="text"] {
   display: block;
   position: relative;
   text-decoration: none;
+  cursor: pointer;
   padding: 2px 0;
   white-space: nowrap;
 }
