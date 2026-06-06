@@ -139,41 +139,7 @@ document.addEventListener('DOMContentLoaded', function () {
         else if (rhporder[o] == 'rb-order' && $('rb-inject')) { recentBookmarks(); }
         else if (rhporder[o] == 'mv-order' && $('mv-inject')) { mostVisited(); }
         else if (rhporder[o] == 'rt-order' && $('rt-inject')) { 
-            // 按照排序顺序调用showRecentTabs
-            try {
-                if (typeof messageAdapter !== 'undefined') {
-                    // 获取recentTabs和openedTabs两个数据
-                    Promise.all([
-                        messageAdapter.getBackgroundData('recentTabs'),
-                        messageAdapter.getBackgroundData('openedTabs')
-                    ]).then(([recentTabs, openedTabs]) => {
-                        if (recentTabs && recentTabs.length > 0) {
-                            // 传递获取到的数据给showRecentTabs
-                            showRecentTabs(openedTabs, recentTabs);
-                        } else {
-                            // 如果没有数据，隐藏rt-inject元素
-                            $('rt-inject').style.display = 'none';
-                        }
-                    }).catch(err => console.warn('Failed to get tabs data:', err));
-                } else if (typeof chrome !== 'undefined' && chrome.extension && chrome.extension.getBackgroundPage) {
-                    try {
-                        const bg = chrome.extension.getBackgroundPage();
-                        if (bg && bg.recentTabs && bg.recentTabs.length > 0) {
-                            // 传递获取到的数据给showRecentTabs
-                            showRecentTabs(bg.openedTabs, bg.recentTabs);
-                        } else {
-                            // 如果没有数据，隐藏rt-inject元素
-                            $('rt-inject').style.display = 'none';
-                        }
-                    } catch (err) {
-                        console.warn('Error accessing background page:', err);
-                        $('rt-inject').style.display = 'none';
-                    }
-                }
-            } catch (err) {
-                console.warn('Error accessing recentTabs:', err);
-                $('rt-inject').style.display = 'none';
-            }
+            showRecentTabs();
         }
     }
 

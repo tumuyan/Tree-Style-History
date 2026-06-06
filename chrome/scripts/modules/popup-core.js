@@ -623,7 +623,12 @@ function openTab(id) {
 
 
 // Recent Tabs in popup
-function showRecentTabs() {
+function showRecentTabs(rhhistory, rt) {
+    if (rhhistory !== undefined && rt !== undefined) {
+        // Data provided directly, skip message passing
+        showRecentTabsImpl(rhhistory, rt);
+        return;
+    }
     if (typeof window.messageAdapter !== 'undefined') {
         Promise.all([
             window.messageAdapter.getBackgroundData('openedTabs'),
@@ -632,6 +637,8 @@ function showRecentTabs() {
             showRecentTabsImpl(rhhistory, rt);
         }).catch(err => {
             console.error('Failed to get tab data:', err);
+            var el = $('rt-inject');
+            if (el) el.style.display = 'none';
         });
     } else {
         var rhhistory = chrome.extension.getBackgroundPage().openedTabs;
