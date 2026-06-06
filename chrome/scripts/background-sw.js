@@ -676,6 +676,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             }
             break;
 
+        case 'refreshContextMenu':
+            initContextMenu();
+            sendResponse({ result: true });
+            break;
+
         default:
             sendResponse(undefined);
     }

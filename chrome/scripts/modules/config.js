@@ -494,6 +494,13 @@ function saveOptions(sync) {
 
     updateFilter();
 
+    // Notify service worker to refresh context menu
+    if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) {
+        chrome.runtime.sendMessage({ action: 'refreshContextMenu' }).catch(function () {
+            // SW may be inactive; message will restart it
+        });
+    }
+
 }
 
 
