@@ -51,6 +51,7 @@ self.addEventListener('activate', (event) => {
 // Favicon cache for third-party favicon services
 // Reduces 429 errors by caching favicon responses in the Cache API
 const FAVICON_CACHE = 'favicon-cache';
+const FAVICON_SHARED_KEY_PREFIX = 'https://favicon-cache.internal/shared/';
 const FAVICON_SERVICE_PATTERNS = [
     'icons.duckduckgo.com',
     'www.google.com/s2/favicons',
@@ -58,6 +59,10 @@ const FAVICON_SERVICE_PATTERNS = [
     'ico.faviconkit.net/',
     'faviconsnap.com/api/favicon'
 ];
+
+// Share favicon cache between services (default: enabled)
+// Updated from localStorage when storage is ready
+var _shareFaviconCache = true;
 
 function isFaviconRequest(url) {
     if (typeof url !== 'string') return false;
@@ -67,21 +72,109 @@ function isFaviconRequest(url) {
     return false;
 }
 
+// Extract hostname from favicon service URL for shared cache key
+function extractHostnameFromFaviconUrl(url) {
+    try {
+        var u = new URL(url);
+        // DuckDuckGo: icons.duckduckgo.com/ip3/{hostname}.ico
+        if (u.hostname === 'icons.duckduckgo.com') {
+            var m = url.match(/\/ip3\/([^\/?]+)\.ico/);
+            if (m) return m[1];
+        }
+        // Favicon.im: favicon.im/{hostname}
+        if (u.hostname === 'favicon.im') {
+            var m = url.match(/favicon\.im\/([^\/?]+)/);
+            if (m) return m[1];
+        }
+        // FaviconKit: ico.faviconkit.net/favicon/{hostname}
+        if (u.hostname === 'ico.faviconkit.net') {
+            var m = url.match(/\/favicon\/([^\/?]+)/);
+            if (m) return m[1];
+        }
+        // FaviconSnap: faviconsnap.com/api/favicon?url=...
+        if (u.hostname === 'faviconsnap.com') {
+            var du = u.searchParams.get('url');
+            if (du) return new URL(decodeURIComponent(du)).hostname;
+        }
+        // Google: www.google.com/s2/favicons?domain_url=...
+        if (u.hostname === 'www.google.com') {
+            var du = u.searchParams.get('domain_url');
+            if (du) return new URL(decodeURIComponent(du)).hostname;
+        }
+    } catch (e) {}
+    return null;
+}
+
 self.addEventListener('fetch', (event) => {
     if (isFaviconRequest(event.request.url)) {
         event.respondWith(
-            caches.match(event.request).then(function (cachedResponse) {
-                if (cachedResponse) return cachedResponse;
-                return fetch(event.request).then(function (response) {
-                    if (response.ok) {
-                        var responseClone = response.clone();
-                        caches.open(FAVICON_CACHE).then(function (cache) {
-                            cache.put(event.request, responseClone);
-                        });
+            (async function () {
+                var cache = await caches.open(FAVICON_CACHE);
+                
+                // Try shared cache first (same hostname cached from any service)
+                if (_shareFaviconCache) {
+                    var hostname = extractHostnameFromFaviconUrl(event.request.url);
+                    if (hostname) {
+                        var sharedRequest = new Request(FAVICON_SHARED_KEY_PREFIX + hostname);
+                        var sharedMatch = await cache.match(sharedRequest);
+                        if (sharedMatch) return sharedMatch;
                     }
-                    return response;
-                });
-            })
+                }
+                
+                // Fall back to exact URL match
+                var exactMatch = await cache.match(event.request);
+                if (exactMatch) return exactMatch;
+                
+                // Fetch from network
+                var response = await fetch(event.request);
+                // Cache by exact URL (cache all responses that returned image data)
+                if (response && (response.ok || response.type === 'opaque')) {
+                    var clone1 = response.clone();
+                    cache.put(event.request, clone1);
+                    
+                    // Shared cache: ONLY for confirmed successful responses (response.ok === true)
+                    // Opaque responses (status 0, e.g. 404 from Google) cannot be verified,
+                    // caching them in shared would poison other services' fallback requests.
+                    if (_shareFaviconCache && response.ok) {
+                        var hostname = extractHostnameFromFaviconUrl(event.request.url);
+                        if (hostname) {
+                            var sharedKey = new Request(FAVICON_SHARED_KEY_PREFIX + hostname);
+                            cache.put(sharedKey, response.clone());
+                        }
+                    }
+                }
+                
+                // SW-level fallback: when primary favicon service returns failure (non-ok or opaque),
+                // automatically try the configured fallback service before returning the error to the page.
+                // This prevents 404 console errors (e.g. Google returns 404+default icon for unknown domains).
+                if (response && (!response.ok || response.type === 'opaque')) {
+                    var hostname = extractHostnameFromFaviconUrl(event.request.url);
+                    if (hostname) {
+                        var fallbackService = localStorage['favicon-service-fallback'] || '';
+                        if (fallbackService) {
+                            var fallbackUrl = getFaviconUrl('https://' + hostname, { service: fallbackService });
+                            if (fallbackUrl && typeof fallbackUrl === 'string' && fallbackUrl.indexOf('http') === 0 && isFaviconRequest(fallbackUrl)) {
+                                try {
+                                    var fallbackResponse = await fetch(fallbackUrl);
+                                    if (fallbackResponse && (fallbackResponse.ok || fallbackResponse.type === 'opaque')) {
+                                        // Cache fallback response for future requests
+                                        var fbClone1 = fallbackResponse.clone();
+                                        cache.put(new Request(fallbackUrl), fbClone1);
+                                        if (_shareFaviconCache) {
+                                            var sharedKey = new Request(FAVICON_SHARED_KEY_PREFIX + hostname);
+                                            cache.put(sharedKey, fallbackResponse.clone());
+                                        }
+                                        return fallbackResponse;
+                                    }
+                                } catch (e) {
+                                    console.warn('SW: fallback fetch failed for', hostname, e);
+                                }
+                            }
+                        }
+                    }
+                }
+                return response;
+            })()
         );
     }
 });
@@ -104,6 +197,9 @@ chrome.runtime.onStartup.addListener(() => {
 function initializeStorageState() {
     console.log('Initializing storage state... (' + (performance.now() - _tSW).toFixed(1) + 'ms)');
     _tSW_init = performance.now();
+    
+    // Read favicon cache sharing preference
+    _shareFaviconCache = localStorage['share-favicon-cache'] !== 'no';
     
     oid = localStorage['oid'];
     if (oid == undefined) {
@@ -715,9 +811,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             break;
 
         case 'refreshContextMenu':
+            // Re-read favicon cache config from storage
+            _shareFaviconCache = localStorage['share-favicon-cache'] !== 'no';
             initContextMenu();
             sendResponse({ result: true });
             break;
+
+        case 'clearFaviconCache':
+            caches.delete(FAVICON_CACHE).then(function (deleted) {
+                // Re-create empty cache for future use
+                if (deleted) {
+                    caches.open(FAVICON_CACHE);
+                }
+                sendResponse({ result: deleted });
+            });
+            return true; // Keep channel open for async response
 
         default:
             sendResponse(undefined);

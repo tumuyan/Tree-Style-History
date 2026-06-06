@@ -141,7 +141,9 @@ var defaultValues = {
     "rhs-showext": "no",
     "rhs-showbg": "no",
     "show-popup": "yes",
-    "favicon-service": "duckduckgo"
+    "favicon-service": "duckduckgo",
+    "share-favicon-cache": "yes",
+    "favicon-service-fallback": ""
 };
 
 function defaultConfig(clean) {
@@ -197,7 +199,7 @@ function getFaviconUrl(url, options) {
     if (url.indexOf('file://') === 0) {
         return 'images/iconmonstr-file-3.svg';
     }
-    var service = localStorage['favicon-service'] || defaultValues['favicon-service'];
+    var service = options.service || localStorage['favicon-service'] || defaultValues['favicon-service'];
     var trimmedUrl = url.trim();
     if (!trimmedUrl) return Object.prototype.hasOwnProperty.call(options, 'fallback') ? options.fallback : '';
     var hostValue = '#';
@@ -223,4 +225,11 @@ function getFaviconUrl(url, options) {
     if (service === 'faviconkit') return 'https://ico.faviconkit.net/favicon/' + hostname + '?sz=64';
     if (service === 'faviconsnap') return 'https://faviconsnap.com/api/favicon?url=' + encodeURIComponent(parsedUrl.origin + '/') + '&size=64';
     return 'chrome://favicon/' + trimmedUrl;
+}
+
+// Generate onerror attribute for favicon img fallback to secondary service (sync with modules/helpers.js)
+function getFaviconOnerror(url) {
+    var fallbackService = localStorage['favicon-service-fallback'] || '';
+    if (!fallbackService) return '';
+    return getFaviconUrl(url, { service: fallbackService });
 }

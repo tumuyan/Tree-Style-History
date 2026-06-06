@@ -411,14 +411,14 @@ document.addEventListener('DOMContentLoaded', function () {
                                 var moreid = 'more-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                                 var errorid = 'error-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                                 var groupid = 'group-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
-                                var faviconSrc = rha[thisc.counter].favicon ? 'src="' + escapeHtmlAttr(rha[thisc.counter].favicon) + '"' : '';
+                                var faviconUrl = rha[thisc.counter].favicon || '';
                                 var escapedHost = escapeHtmlAttr(host);
                                 var escapedHostDisplay = escapeHtmlAttr(host.replace('www.', ''));
                                 var groupEl = createElement('div', {
                                     title: host,
                                     rel: ibcv,
                                     'class': 'item-holder group-title ',
-                                    html: '<a href="#" class="group-title-toggle group-title-toggle-bookmark" id="' + toggleid + '" data-host="' + escapedHost + '" rel="' + escapedHost + '"></a><label class="group-title-toggle-count" rel="' + escapedHost + '"></label><input type="hidden"  style="width: 0; display:none;   padding: 0 0 0 0;  margin: 0 0 0 0;    visibility: hidden;  left: 0;"  class="group-title-checkbox" id="' + moreid + '" value="' + escapedHost + '"><img id="' + errorid + '" class="group-title-favicon" alt="Favicon" ' + faviconSrc + '><span id="' + groupid + '" data-host="' + escapedHost + '" class="group-title-host">' + escapedHostDisplay + '</span>'
+                                    html: '<a href="#" class="group-title-toggle group-title-toggle-bookmark" id="' + toggleid + '" data-host="' + escapedHost + '" rel="' + escapedHost + '"></a><label class="group-title-toggle-count" rel="' + escapedHost + '"></label><input type="hidden"  style="width: 0; display:none;   padding: 0 0 0 0;  margin: 0 0 0 0;    visibility: hidden;  left: 0;"  class="group-title-checkbox" id="' + moreid + '" value="' + escapedHost + '"><img id="' + errorid + '" class="group-title-favicon" alt="Favicon"><span id="' + groupid + '" data-host="' + escapedHost + '" class="group-title-host">' + escapedHostDisplay + '</span>'
                                 });
                                 $(into).appendChild(groupEl);
                                 $(toggleid).addEventListener('click', function () {
@@ -428,9 +428,8 @@ document.addEventListener('DOMContentLoaded', function () {
                                 $(moreid).addEventListener('click', function () {
                                     getMoreItems(this);
                                 });
-                                $(errorid).addEventListener('error', function () {
-                                    this.src = 'images/blank.png';
-                                });
+                                var _faviconFallbackUrl = getFaviconOnerror(rha[thisc.counter].url);
+                                setupFaviconElement($(errorid), faviconUrl, _faviconFallbackUrl);
                                 $(groupid).addEventListener('click', function () {
                                     var host = this.getAttribute('data-host');
                                     toggleGroup(host);
@@ -561,13 +560,13 @@ document.addEventListener('DOMContentLoaded', function () {
                             }
                             var escapedTooltip = escapeHtmlAttr(tooltipText);
 
-                            var faviconSrc = rha[thisc.counter].favicon ? 'src="' + escapeHtmlAttr(rha[thisc.counter].favicon) + '"' : '';
+                            var faviconUrl = rha[thisc.counter].favicon || '';
                             var item;
                             item = '<div class="item">';
                             item += '<span class="checkbox"><label><input class="chkbx bookmark-checkbox" type="checkbox" id="' + selectid + '" value="' + escapedUrlAttr + '" name="check"></label>&nbsp;</span>';
                             item += '<span class="time">' + escapedTimeAttr + '</span>';
                             item += '<a target="_blank" class="link" href="' + escapedUrlAttr + '">';
-                            item += '<img id="' + errorid + '" class="favicon" alt="Favicon" ' + faviconSrc +'>';
+                            item += '<img id="' + errorid + '" class="favicon" alt="Favicon">';
                             item += '<span class="title" title="' + escapedTooltip + '" rel="'  + escapedTimeAttr +  '">' + escapedDisplayTitle + '</span>';
                             item += '</a>';
                             item += '</div>';
@@ -607,9 +606,8 @@ document.addEventListener('DOMContentLoaded', function () {
                             $(selectid).addEventListener('click', function () {
                                 selectBookmarkItem(this, 'single');
                             });
-                            $(errorid).addEventListener('error', function () {
-                                this.src = 'images/blank.png';
-                            });
+                            var _faviconFallbackUrl = getFaviconOnerror(rha[thisc.counter].url);
+                            setupFaviconElement($(errorid), faviconUrl, _faviconFallbackUrl);
                         }
                     }
                     thisc.counter++;

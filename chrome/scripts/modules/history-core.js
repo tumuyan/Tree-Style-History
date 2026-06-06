@@ -2,7 +2,7 @@
 // History page display functions extracted from func.js
 
 import { $, $$, createElement } from '../dom-helper.js';
-import { returnLang, TimeToStr, formatDate, truncate, title_fix, get_host, getFaviconUrl, escapeHtmlAttr, _DATE } from './helpers.js';
+import { returnLang, TimeToStr, formatDate, truncate, title_fix, get_host, getFaviconUrl, getFaviconOnerror, setupFaviconElement, escapeHtmlAttr, _DATE } from './helpers.js';
 import { filtUrl } from './config.js';
 import { calendar_storage2, save_calendar_storage2 } from './calendar.js';
 
@@ -200,12 +200,12 @@ function history(w, q) {
                                     var moreid = 'more-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                                     var errorid = 'error-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                                     var groupid = 'group-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
-                                    var faviconSrc = rha[thisc.counter].favicon ? 'src="' + rha[thisc.counter].favicon + '"' : '';
+                                    var faviconUrl = rha[thisc.counter].favicon || '';
                                     var groupDiv = createElement('div', {
                                         title: rha[thisc.counter].host,
                                         rel: ibcv,
                                         'class': 'item-holder group-title ',
-                                        html: '<a href="#" class="group-title-toggle" id="' + toggleid + '" data-host="' + rha[thisc.counter].host + '" rel="' + rha[thisc.counter].host + '"></a><input type="checkbox" class="group-title-checkbox" id="' + moreid + '" value="' + rha[thisc.counter].host + '"><img id="' + errorid + '" class="group-title-favicon" alt="Favicon" ' + faviconSrc + '><span id="' + groupid + '" data-host="' + rha[thisc.counter].host + '" class="group-title-host">' + rha[thisc.counter].host.replace('www.', '') + '</span>'
+                                        html: '<a href="#" class="group-title-toggle" id="' + toggleid + '" data-host="' + rha[thisc.counter].host + '" rel="' + rha[thisc.counter].host + '"></a><input type="checkbox" class="group-title-checkbox" id="' + moreid + '" value="' + rha[thisc.counter].host + '"><img id="' + errorid + '" class="group-title-favicon" alt="Favicon"><span id="' + groupid + '" data-host="' + rha[thisc.counter].host + '" class="group-title-host">' + rha[thisc.counter].host.replace('www.', '') + '</span>'
                                     });
                                     $(into).appendChild(groupDiv);
                                     $(toggleid).addEventListener('click', function () {
@@ -215,9 +215,8 @@ function history(w, q) {
                                     $(moreid).addEventListener('click', function () {
                                         getMoreItems(this);
                                     });
-                                    $(errorid).addEventListener('error', function () {
-                                        this.src = 'images/blank.png';
-                                    });
+                                    var _faviconFallbackUrl = getFaviconOnerror(rha[thisc.counter].url);
+                                    setupFaviconElement($(errorid), faviconUrl, _faviconFallbackUrl);
                                     $(groupid).addEventListener('click', function () {
                                         var host = this.getAttribute('data-host');
                                         toggleGroup(host);
@@ -284,13 +283,13 @@ function history(w, q) {
                                 }
                                 var selectid = 'select-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                                 var errorid = 'error-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
-                                var faviconSrc = rha[thisc.counter].favicon ? 'src="' + rha[thisc.counter].favicon + '"' : '';
+                                var faviconUrl = rha[thisc.counter].favicon || '';
                                 var item;
                                 item = '<div class="item">';
                                 item += '<span class="checkbox"><label><input class="chkbx" type="checkbox" id="' + selectid + '" value="' + rha[thisc.counter].url + '" name="check"></label>&nbsp;</span>';
                                 item += '<span class="time">' + rha[thisc.counter].time + '</span>';
                                 item += '<a target="_blank" class="link" href="' + rha[thisc.counter].url + '">';
-                                item += '<img id="' + errorid + '" class="favicon" alt="Favicon" ' + faviconSrc + '">';
+                                item += '<img id="' + errorid + '" class="favicon" alt="Favicon">';
                                 item += '<span class="title" title="' + rha[thisc.counter].url + '" rel="' + returnLang('visits') + ': ' + rha[thisc.counter].visits + ' | ' + rha[thisc.counter].time + ' ' + rha[thisc.counter].date + '">' + rha[thisc.counter].title + '</span>';
                                 item += '</a>';
                                 item += '</div>';
@@ -306,9 +305,8 @@ function history(w, q) {
                                 $(selectid).addEventListener('click', function () {
                                     selectHistoryItem(this, 'single');
                                 });
-                                $(errorid).addEventListener('error', function () {
-                                    this.src = 'images/blank.png';
-                                });
+                                var _faviconFallbackUrl = getFaviconOnerror(rha[thisc.counter].url);
+                                setupFaviconElement($(errorid), faviconUrl, _faviconFallbackUrl);
                             }
                         }
                         thisc.counter++;

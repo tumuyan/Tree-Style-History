@@ -2,6 +2,7 @@ import { $, $$, createElement } from '../dom-helper.js';
 import {
     returnLang, escapeHtmlAttr, title_fix, timeNow, formatDate,
     getFaviconUrl, isBookmarkletUrl, get_host, executeBookmarklet,
+    getFaviconOnerror, setupFaviconElement,
     Clipboard, getVersion, getVersionType
 } from './helpers.js';
 import { filtUrl, updateFilter } from './config.js';
@@ -181,7 +182,7 @@ function formatItem(data) {
     }
 
     if (faviconSrc) {
-        item += '<img class="favicon" alt="Favicon" src="' + escapeHtmlAttr(faviconSrc) + '">';
+        item += '<img class="favicon" alt="Favicon">';
     }
     else {
         item += '<img class="favicon" alt="Favicon">';
@@ -223,6 +224,11 @@ function formatItem(data) {
         e.preventDefault();
         rightClick(url);
     });
+    var faviconFallbackUrl = getFaviconOnerror(url);
+    var imgEl = el.querySelector('img.favicon');
+    if (imgEl) {
+        setupFaviconElement(imgEl, faviconSrc, faviconFallbackUrl);
+    }
     return el;
 
 }

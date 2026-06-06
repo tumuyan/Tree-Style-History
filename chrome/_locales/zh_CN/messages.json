@@ -131,6 +131,30 @@
     "faviconServiceFaviconsnap": {
         "message": "FaviconSnap"
     },
+    "faviconServiceFallback": {
+        "message": "次选网站图标服务"
+    },
+    "helpFaviconServiceFallback": {
+        "message": "当首选服务请求失败（404）时，自动使用次选服务重试。"
+    },
+    "none": {
+        "message": "无"
+    },
+    "shareFaviconCache": {
+        "message": "共享图标缓存"
+    },
+    "helpShareFaviconCache": {
+        "message": "开启后，从一个服务缓存的图标可在切换到其他服务时复用，减少重复请求，加快加载速度。"
+    },
+    "clearFaviconCacheLabel": {
+        "message": "清除图标缓存"
+    },
+    "clearingFaviconCacheLabel": {
+        "message": "清除中..."
+    },
+    "clearFaviconCacheDoneLabel": {
+        "message": "完成"
+    },
     "help1": {
         "message": "在弹窗中最多显示多少条最近访问历史"
     },

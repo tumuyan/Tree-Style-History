@@ -131,6 +131,30 @@
     "faviconServiceFaviconsnap": {
         "message": "FaviconSnap"
     },
+    "faviconServiceFallback": {
+        "message": "Fallback favicon service"
+    },
+    "helpFaviconServiceFallback": {
+        "message": "When the primary service fails (404), automatically retry with this fallback service."
+    },
+    "none": {
+        "message": "None"
+    },
+    "shareFaviconCache": {
+        "message": "Share favicon cache"
+    },
+    "helpShareFaviconCache": {
+        "message": "When enabled, favicons cached from one service can be reused when switching to another service. This reduces duplicate requests and speeds up loading."
+    },
+    "clearFaviconCacheLabel": {
+        "message": "Clear favicon cache"
+    },
+    "clearingFaviconCacheLabel": {
+        "message": "Clearing..."
+    },
+    "clearFaviconCacheDoneLabel": {
+        "message": "Done"
+    },
     "help1": {
         "message": "The number of recent history items in the pop-up"
     },

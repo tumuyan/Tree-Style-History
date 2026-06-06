@@ -41,7 +41,9 @@ var defaultValues = {
     "rhs-showext": "no",
     "rhs-showbg": "no",
     "show-popup": "yes",
-    "favicon-service": "duckduckgo"
+    "favicon-service": "duckduckgo",
+    "share-favicon-cache": "yes",
+    "favicon-service-fallback": ""
 };
 
 function defaultConfig(clean) {
@@ -208,6 +210,8 @@ function loadOptions(full) {
             }
         }
     }
+    selectOptionByIdValue('shareFaviconCache', localStorage['share-favicon-cache']);
+    selectOptionByIdValue('faviconServiceFallback', localStorage['favicon-service-fallback']);
 
     previewItem();
 
@@ -449,6 +453,8 @@ function saveOptions(sync) {
     if ($('faviconService')) {
         so['favicon-service'] = $('faviconService').options[$('faviconService').selectedIndex].value;
     }
+    so['share-favicon-cache'] = $('shareFaviconCache').options[$('shareFaviconCache').selectedIndex].value;
+    so['favicon-service-fallback'] = $('faviconServiceFallback').options[$('faviconServiceFallback').selectedIndex].value;
     for (var i in so) {
         localStorage[i] = so[i];
         console.log(i + '=' + so[i]);

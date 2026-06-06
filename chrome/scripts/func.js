@@ -25,7 +25,7 @@ import {
     chromeURL, getVersion, getVersionType,
     Clipboard,
     popup_scrollbar_fix,
-    get_host, getFaviconUrl
+    get_host, getFaviconUrl, getFaviconOnerror, setupFaviconElement
 } from './modules/helpers.js';
 
 import {
@@ -134,6 +134,8 @@ window.Clipboard = Clipboard;
 window.popup_scrollbar_fix = popup_scrollbar_fix;
 window.get_host = get_host;
 window.getFaviconUrl = getFaviconUrl;
+window.getFaviconOnerror = getFaviconOnerror;
+window.setupFaviconElement = setupFaviconElement;
 
 // --- Config ---
 window.defaultValues = defaultValues;

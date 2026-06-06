@@ -90,6 +90,23 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 
+    $('clearFaviconCache').value = returnLang('clearFaviconCacheLabel');
+    $('clearFaviconCache').addEventListener('click', function () {
+        var btn = this;
+        btn.disabled = true;
+        btn.value = returnLang('clearingFaviconCacheLabel');
+        chrome.runtime.sendMessage({ action: 'clearFaviconCache' }).then(function (response) {
+            btn.value = returnLang('clearFaviconCacheDoneLabel');
+            setTimeout(function () {
+                btn.disabled = false;
+                btn.value = returnLang('clearFaviconCacheLabel');
+            }, 2000);
+        }).catch(function () {
+            btn.disabled = false;
+            btn.value = returnLang('clearFaviconCacheLabel');
+        });
+    });
+
 
     // $('shortcuts').set('value', returnLang('shortcuts'));
     $('shortcuts').addEventListener('click', function () {

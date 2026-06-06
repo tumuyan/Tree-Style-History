@@ -314,7 +314,7 @@ function getFaviconUrl(url, options) {
     if (url.indexOf('file://') === 0) {
         return 'images/iconmonstr-file-3.svg';
     }
-    var service = localStorage['favicon-service'] || defaultValues['favicon-service'];
+    var service = options.service || localStorage['favicon-service'] || defaultValues['favicon-service'];
     var trimmedUrl = url.trim();
     if (!trimmedUrl) return options.hasOwnProperty('fallback') ? options.fallback : '';
     var hostValue = '#';
@@ -342,6 +342,47 @@ function getFaviconUrl(url, options) {
     return 'chrome://favicon/' + trimmedUrl;
 }
 
+// Get fallback favicon URL for CSP-compliant error handling via addEventListener
+function getFaviconOnerror(url) {
+    var fallbackService = localStorage['favicon-service-fallback'] || '';
+    if (!fallbackService) return '';
+    return getFaviconUrl(url, { service: fallbackService });
+}
+
+// Setup favicon image element with error and load-based fallback detection
+// Some services (e.g. Google) return a default 16x16 icon with HTTP 404 status.
+// The <img> 'error' event does NOT fire for valid image data even with 404,
+// so we also check the 'load' event and detect suspiciously small icons.
+function setupFaviconElement(imgEl, primaryUrl, fallbackUrl) {
+    if (!imgEl) return;
+    var _checked = false;
+    var _retryCount = 0;
+    
+    imgEl.addEventListener('error', function () {
+        _retryCount++;
+        // Only attempt fallback once; subsequent errors just show blank
+        if (_retryCount === 1 && fallbackUrl) {
+            this.src = fallbackUrl;
+        } else {
+            this.src = 'images/blank.png';
+        }
+    });
+    
+    imgEl.addEventListener('load', function () {
+        if (_checked) return;
+        _checked = true;
+        // Google's default 404 icon is 16x16; most real favicons are >= 32x32
+        // If the loaded image is suspiciously small, treat as failure
+        if (this.naturalWidth <= 16 && this.naturalHeight <= 16 && fallbackUrl) {
+            this.src = fallbackUrl;
+        }
+    });
+    
+    if (primaryUrl) {
+        imgEl.src = primaryUrl;
+    }
+}
+
 // --- Exports ---
 export {
     _DATE, DAY,
@@ -352,5 +393,5 @@ export {
     chromeURL, getVersion, getVersionType,
     Clipboard,
     popup_scrollbar_fix,
-    get_host, getFaviconUrl
+    get_host, getFaviconUrl, getFaviconOnerror, setupFaviconElement
 };
