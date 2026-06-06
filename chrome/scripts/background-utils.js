@@ -15,7 +15,7 @@
 //   calendar_storage2     ↔ modules/calendar.js
 //   save_calendar_storage2() ↔ modules/calendar.js
 //   defaultValues/config  ↔ modules/config.js
-//   getFaviconUrl()       ↔ modules/helpers.js (simplified version)
+//   getFaviconUrl(), get_host(), isBookmarkletUrl()  ↔ modules/helpers.js
 
 // Version (sync with modules/helpers.js)
 
@@ -152,70 +152,75 @@ function defaultConfig(clean) {
     }
 }
 
-// Favicon URL resolver (sync with modules/helpers.js - simplified for background worker)
+// URL parsing helpers (sync with modules/helpers.js)
+
+function isBookmarkletUrl(url) {
+    if (typeof url !== 'string') return false;
+    return /^javascript\s*:/i.test(url.trim());
+}
+
+function get_host(url) {
+    try {
+        var parsed = new URL(url);
+        var host = parsed.hostname;
+        if (host) return host;
+    } catch (e) {
+        try {
+            var parsed = new URL('https://' + url);
+            var host = parsed.hostname;
+            if (host && host.indexOf('.') !== -1) return host;
+        } catch (e2) {}
+    }
+    return "#";
+}
+
+// Favicon URL resolver (sync with modules/helpers.js)
 function getFaviconUrl(url, options) {
     options = options || {};
     if (!url || typeof url !== 'string') {
         return Object.prototype.hasOwnProperty.call(options, 'fallback') ? options.fallback : '';
     }
-
+    if (isBookmarkletUrl(url)) {
+        return Object.prototype.hasOwnProperty.call(options, 'bookmarkletFallback') ? options.bookmarkletFallback : 'images/iconmonstr-script-6.svg';
+    }
+    if (url.indexOf('extension://') !== -1 || url.indexOf('edge://extensions') !== -1) {
+        try {
+            if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) {
+                return url.indexOf(chrome.runtime.id) !== -1 ? 'images/tree-38.png' : 'images/Extension-icon-vector-04.svg';
+            }
+        } catch (e) {}
+        return 'images/Extension-icon-vector-04.svg';
+    }
+    if (url.indexOf('chrome://') === 0 || url.indexOf('about:') === 0 || url.indexOf('edge://') === 0 || url.indexOf('opera://') === 0 || url.indexOf('brave://') === 0) {
+        return 'images/Browser-icon-vector-03.svg';
+    }
+    if (url.indexOf('file://') === 0) {
+        return 'images/iconmonstr-file-3.svg';
+    }
     var service = localStorage['favicon-service'] || defaultValues['favicon-service'];
     var trimmedUrl = url.trim();
-
-    if (!trimmedUrl) {
-        return Object.prototype.hasOwnProperty.call(options, 'fallback') ? options.fallback : '';
-    }
-
+    if (!trimmedUrl) return Object.prototype.hasOwnProperty.call(options, 'fallback') ? options.fallback : '';
+    var hostValue = '#';
+    try { hostValue = get_host(trimmedUrl); } catch (err) { hostValue = '#'; }
     if (service === 'chrome') {
-        return 'chrome://favicon/' + trimmedUrl;
+        return hostValue === '#' ? 'chrome://favicon/' : 'chrome://favicon/' + trimmedUrl;
     }
-
     var parsedUrl = null;
-    try {
-        parsedUrl = new URL(trimmedUrl);
-    } catch (err) {
-        try {
-            parsedUrl = new URL('https://' + trimmedUrl);
-        } catch (err2) {
-            parsedUrl = null;
-        }
+    try { parsedUrl = new URL(trimmedUrl); }
+    catch (err) {
+        try { parsedUrl = new URL('https://' + trimmedUrl); }
+        catch (err2) { parsedUrl = null; }
     }
-
     var fallback = Object.prototype.hasOwnProperty.call(options, 'fallback') ? options.fallback : 'images/blank.png';
-
-    if (!parsedUrl) {
-        return fallback;
-    }
-
+    if (!parsedUrl || hostValue === '#') return fallback;
     var protocol = parsedUrl.protocol;
-    if (protocol !== 'http:' && protocol !== 'https:') {
-        return fallback;
-    }
-
+    if (protocol !== 'http:' && protocol !== 'https:') return fallback;
     var hostname = parsedUrl.hostname;
-    if (!hostname) {
-        return fallback;
-    }
-
-    if (service === 'google') {
-        return 'https://www.google.com/s2/favicons?sz=64&domain_url=' + encodeURIComponent(parsedUrl.origin + '/');
-    }
-
-    if (service === 'duckduckgo') {
-        return 'https://icons.duckduckgo.com/ip3/' + hostname + '.ico';
-    }
-
-    if (service === 'favicon_im') {
-        return 'https://favicon.im/' + hostname;
-    }
-
-    if (service === 'faviconkit') {
-        return 'https://ico.faviconkit.net/' + hostname + '?sz=64';
-    }
-
-    if (service === 'faviconsnap') {
-        return 'https://faviconsnap.com/api/favicon?url=' + encodeURIComponent(parsedUrl.origin + '/') + '&size=64';
-    }
-
+    if (!hostname) return fallback;
+    if (service === 'google') return 'https://www.google.com/s2/favicons?sz=64&domain_url=' + encodeURIComponent(parsedUrl.origin + '/');
+    if (service === 'duckduckgo') return 'https://icons.duckduckgo.com/ip3/' + hostname + '.ico';
+    if (service === 'favicon_im') return 'https://favicon.im/' + hostname;
+    if (service === 'faviconkit') return 'https://ico.faviconkit.net/' + hostname + '?sz=64';
+    if (service === 'faviconsnap') return 'https://faviconsnap.com/api/favicon?url=' + encodeURIComponent(parsedUrl.origin + '/') + '&size=64';
     return 'chrome://favicon/' + trimmedUrl;
 }

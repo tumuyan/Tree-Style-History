@@ -1,6 +1,8 @@
 // Tree Style History - Helper Utilities Module
 // Pure utility functions with minimal side effects.
 
+import { defaultValues } from './config.js';
+
 // --- Date/Time ---
 
 var _DATE = new Date();
@@ -312,7 +314,7 @@ function getFaviconUrl(url, options) {
     if (url.indexOf('file://') === 0) {
         return 'images/iconmonstr-file-3.svg';
     }
-    var service = localStorage['favicon-service'] || 'duckduckgo';
+    var service = localStorage['favicon-service'] || defaultValues['favicon-service'];
     var trimmedUrl = url.trim();
     if (!trimmedUrl) return options.hasOwnProperty('fallback') ? options.fallback : '';
     var hostValue = '#';
