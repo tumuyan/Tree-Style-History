@@ -6,6 +6,10 @@ importScripts('storage-adapter.js');
 importScripts('background-utils.js');
 importScripts('db-manager.js');
 
+// Startup timing
+const _tSW = performance.now();
+var _tSW_init, _tSW_db;  // timing markers for startup summary
+
 // Set global vars
 var openedTabs = {};
 var recentTabs = [];
@@ -30,7 +34,7 @@ var tabUrl0Json = {};
 var urlIdJson = {};
 var idUrlJson = {};
 
-console.log("Service Worker loading...");
+console.log("Service Worker loading... (" + (performance.now() - _tSW).toFixed(1) + "ms)");
 
 // Initialize on install
 self.addEventListener('install', (event) => {
@@ -60,7 +64,8 @@ chrome.runtime.onStartup.addListener(() => {
 });
 
 function initializeStorageState() {
-    console.log('Initializing storage state...');
+    console.log('Initializing storage state... (' + (performance.now() - _tSW).toFixed(1) + 'ms)');
+    _tSW_init = performance.now();
     
     oid = localStorage['oid'];
     if (oid == undefined) {
@@ -93,7 +98,8 @@ function initializeStorageState() {
     // Initialize DB
     if (typeof dbManager !== 'undefined') {
         dbManager.init().then(() => {
-            console.log('DB ready in service worker');
+            console.log('DB ready in service worker (' + (performance.now() - _tSW).toFixed(1) + 'ms)');
+            _tSW_db = performance.now();
             dbManager.updateClosedTabsStatus();
             loadDate(date.getTime(), 0).catch(error => {
                 console.error('loadDate error:', error);
@@ -115,7 +121,7 @@ function initializeStorageState() {
 // Initialize tracking for existing tabs when service worker starts
 function initializeExistingTabs() {
     chrome.tabs.query({}, function(tabs) {
-        console.log('Initializing ' + tabs.length + ' existing tabs');
+        console.log('Initializing ' + tabs.length + ' existing tabs (' + (performance.now() - _tSW).toFixed(1) + 'ms)');
         for (let tab of tabs) {
             openedTabs[tab.id] = tab;
             if (tab.active) {
@@ -123,6 +129,12 @@ function initializeExistingTabs() {
             }
         }
         console.log('Opened tabs count:', Object.keys(openedTabs).length);
+        var dbMs = (_tSW_db !== undefined) ? (_tSW_db - _tSW).toFixed(1) + 'ms' : '(pending)';
+        console.log('[SW Startup] sync=' + (_tSW_load - _tSW).toFixed(1) +
+            'ms | init=' + (_tSW_init - _tSW).toFixed(1) +
+            'ms | db=' + dbMs +
+            ' | tabs=' + (performance.now() - _tSW).toFixed(1) +
+            'ms  (total=' + (performance.now() - _tSW).toFixed(1) + 'ms)');
     });
 }
 
@@ -142,7 +154,7 @@ function openedTab(tab) {
 // Closed tab
 function closedTab(id) {
     if (openedTabs[id] !== undefined) {
-        console.log('close ' + id + ' ' + openedTabs[id].url);
+        console.debug('close ' + id + ' ' + openedTabs[id].url);
         addCloseRedord(id, openedTabs[id].url, openedTabs[id].title, (new Date()).getTime(), 0);
         openedTabs[id].time = timeNow(0);
 
@@ -263,7 +275,7 @@ chrome.tabs.onCreated.addListener(function (tab) {
         if (tab.openerTabId > 0 && tab.id != tab.openerTabId) {
             if (tabUrlJson[tab.openerTabId.toString()] != undefined) {
                 openerJson[tab.id.toString()] = tabUrlJson[tab.openerTabId.toString()];
-                console.log("chrome.tabs.onCreated " + tab.openerTabId + " -> " + tab.id + "; " + 
+                console.debug("chrome.tabs.onCreated " + tab.openerTabId + " -> " + tab.id + "; " + 
                     openerJson[tab.id.toString()] + " -> " + tab.url + ";");
             }
         }
@@ -280,7 +292,7 @@ chrome.tabs.onUpdated.addListener(function (id, info, tab) {
     }
 
     if (info.status == "complete") {
-        console.log("chrome.tabs.onUpdated v " + tab.openerTabId + " -> " + tab.id + "; " + 
+        console.debug("chrome.tabs.onUpdated v " + tab.openerTabId + " -> " + tab.id + "; " + 
             openerJson[tab.id.toString()] + " -> " + tab.url + "; title=" + tab.title);
         visitTab(tab).catch(error => {
             console.error("visitTab error:", error);
@@ -366,7 +378,7 @@ if (chrome && chrome.storage && chrome.storage.onChanged) {
 // Load date function — refactored from recursive callback to async/await
 async function loadDate(date, dateId) {
     if (dateId > localStorage['load-range']) {
-        console.log("loadDate done. dateId = " + dateId + ">" + localStorage['load-range']);
+        console.debug("loadDate done. dateId = " + dateId + ">" + localStorage['load-range']);
         localStorage['calendar-storage'] = JSON.stringify(calendar_r);
         chrome.action.setBadgeText({ text: "Url" });
         loadHistory();
@@ -385,10 +397,10 @@ async function loadDate(date, dateId) {
     calendar_r[dday] = calendar[dday];
 
     if (calendar[qday]) {
-        console.log("skip dday=" + dday + ":" + calendar[dday] + " qday=" + qday + ":" + calendar[qday]);
+        console.debug("skip dday=" + dday + ":" + calendar[dday] + " qday=" + qday + ":" + calendar[qday]);
         await add_urls([], date, dateId);
     } else {
-        console.log("load dday=" + dday + ":" + calendar[dday] + " qday=" + qday + ":" + calendar[qday]);
+        console.debug("load dday=" + dday + ":" + calendar[dday] + " qday=" + qday + ":" + calendar[qday]);
         let obj = { text: '', maxResults: 0, startTime: date - (24 * 3600 * 1000), endTime: date };
         
         try {
@@ -431,13 +443,13 @@ async function add_urls(urls, date_ms, dateId) {
                         title: title
                     });
                 } catch (error) {
-                    console.log("add_url Error :( " + url, error);
+                    console.error("add_url Error :( " + url, error);
                 }
             }
         }
-        console.log("dateId=" + dateId + " loadDate(" + (new Date(date_ms)).toString() + ") done");
+        console.debug("dateId=" + dateId + " loadDate(" + (new Date(date_ms)).toString() + ") done");
     } else {
-        console.log("dateId=" + dateId + " loadDate(" + (new Date(date_ms)).toString() + ") no data");
+        console.debug("dateId=" + dateId + " loadDate(" + (new Date(date_ms)).toString() + ") no data");
     }
 
     await loadDate(date_ms - DAY, dateId + 1);
@@ -472,12 +484,12 @@ async function processVisits() {
                 chrome.history.getVisits({ url: url_item.url }, resolve);
             });
         } catch (e) {
-            console.log("getVisits() error, url=" + url_item.url, e);
+            console.error("getVisits() error, url=" + url_item.url, e);
             continue;
         }
 
         if (h.length < 1) {
-            console.log("getVisits() no data, url=" + url_item.url);
+            console.debug("getVisits() no data, url=" + url_item.url);
             continue;
         }
 
@@ -486,7 +498,7 @@ async function processVisits() {
 
         for (const v of h) {
             if (v.visitTime < loadfrom) {
-                console.log("add_history() time=" + v.visitTime + " < " + loadfrom + ", url=" + url_item.url);
+                console.debug("add_history() time=" + v.visitTime + " < " + loadfrom + ", url=" + url_item.url);
                 break;
             }
 
@@ -495,7 +507,7 @@ async function processVisits() {
 
             if (transition == "typed" || transition == "auto_bookmark" || 
                 transition == "keyword" || transition == "keyword_generated") {
-                console.log("change refer " + v.referringVisitId + "->0 cause transition=" + transition);
+                console.debug("change refer " + v.referringVisitId + "->0 cause transition=" + transition);
                 refer = 0;
             }
 
@@ -510,9 +522,9 @@ async function processVisits() {
                     title: url_item.title,
                     transition: transition,
                 });
-                console.log("Success :) " + refer + " -> " + v.visitId + " [" + url_item.visitCount + "] " + url_item.url);
+                // console.debug("Success :) " + refer + " -> " + v.visitId + " [" + url_item.visitCount + "] " + url_item.url);
             } catch (error) {
-                console.log("Error :( [" + v.visitId + "] " + url_item.url, error);
+                console.error("Error :( [" + v.visitId + "] " + url_item.url, error);
             }
         }
 
@@ -528,7 +540,7 @@ async function processVisits() {
     }
 
     chrome.action.setBadgeText({ text: "" });
-    console.log("getVisits done.");
+    console.debug("getVisits() done.");
 }
 
 // Visit tab function — refactored from callback to async/await
@@ -537,7 +549,7 @@ async function visitTab(tab) {
 
     if (url == undefined || url == "") return;
 
-    console.log("visitTab() tabId=" + tab.openerTabId + " -> " + tab.id + " url=" + url);
+    console.debug("visitTab() tabId=" + tab.openerTabId + " -> " + tab.id + " url=" + url);
 
     if ((/^(http|https|ftp|ftps|file|chrome|chrome-extension|chrome-devtools)\:\/\/(.*)/).test(tab.title) == false && 
         (/^(ftp|ftps|file|chrome|chrome-extension)\:\/\/(.*)/).test(tab.url) == false) {
@@ -551,7 +563,7 @@ async function visitTab(tab) {
         try {
             let h = await new Promise(resolve => chrome.history.getVisits(details, resolve));
             if (h.length < 1) {
-                console.log("visitTab(" + tab.id + ") no data, url=" + tab.url);
+                console.debug("visitTab(" + tab.id + ") no data, url=" + tab.url);
             } else {
                 h.sort(function (a, b) { return b.visitTime - a.visitTime });
                 let loadfrom = (new Date()).getTime() - 1000000;
@@ -581,14 +593,14 @@ function add_tab_history(visitItems, i, loadfrom, url_item) {
         let transition = visitItems[i].transition;
 
         if (visitTime < loadfrom) {
-            console.log("[Err] add_tab_history() time=" + visitTime + " < " + loadfrom + ", url=" + url_item.url);
+            console.debug("[Err] add_tab_history() time=" + visitTime + " < " + loadfrom + ", url=" + url_item.url);
             return;
         }
 
         if (idUrlJson[visitId.toString()] == undefined) {
             urlIdJson[url_item.url] = visitId;
             idUrlJson[visitId.toString()] = url_item.url;
-            console.log("visitJson " + refer + "->" + visitId + " transition=" + transition + " " + url_item.url);
+            console.debug("visitJson " + refer + "->" + visitId + " transition=" + transition + " " + url_item.url);
         }
 
         if (refer == undefined || refer <= 0) {
@@ -611,11 +623,11 @@ function add_tab_history(visitItems, i, loadfrom, url_item) {
             refer = 0;
         } else if (transition == "typed" || transition == "auto_bookmark" || 
                    transition == "keyword" || transition == "keyword_generated") {
-            console.log("change refer " + visitItems[i].referringVisitId + "->0 cause transition=" + transition);
+            console.debug("change refer " + visitItems[i].referringVisitId + "->0 cause transition=" + transition);
             refer = 0;
         }
 
-        console.log("refer referringVisitId/refer2/tabUrl0/result=" + visitItems[i].referringVisitId + "/" + 
+        console.debug("refer referringVisitId/refer2/tabUrl0/result=" + visitItems[i].referringVisitId + "/" + 
             refer2 + "/" + urlIdJson[tabUrl0Json[tabstr]] + "/" + refer + ", transition=" + transition + 
             " " + tabUrl0Json[tabstr] + " ->" + url_item.url);
 
@@ -630,7 +642,7 @@ function add_tab_history(visitItems, i, loadfrom, url_item) {
             console.error("Error adding tab history:", error);
         });
     } else {
-        console.log("add_tab_history() no_result ");
+        console.debug("add_tab_history() no_result ");
     }
 }
 
@@ -671,4 +683,5 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
 });
 
-console.log("Service Worker loaded");
+console.log("Service Worker loaded (" + (performance.now() - _tSW).toFixed(1) + "ms)");
+const _tSW_load = performance.now();

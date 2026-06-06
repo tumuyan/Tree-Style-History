@@ -6,6 +6,7 @@
 
     // === Popup timing tracking ===
     const _pageStartTime = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    if (typeof window !== 'undefined') { window._htmlStartTime = _pageStartTime; }
     if (globalObj.document) {
         globalObj.document.addEventListener('DOMContentLoaded', function _onDCL() {
             var elapsed = ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - _pageStartTime;

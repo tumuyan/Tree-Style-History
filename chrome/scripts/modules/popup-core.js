@@ -652,6 +652,9 @@ function showRecentTabsImpl(rhhistory, rt) {
     rt = Array.isArray(rt) ? rt : [];
     console.log("showRecentTabs() count = " + rt.length);
 
+    var tDataReady = (performance.now() - (window._htmlStartTime || performance.now())).toFixed(1);
+    console.log('[Popup] Data ready (click to render): ' + tDataReady + 'ms');
+
     var itemsno = localStorage['rt-itemsno'] * 1;
     var rcti = 0;
 
