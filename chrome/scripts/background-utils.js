@@ -29,8 +29,8 @@ function returnLang(str) {
 function timeNow(st) {
     var tf = localStorage['rh-timeformat'];
     var currentTime = st === 0 ? new Date() : new Date(st);
-    var hours = currentTime.getHours() * 1;
-    var minutes = currentTime.getMinutes() * 1;
+    var hours = currentTime.getHours();
+    var minutes = currentTime.getMinutes();
     var te = '';
 
     if (tf == '12') {

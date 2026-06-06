@@ -12,8 +12,8 @@ function TimeToStr(time, skip_date, skip_year, skip_clock) {
         _DATE = _DATE + DAY;
     var tf = localStorage['rh-timeformat'];
     var currentTime = new Date(time);
-    var hours = currentTime.getHours() * 1;
-    var minutes = currentTime.getMinutes() * 1;
+    var hours = currentTime.getHours();
+    var minutes = currentTime.getMinutes();
     if (time == undefined) {
         hours = '--';
         minutes = '--';
@@ -67,8 +67,8 @@ function TimeToStr(time, skip_date, skip_year, skip_clock) {
 function timeNow(st) {
     var tf = localStorage['rh-timeformat'];
     var currentTime = st === 0 ? new Date() : new Date(st);
-    var hours = currentTime.getHours() * 1;
-    var minutes = currentTime.getMinutes() * 1;
+    var hours = currentTime.getHours();
+    var minutes = currentTime.getMinutes();
     var te;
     if (tf == '12') {
         if (hours > 11) { te = ' ' + returnLang('PM'); } else { te = ' ' + returnLang('AM'); }
@@ -89,7 +89,7 @@ function formatDate(str) {
         datestr = datestr.replace('mm', '--');
         datestr = datestr.replace('yyyy', '----');
     } else {
-        str = str * 1;
+        str = Number(str);
         var date = new Date(str);
         var day = date.getDate() + '';
         var month = (date.getMonth() + 1) + '';

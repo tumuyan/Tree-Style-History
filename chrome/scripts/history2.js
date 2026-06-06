@@ -78,12 +78,12 @@ document.addEventListener('DOMContentLoaded', function () {
         if (w == 'current') {
             var cdateo = new Date();
         } else if ('selected') {
-            var mcheck = dayarray[($('date-select-month').value * 1 - 1)];
-            var dcheck = ($('date-select-day').value * 1);
+            var mcheck = dayarray[(Number($('date-select-month').value) - 1)];
+            var dcheck = Number($('date-select-day').value);
             if (mcheck < dcheck) {
-                var cdateo = new Date(($('date-select-year').value * 1), ($('date-select-month').value * 1 - 1), mcheck, 23, 59, 59, 999);
+                var cdateo = new Date(Number($('date-select-year').value), (Number($('date-select-month').value) - 1), mcheck, 23, 59, 59, 999);
             } else {
-                var cdateo = new Date(($('date-select-year').value * 1), ($('date-select-month').value * 1 - 1), ($('date-select-day').value * 1), 23, 59, 59, 999);
+                var cdateo = new Date(Number($('date-select-year').value), (Number($('date-select-month').value) - 1), Number($('date-select-day').value), 23, 59, 59, 999);
             }
         }
 
@@ -119,7 +119,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var monthOptions = $$('#date-select-month option');
         for (var i = 0; i < monthOptions.length; i++) {
             (function(el) {
-                if ((mdatec) + 1 == (el.value * 1)) {
+                if ((mdatec) + 1 == Number(el.value)) {
                     el.selected = true;
                 }
             })(monthOptions[i]);
@@ -237,9 +237,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function loadHistory(w, q) {
         if (w == 'yes') {
-            var day = ($('date-select-day').value * 1);
-            var month = ($('date-select-month').value * 1 - 1);
-            var year = ($('date-select-year').value * 1);
+            var day = Number($('date-select-day').value);
+            var month = Number($('date-select-month').value) - 1;
+            var year = Number($('date-select-year').value);
             var today = new Date(year, month, day, 23, 59, 59, 999);
             var today0 = new Date(year, month, day, 0, 0, 0, 0);
 

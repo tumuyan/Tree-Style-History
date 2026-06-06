@@ -48,9 +48,9 @@ function history(w, q) {
 
     if (w == 'yes' || w == 'current') {
         if (w == 'yes') {
-            var day = ($('date-select-day').options[$('date-select-day').selectedIndex].value * 1);
-            var month = ($('date-select-month').options[$('date-select-month').selectedIndex].value * 1 - 1);
-            var year = ($('date-select-year').options[$('date-select-year').selectedIndex].value * 1);
+            var day = Number($('date-select-day').options[$('date-select-day').selectedIndex].value);
+            var month = Number($('date-select-month').options[$('date-select-month').selectedIndex].value) - 1;
+            var year = Number($('date-select-year').options[$('date-select-year').selectedIndex].value);
             var today = new Date(year, month, day, 23, 59, 59, 999);
         } else if (w == 'current') {
             var ndc = new Date();
@@ -69,9 +69,9 @@ function history(w, q) {
         $('delete-range-two').value = formatDate(eTime);
     } else if (w == 'search') {
         if (sw == 'current') {
-            var day = ($('date-select-day').options[$('date-select-day').selectedIndex].value * 1);
-            var month = ($('date-select-month').options[$('date-select-month').selectedIndex].value * 1 - 1);
-            var year = ($('date-select-year').options[$('date-select-year').selectedIndex].value * 1);
+            var day = Number($('date-select-day').options[$('date-select-day').selectedIndex].value);
+            var month = Number($('date-select-month').options[$('date-select-month').selectedIndex].value) - 1;
+            var year = Number($('date-select-year').options[$('date-select-year').selectedIndex].value);
             var ndate = new Date(year, month, day, 23, 59, 59, 999);
             var eTime = ndate.getTime();
             var sTime = (eTime - 86400000);
@@ -576,7 +576,7 @@ function deleteHistoryItem(w) {
                 el.closest('div.item-holder').remove();
                 chrome.history.deleteUrl({ url: el.value });
             });
-            chrome.history.search({ text: '', maxResults: 1, startTime: (new Date()).getTime() - (1 * 24 * 3600 * 1000), endTime: (new Date()).getTime() }, function (hi) {
+            chrome.history.search({ text: '', maxResults: 1, startTime: (new Date()).getTime() - (24 * 3600 * 1000), endTime: (new Date()).getTime() }, function (hi) {
                 if (grp == 'yes') {
                     Array.from($$(into + ' .group-holder')).forEach(function (gel) {
                         if (gel.querySelectorAll(':scope > div.item-holder').length == 0) {

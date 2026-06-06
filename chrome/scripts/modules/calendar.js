@@ -39,7 +39,7 @@ function isLeapYear() {
     if (!select || !select.options || select.options.length === 0) return false;
     var selectedOption = select.options[select.selectedIndex];
     if (!selectedOption) return false;
-    var year = selectedOption.value * 1;
+    var year = Number(selectedOption.value);
     return (year % 400 == 0 || (year % 100 != 0 && year % 4 == 0));
 }
 
@@ -73,12 +73,12 @@ function calendar(w, e) {
         var monthSelect = $('date-select-month');
         var daySelect = $('date-select-day');
         var yearSelect = $('date-select-year');
-        var mcheck = dayarray[(monthSelect.options[monthSelect.selectedIndex].value * 1 - 1)];
-        var dcheck = (daySelect.options[daySelect.selectedIndex].value * 1);
+        var mcheck = dayarray[(Number(monthSelect.options[monthSelect.selectedIndex].value) - 1)];
+        var dcheck = Number(daySelect.options[daySelect.selectedIndex].value);
         if (mcheck < dcheck) {
-            var cdateo = new Date((yearSelect.options[yearSelect.selectedIndex].value * 1), (monthSelect.options[monthSelect.selectedIndex].value * 1 - 1), mcheck, 23, 59, 59, 999);
+            var cdateo = new Date(Number(yearSelect.options[yearSelect.selectedIndex].value), (Number(monthSelect.options[monthSelect.selectedIndex].value) - 1), mcheck, 23, 59, 59, 999);
         } else {
-            var cdateo = new Date((yearSelect.options[yearSelect.selectedIndex].value * 1), (monthSelect.options[monthSelect.selectedIndex].value * 1 - 1), (daySelect.options[daySelect.selectedIndex].value * 1), 23, 59, 59, 999);
+            var cdateo = new Date(Number(yearSelect.options[yearSelect.selectedIndex].value), (Number(monthSelect.options[monthSelect.selectedIndex].value) - 1), Number(daySelect.options[daySelect.selectedIndex].value), 23, 59, 59, 999);
         }
     }
 
@@ -106,7 +106,7 @@ function calendar(w, e) {
 
     var monthOptions = $$('#date-select-month option');
     for (mi = 0; mi < monthOptions.length; mi++) {
-        if ((mdatec) + 1 == (monthOptions[mi].value * 1)) {
+        if ((mdatec) + 1 == Number(monthOptions[mi].value)) {
             monthOptions[mi].selected = true;
         }
     }

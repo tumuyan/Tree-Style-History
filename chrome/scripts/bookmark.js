@@ -352,15 +352,15 @@ document.addEventListener('DOMContentLoaded', function () {
                     } else if (nameA > nameB) {
                         return 1;
                     } else {
-                        var epochA = (a.epoch === undefined || a.epoch === null) ? 0 : a.epoch * 1;
-                        var epochB = (b.epoch === undefined || b.epoch === null) ? 0 : b.epoch * 1;
+                        var epochA = (a.epoch === undefined || a.epoch === null) ? 0 : Number(a.epoch);
+                        var epochB = (b.epoch === undefined || b.epoch === null) ? 0 : Number(b.epoch);
                         return epochB - epochA;
                     }
                 });
             } else {
                 rha.sort(function (a, b) {
-                    var epochA = (a.epoch === undefined || a.epoch === null) ? 0 : a.epoch * 1;
-                    var epochB = (b.epoch === undefined || b.epoch === null) ? 0 : b.epoch * 1;
+                    var epochA = (a.epoch === undefined || a.epoch === null) ? 0 : Number(a.epoch);
+                    var epochB = (b.epoch === undefined || b.epoch === null) ? 0 : Number(b.epoch);
 
                     if (epochA !== epochB) {
                         return epochA - epochB;

@@ -65,12 +65,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
     for (var o in rhporder) {
         if (rhporder[o] == 'rh-order') {
-            if ((localStorage['rh-itemsno'] * 1) > 0) {
+            if (Number(localStorage['rh-itemsno']) > 0) {
                 var el = createElement('div', { id: 'rh-inject', html: '<div id="rh-inject-title" class="popup-title"><span>' + returnLang('recentHistory') + '    - <a href="#"  id="show-all-history" target="_blank">' + returnLang('more') + '🕑</a></span></div>' });
                 $('popup-insert').appendChild(el);
             }
         } else if (rhporder[o] == 'rct-order') {
-            if ((localStorage['rct-itemsno'] * 1) > 0 ) {
+            if (Number(localStorage['rct-itemsno']) > 0 ) {
                 if (navigator.userAgent.toLowerCase().indexOf('edg') > 0) {
                     var el = createElement('div', { id: 'rct-inject', html: '<div id="rct-inject-title" class="popup-title"><span>' + returnLang('recentlyClosedTabs') + '    - <a href="#"  id="show-all-closed" target="_blank">' + returnLang('more') + '...</a></span></div>' });
                     $('popup-insert').appendChild(el);
@@ -80,18 +80,18 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             }
         } else if (rhporder[o] == 'rb-order') {
-            if ((localStorage['rb-itemsno'] * 1) > 0) {
+            if (Number(localStorage['rb-itemsno']) > 0) {
                 var el = createElement('div', { id: 'rb-inject', html: '<div id="rb-inject-title" class="popup-title"><span>' + returnLang('recentBookmarks') + '    - <a href="#"  id="show-all-bookmark" target="_blank">' + returnLang('more') + '...</a></span></div>' });
                 $('popup-insert').appendChild(el);
             }
         } else if (rhporder[o] == 'mv-order') {
-            if ((localStorage['mv-itemsno'] * 1) > 0) {
+            if (Number(localStorage['mv-itemsno']) > 0) {
                 var el = createElement('div', { id: 'mv-inject', html: '<div id="mv-inject-title" class="popup-title"><span>' + returnLang('mostVisited') + '</span></div>' });
                 $('popup-insert').appendChild(el);
             }
         }  else if (rhporder[o] == 'rt-order') {
             // rt = recent tab
-            if ((localStorage['rt-itemsno'] * 1) > 0) {
+            if (Number(localStorage['rt-itemsno']) > 0) {
                 // 只创建HTML元素，不立即调用showRecentTabs函数
                 var el = createElement('div', { id: 'rt-inject', html: '<div id="rt-inject-title" class="popup-title"><span>' + returnLang('recentTabs') + '</span></div>' });
                 $('popup-insert').appendChild(el);

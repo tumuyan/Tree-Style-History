@@ -504,7 +504,7 @@ function recentHistory() {
 
     var ir = 0;
     var rh = '';
-    var rhin = localStorage['rh-itemsno'] * 1;
+    var rhin = Number(localStorage['rh-itemsno']);
     var rhino = rhin;
     rhin = rhin * 4;
 
@@ -555,7 +555,7 @@ function recentHistory() {
 // Recently Closed Tabs
 function recentlyClosedTabs() {
 
-    var itemsno = localStorage['rct-itemsno'] * 1;
+    var itemsno = Number(localStorage['rct-itemsno']);
 
     if (itemsno > 0) {
 
@@ -655,7 +655,7 @@ function showRecentTabsImpl(rhhistory, rt) {
     var tDataReady = (performance.now() - (window._htmlStartTime || performance.now())).toFixed(1);
     console.log('[Popup] Data ready (click to render): ' + tDataReady + 'ms');
 
-    var itemsno = localStorage['rt-itemsno'] * 1;
+    var itemsno = Number(localStorage['rt-itemsno']);
     var rcti = 0;
 
     if (itemsno > 0) {
@@ -711,7 +711,7 @@ function mostVisited() {
     if (mvc !== 'false') {
 
         var mvd = JSON.parse(mvc);
-        var itemsno = localStorage['mv-itemsno'] * 1;
+        var itemsno = Number(localStorage['mv-itemsno']);
         var mvrl = localStorage['mv-blocklist'];
         var r = 0;
 
@@ -738,7 +738,7 @@ function mostVisited() {
 // Recent Bookmarks
 function recentBookmarks() {
 
-    var rbin = localStorage['rb-itemsno'] * 1;
+    var rbin = Number(localStorage['rb-itemsno']);
 
     if (rbin > 0) {
 
