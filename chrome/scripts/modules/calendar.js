@@ -58,8 +58,17 @@ function showCalendar() {
 
 // --- Date picker ---
 
-function calendar(w, e) {
+function calendar(w, e, clickCallback) {
     var i, ia, ii, d, mi;
+
+    // Helper to call the appropriate click handler
+    function calendarClickHandler() {
+        if (typeof clickCallback === 'function') {
+            clickCallback();
+        } else {
+            history('yes', '');
+        }
+    }
 
     if (isLeapYear()) {
         var dayarray = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
@@ -160,7 +169,7 @@ function calendar(w, e) {
                 var selectedLink = document.querySelector('#calendar-days a#selected');
                 if (selectedLink) selectedLink.removeAttribute('id');
                 cel.id = 'selected';
-                history('yes', '');
+                calendarClickHandler();
             });
             $('calendar-days').appendChild(dayLink);
         } else {
@@ -201,7 +210,7 @@ function calendar(w, e) {
                 var selectedLink = document.querySelector('#calendar-days a#selected');
                 if (selectedLink) selectedLink.removeAttribute('id');
                 cel.id = 'selected';
-                history('yes', '');
+                calendarClickHandler();
             });
             $('calendar-days').appendChild(dayLink);
         }

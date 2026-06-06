@@ -46,194 +46,24 @@ document.addEventListener('DOMContentLoaded', function () {
     $(derhdf[2]).innerHTML = '<select class="select" id="date-select-year"></select>';
 
     $('date-select-day').addEventListener('change', function () {
-        calendar2('selected', '');
+        calendar('selected', '', function() { loadHistory('yes', ''); });
         //   historyView('yes', '');
         loadHistory('yes', '');
     });
     $('date-select-month').addEventListener('change', function () {
-        calendar2('selected', '');
+        calendar('selected', '', function() { loadHistory('yes', ''); });
         //   historyView('yes', '');
         loadHistory('yes', '');
     });
     $('date-select-year').addEventListener('change', function () {
-        calendar2('selected', '');
+        calendar('selected', '', function() { loadHistory('yes', ''); });
         //   historyView('yes', '');
         loadHistory('yes', '');
     });
 
     // Calendar init
 
-    calendar2('current', '');
-
-
-
-    function calendar2(w, e) {
-
-        if (isLeapYear()) {
-            var dayarray = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-        } else {
-            var dayarray = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-        }
-
-        if (w == 'current') {
-            var cdateo = new Date();
-        } else if ('selected') {
-            var mcheck = dayarray[(Number($('date-select-month').value) - 1)];
-            var dcheck = Number($('date-select-day').value);
-            if (mcheck < dcheck) {
-                var cdateo = new Date(Number($('date-select-year').value), (Number($('date-select-month').value) - 1), mcheck, 23, 59, 59, 999);
-            } else {
-                var cdateo = new Date(Number($('date-select-year').value), (Number($('date-select-month').value) - 1), Number($('date-select-day').value), 23, 59, 59, 999);
-            }
-        }
-
-        if (e == 'prev') {
-            cdateo.setDate(cdateo.getDate() - 1);
-        } else if (e == 'next') {
-            cdateo.setDate(cdateo.getDate() + 1);
-        }
-
-        $('date-select-day').innerHTML = '';
-        var ydatec = new Date().getFullYear();
-        var mdatec = cdateo.getMonth();
-        var ddatec = cdateo.getDate();
-        var yeararray = [ydatec, (ydatec - 1)];
-
-        if (w == 'current') {
-            for (i = 0; i < yeararray.length; i++) {
-                if (i == 0) {
-                    var opt = document.createElement('option');
-                    opt.value = yeararray[i];
-                    opt.selected = true;
-                    opt.textContent = yeararray[i];
-                    $('date-select-year').appendChild(opt);
-                } else {
-                    var opt = document.createElement('option');
-                    opt.value = yeararray[i];
-                    opt.textContent = yeararray[i];
-                    $('date-select-year').appendChild(opt);
-                }
-            }
-        }
-
-        var monthOptions = $$('#date-select-month option');
-        for (var i = 0; i < monthOptions.length; i++) {
-            (function(el) {
-                if ((mdatec) + 1 == Number(el.value)) {
-                    el.selected = true;
-                }
-            })(monthOptions[i]);
-        }
-
-        for (i = 0; i <= dayarray.length; i++) {
-            if (mdatec == i) {
-                for (ia = 1; ia <= dayarray[i]; ia++) {
-                    if (ia == ddatec) {
-                        ia = ia + '';
-                        if (ia.length == 1) {
-                            ia = '0' + ia;
-                        }
-                        var opt = document.createElement('option');
-                        opt.value = ia;
-                        opt.selected = true;
-                        opt.textContent = ia;
-                        $('date-select-day').appendChild(opt);
-                    } else {
-                        ia = ia + '';
-                        if (ia.length == 1) {
-                            ia = '0' + ia;
-                        }
-                        var opt = document.createElement('option');
-                        opt.value = ia;
-                        opt.textContent = ia;
-                        $('date-select-day').appendChild(opt);
-                    }
-                }
-            }
-        }
-
-        var fday = new Date(ydatec, mdatec, 1, 23, 59, 59, 999).getDay();
-        var lday = new Date(ydatec, mdatec, dayarray[mdatec], 23, 59, 59, 999).getDay();
-
-        $('calendar-days').textContent = '';
-
-        for (ii = 0; ii < dayarray[mdatec]; ii++) {
-            if (ii == 0) {
-                for (d = 0; d < fday; d++) {
-                    var sp = document.createElement('span');
-                    sp.innerHTML = '&nbsp;';
-                    sp.className = 'day';
-                    $('calendar-days').appendChild(sp);
-                }
-            }
-            if ((ii + 1) == ddatec) {
-                var a = document.createElement('a');
-                a.id = 'selected';
-                a.href = '#';
-                a.rel = (ii + 1) + '|' + (mdatec + 1) + '|' + ydatec;
-                a.textContent = (ii + 1);
-                a.className = 'day';
-                a.addEventListener('click', function () {
-                    var cel = this;
-                    var dayOptions = $$('#date-select-day option');
-                    for (var i = 0; i < dayOptions.length; i++) {
-                        (function(el) {
-                            if (parseInt(el.value, 10) == parseInt(cel.textContent, 10)) {
-                                el.selected = true;
-                            } else {
-                                el.selected = false;
-                            }
-                        })(dayOptions[i]);
-                    }
-                    var selectedLinks = $$('#calendar-days a#selected');
-                    for (var i = 0; i < selectedLinks.length; i++) {
-                        selectedLinks[i].removeAttribute('id');
-                    }
-                    cel.id = 'selected';
-                    //   historyView('yes', '');
-                    loadHistory('yes', '');
-                });
-                $('calendar-days').appendChild(a);
-            } else {
-                var a = document.createElement('a');
-                a.href = '#';
-                a.textContent = (ii + 1);
-                a.className = 'day';
-                a.addEventListener('click', function () {
-                    var cel = this;
-                    var dayOptions = $$('#date-select-day option');
-                    for (var i = 0; i < dayOptions.length; i++) {
-                        (function(el) {
-                            if (parseInt(el.value, 10) == parseInt(cel.textContent, 10)) {
-                                el.selected = true;
-                            } else {
-                                el.selected = false;
-                            }
-                        })(dayOptions[i]);
-                    }
-                    var selectedLinks = $$('#calendar-days a#selected');
-                    for (var i = 0; i < selectedLinks.length; i++) {
-                        selectedLinks[i].removeAttribute('id');
-                    }
-                    cel.id = 'selected';
-                    //   historyView('yes', '');
-                    loadHistory('yes', '');
-                });
-                $('calendar-days').appendChild(a);
-            }
-            if ((ii + 1) == dayarray[mdatec]) {
-                for (d = 0; d < (6 - lday); d++) {
-                    var sp = document.createElement('span');
-                    sp.innerHTML = '&nbsp;';
-                    sp.className = 'day';
-                    $('calendar-days').appendChild(sp);
-                }
-            }
-        }
-
-    }
-
-
+    calendar('current', '', function() { loadHistory('yes', ''); });
 
     function loadHistory(w, q) {
         if (w == 'yes') {

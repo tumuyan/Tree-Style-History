@@ -1,8 +1,23 @@
 // Background Utilities
 // Extracted minimal functions needed by background script
 // This separates background dependencies from UI dependencies for MV3 migration
+//
+// SYNC WARNING: These functions are duplicated from modules/ files.
+// When modifying any function below, check and sync the corresponding
+// version in the referenced module file.
+//
+// Sync mappings:
+//   getVersion()          ↔ modules/helpers.js
+//   getVersionType()      ↔ modules/helpers.js
+//   returnLang()          ↔ modules/helpers.js
+//   timeNow()             ↔ modules/helpers.js
+//   _DATE, DAY            ↔ modules/helpers.js
+//   calendar_storage2     ↔ modules/calendar.js
+//   save_calendar_storage2() ↔ modules/calendar.js
+//   defaultValues/config  ↔ modules/config.js
+//   getFaviconUrl()       ↔ modules/helpers.js (simplified version)
 
-// Version
+// Version (sync with modules/helpers.js)
 
 function getVersion() {
     // Directly get version from manifest.json
@@ -10,21 +25,21 @@ function getVersion() {
 }
 
 
-// Version Type
+// Version Type (sync with modules/helpers.js)
 
 function getVersionType() {
     return 'browserAction';
 }
 
 
-// Return lang
+// Return lang (sync with modules/helpers.js)
 
 function returnLang(str) {
     return chrome.i18n.getMessage(str);
 }
 
 
-// Time formatting
+// Time formatting (sync with modules/helpers.js)
 
 function timeNow(st) {
     var tf = localStorage['rh-timeformat'];
@@ -58,7 +73,7 @@ function timeNow(st) {
 }
 
 
-// Calendar storage helper
+// Calendar storage helper (sync with modules/calendar.js)
 
 var _DATE = new Date();
 _DATE.setHours(0); _DATE.setMinutes(0); _DATE.setSeconds(0); _DATE.setMilliseconds(0);
@@ -90,7 +105,7 @@ function save_calendar_storage2(obj, n, f) {
 }
 
 
-// Default configuration values
+// Default configuration values (sync with modules/config.js)
 
 var defaultValues = {
     "rh-itemsno": 16,
@@ -137,6 +152,7 @@ function defaultConfig(clean) {
     }
 }
 
+// Favicon URL resolver (sync with modules/helpers.js - simplified for background worker)
 function getFaviconUrl(url, options) {
     options = options || {};
     if (!url || typeof url !== 'string') {
