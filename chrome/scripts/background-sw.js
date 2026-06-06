@@ -48,6 +48,44 @@ self.addEventListener('activate', (event) => {
     event.waitUntil(clients.claim());
 });
 
+// Favicon cache for third-party favicon services
+// Reduces 429 errors by caching favicon responses in the Cache API
+const FAVICON_CACHE = 'favicon-cache';
+const FAVICON_SERVICE_PATTERNS = [
+    'icons.duckduckgo.com',
+    'www.google.com/s2/favicons',
+    'favicon.im/',
+    'ico.faviconkit.net/',
+    'faviconsnap.com/api/favicon'
+];
+
+function isFaviconRequest(url) {
+    if (typeof url !== 'string') return false;
+    for (var i = 0; i < FAVICON_SERVICE_PATTERNS.length; i++) {
+        if (url.indexOf(FAVICON_SERVICE_PATTERNS[i]) !== -1) return true;
+    }
+    return false;
+}
+
+self.addEventListener('fetch', (event) => {
+    if (isFaviconRequest(event.request.url)) {
+        event.respondWith(
+            caches.match(event.request).then(function (cachedResponse) {
+                if (cachedResponse) return cachedResponse;
+                return fetch(event.request).then(function (response) {
+                    if (response.ok) {
+                        var responseClone = response.clone();
+                        caches.open(FAVICON_CACHE).then(function (cache) {
+                            cache.put(event.request, responseClone);
+                        });
+                    }
+                    return response;
+                });
+            })
+        );
+    }
+});
+
 // Initialize storage and DB when service worker starts
 onStorageReady(function () {
     initializeStorageState();
