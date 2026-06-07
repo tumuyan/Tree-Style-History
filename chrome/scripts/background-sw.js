@@ -105,6 +105,56 @@ function extractHostnameFromFaviconUrl(url) {
     return null;
 }
 
+// === Negative Cache for failed API+domain combinations ===
+// Stores URLs that have previously failed (404, etc.) to avoid 
+// repeating network requests within a configurable time window.
+const NEGATIVE_CACHE_TTL = 3600000; // 1 hour
+
+function getNegativeCache() {
+    try {
+        return JSON.parse(localStorage['favicon-negative-cache'] || '{}');
+    } catch (e) {
+        return {};
+    }
+}
+
+function setNegativeCache(cache) {
+    try {
+        localStorage['favicon-negative-cache'] = JSON.stringify(cache);
+    } catch (e) {}
+}
+
+function isNegativeCached(url) {
+    if (!url) return false;
+    var cache = getNegativeCache();
+    var ts = cache[url];
+    if (!ts) return false;
+    // Expired entry -> clean up and allow retry
+    if (Date.now() - ts > NEGATIVE_CACHE_TTL) {
+        delete cache[url];
+        setNegativeCache(cache);
+        return false;
+    }
+    return true;
+}
+
+function addNegativeCache(url) {
+    if (!url) return;
+    var cache = getNegativeCache();
+    // Periodically clean expired entries (~every 20 entries)
+    var keys = Object.keys(cache);
+    if (keys.length >= 20) {
+        var now = Date.now();
+        keys.forEach(function(key) {
+            if (now - cache[key] > NEGATIVE_CACHE_TTL) {
+                delete cache[key];
+            }
+        });
+    }
+    cache[url] = Date.now();
+    setNegativeCache(cache);
+}
+
 self.addEventListener('fetch', (event) => {
     if (isFaviconRequest(event.request.url)) {
         event.respondWith(
@@ -125,8 +175,12 @@ self.addEventListener('fetch', (event) => {
                 var exactMatch = await cache.match(event.request);
                 if (exactMatch) return exactMatch;
                 
-                // Fetch from network
-                var response = await fetch(event.request);
+                // Check negative cache: skip network if this URL recently failed
+                var shouldSkipNetwork = isNegativeCached(event.request.url);
+                
+                // Fetch from network (skip if negative cached to avoid repeat 404)
+                var response = shouldSkipNetwork ? null : await fetch(event.request);
+                
                 // Cache by exact URL (cache all responses that returned image data)
                 if (response && (response.ok || response.type === 'opaque')) {
                     var clone1 = response.clone();
@@ -144,35 +198,47 @@ self.addEventListener('fetch', (event) => {
                     }
                 }
                 
-                // SW-level fallback: when primary favicon service returns failure (non-ok or opaque),
-                // automatically try the configured fallback service before returning the error to the page.
-                // This prevents 404 console errors (e.g. Google returns 404+default icon for unknown domains).
-                if (response && (!response.ok || response.type === 'opaque')) {
+                // SW-level fallback: when primary favicon returns failure (non-ok, opaque, or skipped),
+                // add to negative cache and try the configured fallback service.
+                // Negative cache prevents repeat 404 requests within the TTL window.
+                if (!response || !response.ok || response.type === 'opaque') {
+                    // Add primary URL to negative cache if it was a real fetch failure
+                    if (response) addNegativeCache(event.request.url);
+                    
                     var hostname = extractHostnameFromFaviconUrl(event.request.url);
                     if (hostname) {
                         var fallbackService = localStorage['favicon-service-fallback'] || '';
                         if (fallbackService) {
                             var fallbackUrl = getFaviconUrl('https://' + hostname, { service: fallbackService });
                             if (fallbackUrl && typeof fallbackUrl === 'string' && fallbackUrl.indexOf('http') === 0 && isFaviconRequest(fallbackUrl)) {
-                                try {
-                                    var fallbackResponse = await fetch(fallbackUrl);
-                                    if (fallbackResponse && (fallbackResponse.ok || fallbackResponse.type === 'opaque')) {
-                                        // Cache fallback response for future requests
-                                        var fbClone1 = fallbackResponse.clone();
-                                        cache.put(new Request(fallbackUrl), fbClone1);
-                                        if (_shareFaviconCache) {
-                                            var sharedKey = new Request(FAVICON_SHARED_KEY_PREFIX + hostname);
-                                            cache.put(sharedKey, fallbackResponse.clone());
+                                // Check negative cache for fallback URL too
+                                if (isNegativeCached(fallbackUrl)) {
+                                    console.info('SW: fallback also negative cached for', hostname);
+                                } else {
+                                    try {
+                                        var fallbackResponse = await fetch(fallbackUrl);
+                                        if (fallbackResponse && (fallbackResponse.ok || fallbackResponse.type === 'opaque')) {
+                                            // Cache fallback response for future requests
+                                            var fbClone1 = fallbackResponse.clone();
+                                            cache.put(new Request(fallbackUrl), fbClone1);
+                                            if (_shareFaviconCache) {
+                                                var sharedKey = new Request(FAVICON_SHARED_KEY_PREFIX + hostname);
+                                                cache.put(sharedKey, fallbackResponse.clone());
+                                            }
+                                            return fallbackResponse;
+                                        } else {
+                                            // Fallback also failed, add to negative cache
+                                            addNegativeCache(fallbackUrl);
                                         }
-                                        return fallbackResponse;
+                                    } catch (e) {
+                                        console.warn('SW: fallback fetch failed for', hostname, e);
                                     }
-                                } catch (e) {
-                                    console.warn('SW: fallback fetch failed for', hostname, e);
                                 }
                             }
                         }
                     }
                 }
+                // Return primary response (or null if skipped; frontend handles via load/error events)
                 return response;
             })()
         );
@@ -825,6 +891,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 }
                 sendResponse({ result: deleted });
             });
+            // Also clear negative cache
+            localStorage.removeItem('favicon-negative-cache');
             return true; // Keep channel open for async response
 
         default:

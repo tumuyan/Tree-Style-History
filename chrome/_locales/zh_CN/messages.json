@@ -108,7 +108,7 @@
         "message": "不显示刷新页面的历史记录、没有跳转关系的重复记录，从而减少展示的历史记录"
     },
     "faviconService": {
-        "message": "网站图标服务"
+        "message": "首选网站图标服务"
     },
     "helpFaviconService": {
         "message": "选择用哪个 API 来加载历史记录条目的网站图标。"
