@@ -221,7 +221,7 @@ function getFaviconUrl(url, options) {
     if (!hostname) return fallback;
     if (service === 'google') return 'https://www.google.com/s2/favicons?sz=64&domain_url=' + encodeURIComponent(parsedUrl.origin + '/');
     if (service === 'duckduckgo') return 'https://icons.duckduckgo.com/ip3/' + hostname + '.ico';
-    if (service === 'favicon_im') return 'https://favicon.im/' + hostname;
+    if (service === 'favicon_im') return 'https://favicon.im/' + hostname + '?throw-error-on-404=true';
     if (service === 'faviconkit') return 'https://ico.faviconkit.net/favicon/' + hostname + '?sz=64';
     if (service === 'faviconsnap') return 'https://faviconsnap.com/api/favicon?url=' + encodeURIComponent(parsedUrl.origin + '/') + '&size=64';
     return 'chrome://favicon/' + trimmedUrl;
