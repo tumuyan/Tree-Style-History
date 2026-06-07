@@ -155,6 +155,12 @@
     "clearFaviconCacheDoneLabel": {
         "message": "Done"
     },
+    "popupZoomLabel": {
+        "message": "Popup zoom (%)"
+    },
+    "pageZoomLabel": {
+        "message": "Page zoom (%)"
+    },
     "help1": {
         "message": "The number of recent history items in the pop-up"
     },

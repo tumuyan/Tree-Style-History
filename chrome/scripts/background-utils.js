@@ -143,7 +143,9 @@ var defaultValues = {
     "show-popup": "yes",
     "favicon-service": "duckduckgo",
     "share-favicon-cache": "yes",
-    "favicon-service-fallback": ""
+    "favicon-service-fallback": "",
+    "popup-zoom": 100,
+    "page-zoom": 100
 };
 
 function defaultConfig(clean) {

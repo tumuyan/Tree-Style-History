@@ -143,6 +143,8 @@ document.addEventListener('DOMContentLoaded', function () {
     loadSlider('loadrange2', 1, 100, 'load-range2');
     loadSlider('loadrange3', 0, 900, 'load-range3');
     loadSlider('loadrange4', 0, 9000, 'load-range4');
+    loadSlider('popupZoom', 25, 300, 'popup-zoom');
+    loadSlider('pageZoom', 25, 300, 'page-zoom');
     // Load translations iframe
     //$('translations-iframe').set('html', '<iframe onerror="$(\'translations-iframe\').set(\'text\', \'Currently Unavailable\');" src="http://www.indezinez.com/api/recenthistory/translations.php?l='+chrome.i18n.getMessage("@@ui_locale")+'" frameborder="0" scrolling="no"></iframe>');
     //$('translations-iframe').set('html', '<a target="_blank" href="http://www.indezinez.com/api/ext/recenthistory/?l='+chrome.i18n.getMessage("@@ui_locale")+'">Click here to view form</a> (opens external link in new window)');

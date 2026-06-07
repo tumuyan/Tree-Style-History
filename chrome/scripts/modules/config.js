@@ -43,7 +43,9 @@ var defaultValues = {
     "show-popup": "yes",
     "favicon-service": "duckduckgo",
     "share-favicon-cache": "yes",
-    "favicon-service-fallback": ""
+    "favicon-service-fallback": "",
+    "popup-zoom": 100,
+    "page-zoom": 100
 };
 
 function defaultConfig(clean) {
@@ -455,6 +457,8 @@ function saveOptions(sync) {
     }
     so['share-favicon-cache'] = $('shareFaviconCache').options[$('shareFaviconCache').selectedIndex].value;
     so['favicon-service-fallback'] = $('faviconServiceFallback').options[$('faviconServiceFallback').selectedIndex].value;
+    so['popup-zoom'] = parseInt($('popupZoom').value, 10) || 100;
+    so['page-zoom'] = parseInt($('pageZoom').value, 10) || 100;
     for (var i in so) {
         localStorage[i] = so[i];
         console.log(i + '=' + so[i]);

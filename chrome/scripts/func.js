@@ -208,6 +208,14 @@ document.addEventListener('DOMContentLoaded', function () {
         el.innerHTML = returnLang(el.getAttribute('data-lang-string'));
     });
 
+    // Apply zoom: popup vs full pages
+    var isPopup = !!document.getElementById('popup');
+    var zoomKey = isPopup ? 'popup-zoom' : 'page-zoom';
+    var zoom = parseInt(localStorage[zoomKey], 10);
+    if (!isNaN(zoom) && zoom !== 100) {
+        document.body.style.zoom = zoom + '%';
+    }
+
     // Href hashes — prevent default click on empty links
     setInterval(function () {
         Array.from($$('a[href="#"]')).forEach(function (el) {

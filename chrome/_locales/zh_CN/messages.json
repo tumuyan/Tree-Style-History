@@ -155,6 +155,12 @@
     "clearFaviconCacheDoneLabel": {
         "message": "完成"
     },
+    "popupZoomLabel": {
+        "message": "弹出窗口缩放 (%)"
+    },
+    "pageZoomLabel": {
+        "message": "页面缩放 (%)"
+    },
     "help1": {
         "message": "在弹窗中最多显示多少条最近访问历史"
     },
