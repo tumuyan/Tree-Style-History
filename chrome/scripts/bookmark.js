@@ -288,6 +288,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
             if (hi[i] !== undefined) {
 
+                // Skip folders (bookmark tree nodes without a url property)
+                if (!hi[i].url) continue;
+
                 if (filtUrl(hi[i].url) == false) {
 
                     var title = hi[i].title;
