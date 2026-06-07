@@ -71,6 +71,12 @@ moo.js 是MooTools 框架文件，jquery-*.js 是jquery库文件，jquery.ztree.
 chrome/scripts/目录下 background-utils.js 文件是被 background-sw.js 引用的文件，内容基本由 func.js 精简而来。
 
 ## Changlog
+3.3.0 (2026/06/07)  
+重构: MooTools 完全移除，全部替换为原生 JavaScript；`func.js` 拆分为 5 个 ES6 模块  
+Favicon优化: 增加服务API，缓存请求成功的图片和失败的url，增加次选机制  
+新增功能: 自定义弹出窗口和其他页面的缩放比例（25-300%） 
+Bug 修复: 若干
+
 3.2.0 (2025/11/10) 修复了一些bug。在AI的协助下已经升级到manifest v3，切换默认分支到mv3-3（因为这是我第3次尝试把扩展升级到mv3）。由于MV3的限制，一些功能的体验会劣化。如：部分页面无法正常显示favicon，在弹窗中点击小书签可能不触发功能。  
 
 3.1.13 (2024/04/29) 调整popup窗口所能显示的项目数量的上限，处理favicon 为空的情况。

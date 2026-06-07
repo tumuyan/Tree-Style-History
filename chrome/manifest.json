@@ -2,7 +2,7 @@
   "name": "__MSG_name__",
   "short_name": "__MSG_nameShort__",
   "author": "Tumuyan",
-  "version": "3.2.0",
+  "version": "3.3.0",
   "update_url": "https://edge.microsoft.com/extensionwebstorebase/v1/crx",
   "manifest_version": 3,
   "minimum_chrome_version": "88",
