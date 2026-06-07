@@ -594,6 +594,10 @@ function recentlyClosedTabs() {
                 }
 
                 var furl = tab.favIconUrl;
+                // Generate favicon URL from page URL if tab has no favicon data
+                if (!furl && typeof url === 'string') {
+                    furl = getFaviconUrl(url);
+                }
 
                 if (title == '') {
                     title = url;
