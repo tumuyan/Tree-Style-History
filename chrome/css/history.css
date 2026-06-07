@@ -329,7 +329,10 @@ label.group-title-toggle-count {
     border-spacing: 0;
     padding: 0;
     width: 100%;
+    /* 固定表格布局：列宽由表格算法分配，不被内容撑开 */
+    table-layout: fixed;
 }
+
 
 #rh-search-form {
     display: block;
@@ -339,10 +342,6 @@ label.group-title-toggle-count {
 
 #search {
     text-align: right;
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 8px;
 }
 
 #rh-search {
