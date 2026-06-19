@@ -10,6 +10,9 @@ importScripts('db-manager.js');
 const _tSW = performance.now();
 var _tSW_init, _tSW_db;  // timing markers for startup summary
 
+// Idempotent flag: prevent double initialization from onStorageReady + onInstalled/onStartup
+var _storageInitialized = false;
+
 // Set global vars
 var openedTabs = {};
 var recentTabs = [];
@@ -252,15 +255,23 @@ onStorageReady(function () {
 
 chrome.runtime.onInstalled.addListener(() => {
     console.log('onInstalled event');
-    initializeStorageState();
+    onStorageReady(function () {
+        initializeStorageState();
+    });
 });
 
 chrome.runtime.onStartup.addListener(() => {
     console.log('onStartup event');
-    initializeStorageState();
+    onStorageReady(function () {
+        initializeStorageState();
+    });
 });
 
 function initializeStorageState() {
+    // Idempotent: prevent double initialization from overlapping event sources
+    if (_storageInitialized) return;
+    _storageInitialized = true;
+
     console.log('Initializing storage state... (' + (performance.now() - _tSW).toFixed(1) + 'ms)');
     _tSW_init = performance.now();
     
