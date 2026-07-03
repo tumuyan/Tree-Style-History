@@ -100,7 +100,7 @@ function history(w, q) {
 
             alertLoadingHistory(false);
 
-            for (var i = 0; i <= hi.length; i++) {
+            for (var i = 0; i < hi.length; i++) {
 
                 if (hi[i] !== undefined && (/^(http|https|ftp|ftps)\:\/\//).test(hi[i].url)) {
 

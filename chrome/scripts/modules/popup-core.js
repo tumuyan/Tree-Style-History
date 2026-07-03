@@ -39,10 +39,12 @@ function leftClick(url, event) {
         });
     } else {
         if (ca == 'current') {
-            chrome.tabs.getSelected(null, function (tab) {
-                chrome.tabs.update(tab.id, { url: url }, function () {
-                    window.close();
-                });
+            chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
+                if (tabs[0]) {
+                    chrome.tabs.update(tabs[0].id, { url: url }, function () {
+                        window.close();
+                    });
+                }
             });
         } else if (ca == 'newtab') {
             chrome.tabs.create({
@@ -240,7 +242,7 @@ function popupSearch(q) {
         chrome.history.search({ text: q, maxResults: 30 }, function (hi) {
             if (hi.length > 0) {
                 $('popup-search-insert').textContent = '';
-                for (var i = 0; i <= hi.length; i++) {
+                for (var i = 0; i < hi.length; i++) {
                     if (hi[i] !== undefined) {
                         var title = hi[i].title;
                         var url = hi[i].url;
@@ -520,7 +522,7 @@ function recentHistory() {
 
             if (hi.length > 0) {
 
-                for (var i = 0; i <= hi.length; i++) {
+                for (var i = 0; i < hi.length; i++) {
 
                     if (ir == rhino) { break; }
 
@@ -756,7 +758,7 @@ function recentBookmarks() {
 
             if (bm.length > 0) {
 
-                for (var i = 0; i <= bm.length; i++) {
+                for (var i = 0; i < bm.length; i++) {
 
                     if (bm[i] !== undefined) {
 

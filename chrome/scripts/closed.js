@@ -291,7 +291,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function feach_History(loadfrom, loadto, t) {
 
-        var transaction = db.transaction(["closed"], "readwrite");
+        var transaction = db.transaction(["closed"], "readonly");
         var objectStore = transaction.objectStore("closed");
         // 索引，最后的访问时间大于日期上限
         let result = objectStore.index('closeTime');

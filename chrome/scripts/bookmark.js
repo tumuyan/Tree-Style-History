@@ -284,7 +284,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var oby = localStorage['rh-orderby'];
         var ord = localStorage['rh-order'];
 
-        for (i = 0; i <= hi.length; i++) {
+        for (i = 0; i < hi.length; i++) {
 
             if (hi[i] !== undefined) {
 
