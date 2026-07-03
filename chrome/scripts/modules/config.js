@@ -200,7 +200,7 @@ function loadOptions(full) {
     selectOptionByIdValue('rhsshowurl', localStorage['rhs-showurl']);
     selectOptionByIdValue('rhsshowsep', localStorage['rhs-showsep']);
     selectOptionByIdValue('rhsshowext', localStorage['rhs-showext']);
-    selectOptionByIdValue('rhsshowbg', localStorage['rhs-showbg']);
+    
     selectOptionByIdValue('lessItem', localStorage['less-item']);
     if ($('faviconService')) {
         var favServiceSelect = $('faviconService');

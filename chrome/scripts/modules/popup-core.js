@@ -75,7 +75,6 @@ function formatItem(data) {
     var sobj = {};
     var rhsurl = localStorage['rhs-showurl'];
     var rhsext = localStorage['rhs-showext'];
-    var rhssbg = localStorage['rhs-showbg'];
 
     var url = data.url;
     var type = data.type;
@@ -252,10 +251,6 @@ function popupSearch(q) {
                             $('popup-search-insert').appendChild(formatItem({ type: 'rh', title: title, url: url, favicon: furl, visits: visits }));
                         }
                     }
-                }
-                if (localStorage['rhs-showbg'] == 'yes') {
-                    //isBookmarked('#popup-search-insert ');
-                    isPinned('#popup-search-insert ');
                 }
             } else {
                 $('popup-search-insert').innerHTML = '<div class="no-results"><span>' + returnLang('noResults') + '</span></div>';
@@ -546,11 +541,6 @@ function recentHistory() {
 
                 }
 
-                if (localStorage['rhs-showbg'] == 'yes') {
-                    //isBookmarked('#rh-inject .item');
-                    isPinned('#rh-inject .item');
-                }
-
             }
 
         });
@@ -613,12 +603,7 @@ function recentlyClosedTabs() {
                 $('rct-inject').style.display = 'none';
             }
 
-            if (localStorage['rhs-showbg'] == 'yes') {
-                //isBookmarked('#rct-inject .item');
-                isPinned('#rct-inject .item');
-            }
-
-        });
+            });
 
     }
 
@@ -703,12 +688,6 @@ function showRecentTabsImpl(rhhistory, rt) {
         if ($$('#rt-inject .item').length == 0) {
             $('rt-inject').style.display = 'none';
         }
-
-        if (localStorage['rhs-showbg'] == 'yes') {
-            //isBookmarked('#rct-inject .item');
-            isPinned('#rt-inject .item');
-        }
-
 
     }
 

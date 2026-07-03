@@ -2,9 +2,9 @@
 // History page display functions extracted from func.js
 
 import { $, $$, createElement } from '../dom-helper.js';
-import { returnLang, TimeToStr, formatDate, truncate, title_fix, get_host, getFaviconUrl, getFaviconOnerror, setupFaviconElement, escapeHtmlAttr, _DATE } from './helpers.js';
+import { returnLang, TimeToStr, formatDate, truncate, title_fix, get_host, getFaviconUrl, getFaviconOnerror, setupFaviconElement, escapeHtmlAttr } from './helpers.js';
 import { filtUrl } from './config.js';
-import { calendar_storage2, save_calendar_storage2 } from './calendar.js';
+import { save_calendar_storage2 } from './calendar.js';
 
 // Module-level variables
 var selectedItem;

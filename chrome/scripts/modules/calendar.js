@@ -78,7 +78,7 @@ function calendar(w, e, clickCallback) {
 
     if (w == 'current') {
         var cdateo = new Date();
-    } else if ('selected') {
+    } else if (w == 'selected' || w == 'yes') {
         var monthSelect = $('date-select-month');
         var daySelect = $('date-select-day');
         var yearSelect = $('date-select-year');
