@@ -19,6 +19,10 @@ $:
     script: npm run test:ci
   - name: 校验 JSON 与脚本语法
     script: npm run verify
+  - name: 安装浏览器（端到端测试）
+    script: npm run browser:install
+  - name: 端到端测试
+    script: npm run test:e2e:ci
 
 # 触发路径过滤：先匹配全部，再排除纯文档/图片变更。
 # 取反语法出自官方语法手册："!(...)" 形式，且需以 "**" 打底；

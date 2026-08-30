@@ -30,6 +30,9 @@ npm run check   # 本地门禁：lint + test + verify，约 3 秒
 | `npm run test:only -- <file>` | 本地 | 跑单个文件，如 `npm run test:only -- tests/static.test.mjs` |
 | `npm run test:watch` | 本地 | 监听变化自动重跑 |
 | `npm run test:ci` | **CI** | spec 到 stdout **并**生成 `junit.xml` |
+| `npm run test:e2e` | 本地 | 真实 Chromium 侧载扩展，逐个打开 6 个页面断言无 JS 错误 |
+| `npm run test:e2e:ci` | **CI** | 同上，并额外生成 `junit-e2e.xml`（**不**覆盖 `junit.xml`） |
+| `npm run browser:install` | **CI** | 下载 Chromium 与 apt 系统库，e2e 的前置步骤 |
 | `npm run verify:json` | 通用 | 校验 manifest 与两个语言文件是合法 JSON |
 | `npm run verify:syntax` | 通用 | `node --check` 全部 21 个首方脚本 |
 | `npm run verify` | 通用 | 上面两项之和 |
@@ -37,6 +40,10 @@ npm run check   # 本地门禁：lint + test + verify，约 3 秒
 | `npm run check:ci` | **CI** | lint + test:ci + verify |
 
 `test:ci` 与 `test` 的**唯一区别是输出**：CI 要机器可读的 `junit.xml`，本地要可读的终端输出。**不存在"只有 CI 才跑的检查"**。
+
+`npm run test:e2e`（`e2e/pages.spec.mjs`）是唯一**需要真实浏览器**的套件，刻意不放进 `tests/`、也不进 `npm run check`（本地门禁要保持秒级）。它已接入**两套 CI**，各自在 `verify` 之后追加两个步骤：`npm run browser:install` → `npm run test:e2e:ci`——两边同样只调 npm script，不内联命令。
+
+`node:22` / `ubuntu-latest` 镜像都没有可用的浏览器，所以安装步骤必须在 CI 内完成，不能省。本地首次运行执行 `npm run browser:install` 即可（约 200MB，装一次）。`playwright` 包缺失时整套 e2e 自动 skip，而不是让命令失败。
 
 ### 两套 CI
 
@@ -59,6 +66,14 @@ npm run check   # 本地门禁：lint + test + verify，约 3 秒
 
 - 测试用 Node 内置 `node:test`，**没有测试框架依赖**。`tests/stubs.mjs` 提供 `localStorage` / `chrome` / `document` 桩，并刻意复刻了 `storage-adapter.js` 的字符串化语义（所有值写进去都会变成字符串）。
 - `npm test` 覆盖三类：静态检查（`tests/static.test.mjs`：manifest 合法性、MV3 约束、HTML 资源引用、i18n 覆盖）、模块行为（`tests/modules.test.mjs`）、模块图完整性（各模块公开导出仍存在）。
+- `npm run test:e2e` 是**唯一能验证"页面真的能打开"**的一层：用 Playwright 自带的 Chromium 侧载 `chrome/`，逐个打开 popup / history / history2 / closed / bookmark / options 六个页面，断言无未捕获异常、无扩展自身发出的 `console.error`。官方做法与踩坑记录都写在 `e2e/pages.spec.mjs` 文件头注释里，要点：
+  - 扩展**只能在 persistent context 中加载**，且必须用 `channel: 'chromium'`——Chrome/Edge 已移除侧载用的命令行 flag，headless shell 也不支持扩展，所以 Playwright 自带的 Chromium 是唯一选择。
+  - MV3 的扩展 id 从 service worker 的 URL 里取（没有 background page 可读了）。
+  - **不能用 `networkidle` 判断渲染完成**：`func.js` 装了一个永不清除的 250ms `setInterval`，页面永远不安静。改为 `goto(waitUntil:'load')` → 等 `storageAdapter.ready()` → 固定 settle 1.5s。
+  - 网络错误只记录、不判失败：popup 的 favicon 走第三方服务与 `chrome://favicon/`，无外网时必然全挂，那是图标降级，不是页面坏了。只有扩展自身代码产出的错误才算数。
+  - 这套断言经过**变异验证**（往 `popup.js` 注入 `throw` + `console.error`，确认只有该页面变红），不是"永远绿"的假测试。
+  - 新增 e2e 用例时沿用同一模式：`collectErrors(page)` → `goto` → `settle(page)` → 断言 `jsErrors` 为空。**不要**用 `networkidle`。
+  - 手工验证路径（无法自动化时）：`chrome://extensions` → 加载已解压的 `chrome/`，再逐个打开页面看控制台。
 - **重要约定**：`test(name, { skip: '原因' }, fn)` 表示**已知缺陷**，函数体内写的是*期望*行为。修 bug 时把对应 skip 去掉即可（先看到红，再改到绿）。当前 3 个 skip，与 `TODO.md` 条目一一对应。
 - 模块在**导入期**就会读写 `localStorage`（如 `config.js` 顶层调用 `updateFilter()`），测试中必须用 `await import(...)`，静态 `import` 会被提升到装桩之前。观察导入期副作用时用 `importModuleFresh()` 绕过 ESM 缓存。
 

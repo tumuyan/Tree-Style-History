@@ -232,7 +232,15 @@
   - 已覆盖：`filtUrl` 匹配、配置读写往返（`saveOptions`/`loadOptions`/`downloadOptions`/`addList`）、favicon 子系统、小书签执行、时间格式化、模块图与 `func.js` 挂载一致性、manifest 权限覆盖、SW 副本同步。
   - 仍未覆盖：`feach_History` 的树构建与翻页边界、`history()`/`popup-core.js` 的渲染层、Service Worker 采集链路。
   - **阻塞原因**：这几处都深度依赖真实 DOM（zTree / `querySelector('div[rel="' + host + '"]')` / `setInterval` 分片渲染），`tests/dom.mjs` 的替身**故意不做 HTML 树解析**，硬撑会写出一堆似是而非的断言。
-  - 建议：要么引入 jsdom/happy-dom 并接受一个开发依赖，要么按 TODO.md 第 2 批先把渲染层重构成可测的纯函数。在那之前，这几处的回归只能靠手动加载扩展验证。
+  - 建议：要么引入 jsdom/happy-dom 并接受一个开发依赖，要么按 TODO.md 第 2 批先把渲染层重构成可测的纯函数。
+  - 更新：**阻塞已降级**。见下方「端到端冒烟测试」——现在有真实 Chromium 可用，上面这几处可以直接写真实交互断言（访问页面产生历史 → 打开 `history2.html` → 断言树节点），不再需要 jsdom，也不必为可测性重构渲染层。
+
+- [x] **端到端冒烟测试（真实浏览器，已进两套 CI）**
+  - `e2e/pages.spec.mjs` + `npm run test:e2e`：Playwright 自带 Chromium 侧载 `chrome/`，逐个打开 popup / history / history2 / closed / bookmark / options **六个页面**，断言无未捕获异常、无扩展自身发出的 `console.error`。8 个用例约 12 秒。
+  - 按官方扩展测试指南实现（`e2e/pages.spec.mjs` 文件头注释有完整要点）：扩展只能装在 **persistent context**，且必须用 `channel: 'chromium'`（Chrome/Edge 已移除侧载 flag，headless shell 不支持扩展）；MV3 的扩展 id 从 service worker URL 取。
+  - CI 接入：两套流水线在 `verify` 之后都追加 `npm run browser:install` → `npm run test:e2e:ci`。`node:22` 与 `ubuntu-latest` 均无可用浏览器，安装步骤不可省。e2e 报告写入 **`junit-e2e.xml`**，与单元测试的 `junit.xml` 分开上传（`path: junit*.xml`），避免互相覆盖。
+  - 断言经过**变异验证**：临时往 `popup.js` 注入 `throw` + `console.error`，确认只有 `popup.html` 变红且两条错误都被列出，其余 7 条不受影响——证明不是"永远绿"的假测试。
+  - 刻意**不进 `npm run check`**（本地门禁要保持秒级），`playwright` 缺失时整套自动 skip。
 
 ---
 

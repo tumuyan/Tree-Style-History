@@ -49,12 +49,16 @@ jobs:
       - name: Validate JSON, script syntax and CI parity
         run: npm run verify
 
-      # Keep the machine-readable report even when tests fail, so the artifact
-      # is available for triage.
-      - name: Upload test report
+      - name: Install browser for end-to-end tests
+        run: npm run browser:install
+
+      - name: End-to-end tests
+        run: npm run test:e2e:ci
+
+      - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: junit-report
-          path: junit.xml
+          path: junit*.xml
           if-no-files-found: ignore

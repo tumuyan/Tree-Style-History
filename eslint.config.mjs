@@ -270,6 +270,29 @@ export default [
     },
 
     // ---------------------------------------------------------------------
+    // End-to-end smoke tests (needs a real browser, see npm run test:e2e).
+    //
+    // Kept out of `tests/**` on purpose: `npm test` must stay runnable in the
+    // bare node:22 CI image, which has no browser. If playwright is missing
+    // the suite self-skips rather than failing the install-less run.
+    // ---------------------------------------------------------------------
+    {
+        files: ['e2e/**/*.mjs'],
+        languageOptions: {
+            ecmaVersion: 2022,
+            sourceType: 'module',
+            globals: {
+                ...globals.node,
+                ...globals.browser,
+            },
+        },
+        rules: {
+            'no-undef': 'error',
+            'no-unused-vars': ['warn', { args: 'none' }],
+        },
+    },
+
+    // ---------------------------------------------------------------------
     // Test files (Node, zero-dependency node:test)
     // ---------------------------------------------------------------------
     {
