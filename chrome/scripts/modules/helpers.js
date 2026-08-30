@@ -8,7 +8,7 @@
 // re-exported, so the public API (`func.js` mounts these on `window`) is
 // unchanged.
 
-import { _DATE, timeNow, returnLang, advanceDateToToday } from './shared/format.js';
+import { _DATE, returnLang, advanceDateToToday } from './shared/format.js';
 import { isBookmarkletUrl } from './shared/url.js';
 
 export { _DATE, DAY, timeNow, returnLang, getVersion, getVersionType } from './shared/format.js';

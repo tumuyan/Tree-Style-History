@@ -52,8 +52,12 @@ const HEADER = `// =============================================================
 const IMPORT_RE = /^\s*import\s+(?:[^'"\n]*?\sfrom\s+)?['"]([^'"]+)['"]\s*;?\s*$/;
 // A whole-line `export { a, b, c };` — including the closing brace, so a block
 // spanning several lines fails instead of losing only its first line.
-const EXPORT_BLOCK_RE = /^\s*export\s*\{[^}]*\}\s*;?\s*$/;
-const EXPORT_DECL_RE = /^\s*export\s+(?:async\s+)?(?:function|var|let|const|class)\s/;
+// Both export forms carry a capture group so that `stripModuleSyntax()` (which
+// only tests) and `collectExportedNames()` (which reads the name) match against
+// literally the same pattern. Two spellings of one grammar is exactly the
+// drift this generator exists to eliminate.
+const EXPORT_BLOCK_RE = /^\s*export\s*\{([^}]*)\}\s*;?\s*$/;
+const EXPORT_DECL_RE = /^\s*export\s+(?:async\s+)?(?:function|var|let|const|class)\s+([A-Za-z_$][\w$]*)/;
 
 const UNSUPPORTED_HINT =
     'Only single-line `import ...;` and `export ...;` / `export { ... };` are flattened.';
@@ -64,6 +68,36 @@ function collectImports(src) {
     for (const line of src.split(/\r?\n/)) {
         const m = IMPORT_RE.exec(line);
         if (m) out.push(m[1]);
+    }
+    return out;
+}
+
+/**
+ * Names a module exports, in declaration order.
+ *
+ * Note `let`/`const`/`class` are included here even though ESLint's `exported`
+ * directive comment does not honour them (see build()) — the shared layer
+ * currently only uses `function` and `var`, and listing everything keeps the
+ * two lists from drifting apart silently.
+ */
+function collectExportedNames(src) {
+    const out = [];
+    for (const line of src.split(/\r?\n/)) {
+        const trimmed = line.trim();
+        if (IMPORT_RE.test(trimmed)) continue;
+        const decl = EXPORT_DECL_RE.exec(trimmed);
+        if (decl) {
+            out.push(decl[1]);
+            continue;
+        }
+        const block = EXPORT_BLOCK_RE.exec(trimmed);
+        if (block) {
+            for (const part of block[1].split(',')) {
+                // `a as b` is exported under `b`.
+                const name = part.trim().split(/\s+as\s+/).pop().trim();
+                if (name) out.push(name);
+            }
+        }
     }
     return out;
 }
@@ -167,6 +201,22 @@ function readModules() {
 
 function build(modules) {
     const blocks = [HEADER.replace(/\n+$/, '')];
+
+    // Declare the public surface for ESLint.
+    //
+    // background-sw.js reaches these through importScripts(), which static
+    // analysis cannot see, so `no-unused-vars` would flag every symbol that is
+    // not *also* called from inside this file (e.g. `getVersionType`).
+    //
+    // The list is derived from the modules' actual exports rather than
+    // hand-written, so it cannot fall behind the way a manual list would.
+    // ESLint only honours the directive for `function` and `var` declarations;
+    // that is all modules/shared/ uses today.
+    const exported = modules.flatMap((m) => collectExportedNames(m.src));
+    if (exported.length > 0) {
+        blocks.push(`/* exported ${exported.join(', ')} */`);
+    }
+
     for (const { file, src } of modules) {
         const lines = [`// ---- begin modules/shared/${file} ----`];
         for (const line of src.split(/\r?\n/)) {

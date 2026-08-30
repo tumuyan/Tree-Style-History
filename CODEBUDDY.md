@@ -165,6 +165,7 @@ MV3 取消了后台页面，因此代码分成两套互不相通的运行时：
 - 生成器只认**单行** `import ...;` / `export ...;` / `export { ... };`；`export default`、跨行的 `import` 或 `export {` 会让生成**直接失败**并给出提示，不会产出坏文件（`vm.Script` 解析自检是兜底的第二道）。
 - 生成器会在生成前校验模块图，两种错误都会**显式报错**而不会静默产出缺斤少两的文件：①`modules/shared/` 里有文件没登记进 `gen-sw-utils.mjs` 的 `FILES`（否则它永远不会进入生成物）；②某个 shared 模块 import 了不在 `FILES` 里、或排在它后面的文件（import 行是被删掉的，一旦目标没被更早拼接，引用就退化成隐式全局，语法检查看不见，只在 SW 运行时炸）。**往 `shared/` 加文件必须同时加进 `FILES` 并按依赖顺序放好。**
 - 生成器只规范化各模块**拼接处**的换行，不动模块内部的空行——它们可能在模板字符串里。因此删掉 import 行后留下的连续空行会保留，这是刻意的。
+- 生成器会在文件头派发 `/* exported ... */`（ESLint 指令），名单由各模块真实导出推导。SW 经 `importScripts()` 取用这些符号是静态分析看不见的，没有它 `no-unused-vars` 会把所有未被本文件调用的函数都报一遍。注意该指令**只对 `function` 与 `var` 生效**，`const`/`let`/`class` 无效。
 - 页面侧照常通过 `modules/helpers.js`、`modules/config.js`、`modules/calendar.js` 的 `export ... from` 转出，公开 API 不变。
 
 **新增生成器的做法**（与本仓库其他命令家族一致的约定）：裸名跑全部、`:子项`跑单个。写 `scripts/gen-<name>.mjs`，加 `"gen:<name>"` 成员，再把裸名改成

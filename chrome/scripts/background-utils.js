@@ -10,6 +10,8 @@
 // concatenation is what the Service Worker loads via importScripts.
 // ============================================================================
 
+/* exported defaultValues, defaultConfig, DAY, _DATE, advanceDateToToday, getVersion, getVersionType, returnLang, timeNow, isBookmarkletUrl, get_host, getFaviconUrl, getFaviconOnerror, calendar_storage2, save_calendar_storage2 */
+
 // ---- begin modules/shared/config-defaults.js ----
 // Shared config defaults — single source of truth for background-utils.js.
 //

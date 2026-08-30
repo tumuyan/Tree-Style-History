@@ -5,7 +5,7 @@
 状态图例：`[ ]` 未开始 · `[x]` 已完成 · `[-]` 暂缓
 
 > **护栏已就位**：`npm run check`（ESLint + `node:test` + 4 个校验脚本）是唯一准入闸门，约 5 秒跑完，CI 强制执行。
-> 当前基线：**lint 0 error / 92 测试 · 86 通过 · 6 skip · 0 失败**。
+> 当前基线：**lint 0 error / 146 warning · 97 测试 · 91 通过 · 6 skip · 0 失败**（另：e2e 8 测试 · 8 通过）。
 > 其中 6 个 skip 是已知缺陷的"待修规范"（函数体内写的是期望行为），对应下面标注 `（有 skip 测试）` 的条目（个别条目共用一个测试）——**修完后请去掉对应 skip**。
 
 ---
@@ -27,6 +27,7 @@
   - `modules.test.mjs` 新增：favicon 全服务映射与降级链、`executeBookmarklet` 的 MV3/无标签/非小书签分支、时间格式化、选项页 `saveOptions`⇄`loadOptions` 往返与 sync 往返、过滤域名增删改。
   - `static.test.mjs` 新增：`func.js` 的 `window.*` 挂载 ↔ 模块导出双向一致性、首方脚本禁用 `eval`/`new Function`、`config.js` 引用的选项页 id 必须存在、manifest 权限与实际 `chrome.*` 调用双向覆盖、HTML 属性插值必须转义、`.lang` 类缺失检测。
   - `scripts/check-sw-sync.mjs`（接入 `npm run verify`）：比对 `background-utils.js` 与 `modules/` 的手工同步副本（10 个同名函数 + 38 键 `defaultValues`），把 P3 的"人肉记忆"变成 CI 断言。
+    - **已被取代**：重复的那份改为由 `modules/shared/` 生成后，此脚本连同比对对象一起删除（见「第 1.8 批」）。留档以上描述的是当时的中间态。
 
 ### 第 1.5 批（已完成）：三个可测缺陷
 
@@ -37,7 +38,7 @@
 - [x] **修复 `te` 未初始化导致输出 `undefined`**（`chrome/scripts/modules/helpers.js:23`、`74`）
   - 原状：`var te;` 只在 `tf == '12'` / `tf == '24'` 分支里赋值，其余情况拼出 `13:05undefined`。
   - 做法：`TimeToStr()` 与 `timeNow()` 都改为 `var te = '';` 预先初始化，并删掉 `timeNow()` 里已冗余的 `else if (tf == '24') { te = ''; }` 分支。
-  - 连带收益：删掉该分支后 `helpers.js` 与 `background-utils.js` 的 `timeNow()` **完全一致**，`check-sw-sync.mjs` 里最后一条 `ACCEPTED_DRIFT` 记录得以删除，同步检查现在零豁免。
+  - 连带收益：删掉该分支后 `helpers.js` 与 `background-utils.js` 的 `timeNow()` **完全一致**，`check-sw-sync.mjs` 里最后一条 `ACCEPTED_DRIFT` 记录得以删除，同步检查现在零豁免。（该脚本后来随「第 1.8 批」的改造一起删除。）
 - [x] **修复 `addList()` 只替换第一个空格**（`chrome/scripts/modules/config.js:597`）
   - 原状：`item.replace(' ', '')` → 粘贴 `" example.com "` 保留尾部空格 → 过不了 `rel.test()` → 弹「请输入合法 URL」并**整条丢弃**。
   - 做法：改为 `replace(/\s+/g, '')`，制表符/换行一并处理。
@@ -146,6 +147,28 @@
 - [x] 新增 4 个测试：渲染不崩溃、保存不清空、**点 X 移除后保存可恢复站点**、清空后写回 `'false'` 哨兵值。
   - `tests/dom.mjs` 微调：`innerHTML` 注册出的 id 元素现在挂上 `parentNode`，使 `closest('tr')` 可解析——这是 X 按钮的真实工作方式。**仅一层父级**，仍不构建嵌套树。
 
+### 第 1.7 批（已完成）：删除 `filtUrl()` 里从不执行的降段分支
+
+- [x] 分支守卫 `site_r`（`/(.+\.){3,}/`）要求主机名 4 段以上，其内的替换又要求连续两个点（真实主机名不存在），**两个条件不可能同时成立** → 该分支是死代码。
+  - 后果：配置 `example.com` 覆盖不到 `www.example.com`。
+  - 做法：改为只剥 `www.` 前缀。只剥 `www` 而非逐级上溯，以免配置的 `b.com` 误伤 `xb.com`。
+  - 注：此条在提交 `005b7e3` 中已完成，当时漏建本节，导致第 1.5 批的「见『第 1.7 批』」长期悬空。
+
+### 第 1.8 批（已完成）：`background-utils.js` 改为生成 + 修跨午夜日期滚动
+
+- [x] **消除 `background-utils.js` 的手工同步**（对应 P3 同名条目）
+  - 无依赖的底层函数抽到 `chrome/scripts/modules/shared/`（`config-defaults.js`/`format.js`/`url.js`/`favicon.js`/`calendar-storage.js`），由 `scripts/gen-sw-utils.mjs` 按拓扑序去掉 import/export 标记拼接成 `background-utils.js`。
+  - `scripts/check-sw-sync.mjs` 删除；`verify:sw-sync` 改为 `gen-sw-utils.mjs --check`，生成与校验共用同一份逻辑。
+  - 生成器在生成前校验模块图：`shared/` 有文件未登记进 `FILES`、或 import 指向未拼接/更晚拼接的文件，均显式报错——后者会退化成隐式全局，语法自检看不见，只在 SW 运行时炸。
+  - 生成器派发 `/* exported ... */` 指令（名单由各模块真实导出推导，不会漂移）：SW 经 `importScripts()` 取用这些符号是静态分析看不见的，否则 `no-unused-vars` 会误报全部未被本文件调用的函数。
+- [x] **修 `TimeToStr()` 跨午夜滚动把 `_DATE` 变成字符串**（`modules/helpers.js`）
+  - 原状：`_DATE = _DATE + DAY`，`Date` 被强制转为字符串，次日首次调用后 `_DATE.getTime()` 抛 `TypeError`。
+  - 做法：抽成 `advanceDateToToday()`，改用 `new Date(_DATE.getTime() + DAY)` 并补上循环；`window._DATE` 也由一次性快照变成随滚动更新的 live binding。
+  - 测试：`tests/shared.test.mjs`。该层无导入期副作用，可静态 `import`（`calendar-storage.js` 除外，它导入期会调 `onStorageReady()`）。
+- [x] **`tests/sw-sync.test.mjs` 的检查集合改为从 `shared/` 源码自动提取**
+  - 手写版漏了 `background-sw.js:515` 调用的 `getVersionType`。自动提取后零误报，且新增导出会自动纳入。
+- [x] 顺带解开 `helpers.js` ↔ `config.js` 循环依赖（P3 同名条目已更新为「已解开 1 组」）。
+
 ### 新发现（由测试暴露）
 
 - [x] **选项页缺少 `#mvlist` / `#mvlist-table`，「最常访问黑名单」整条链路失效** — **已修复**（见「第 1.6 批」）
@@ -159,7 +182,7 @@
 
 - [ ] **`timeNow()` / `TimeToStr()` 的 `te` 未初始化** — **已修复**（见「第 1.5 批」）
   - ~~现状：`helpers.js:23` 与 `:74` 声明 `var te;` 但只在 `tf == '12'` / `tf == '24'` 分支赋值。~~
-  - 修法要点（供回看）：以 `background-utils.js` 的 `var te = ''` 为准统一，并删掉 `helpers.js` 里冗余的 `else if (tf == '24')` 分支，使 `check-sw-sync.mjs` 的 `ACCEPTED_DRIFT` 清空。
+  - 修法要点（供回看）：以 `background-utils.js` 的 `var te = ''` 为准统一，并删掉 `helpers.js` 里冗余的 `else if (tf == '24')` 分支，使 `check-sw-sync.mjs` 的 `ACCEPTED_DRIFT` 清空。（该脚本后来随「第 1.8 批」的改造一起删除。）
   - 触发条件：`defaultConfig()` 保证 `rh-timeformat` 有值，所以正常情况下碰不到；但在 storage 尚未就绪（`storage-adapter.js` 冷启动）的窗口内读取就会露出来。
 
 - [ ] **给 `rh-list-order` 的 `split(',')` 加空值保护**（`chrome/scripts/popup.js:64`、`134`）
@@ -203,18 +226,19 @@
 
 ## P3 — 架构与可维护性
 
-- [ ] **清理 lint 警告存量**：约 90 处 `no-redeclare`（同作用域 `var` 重复声明）、61 处 `no-unused-vars`、1 处 `no-empty`、2 处 `require-atomic-updates`。
+- [ ] **清理 lint 警告存量**：共 146 处 — 89 处 `no-redeclare`（同作用域 `var` 重复声明，其中 16 处是 `background-utils.js` 与 `eslint.config.mjs` 的 `crossFileGlobals` 同名，属生成文件的固有重复）、54 处 `no-unused-vars`（多为 `catch (e)` 未使用绑定）、1 处 `no-empty`、2 处 `require-atomic-updates`。
   - 现状：这些设为 warning，不阻塞 CI。`no-redeclare` 之所以不设为 error，是因为它合法无害，90 条会淹没真实错误。
   - 收尾动作：清零后把 `npm run lint` 改为 `eslint . --max-warnings 0`，彻底锁死。
 
-- [ ] **消除 `background-utils.js` 的手工同步**（**漂移已可被 CI 发现，根治仍待做**）
-  - 现状：`background-utils.js` 用注释列出与 `modules/` 的 SYNC 映射（`getVersion`/`timeNow`/`getFaviconUrl`/`defaultConfig`/`save_calendar_storage2` 等），因 MV3 的 SW 无法 `importScripts` ES module 而必须重复。
-  - 已有护栏：`npm run verify:sw-sync`（`scripts/check-sw-sync.mjs`）逐函数比对两侧函数体与 38 键 `defaultValues`，单侧改动会让 CI 失败。**当前 0 豁免**：10 个函数与 `defaultValues` 全部一致（`ACCEPTED_DRIFT` 已清空）。请保持这个状态——新增豁免等于让该函数退出检查。
-  - 根治做法：抽成同时兼容两种加载方式的 UMD 式文件，届时连同 `check-sw-sync.mjs` 一起删除。
+- [x] **消除 `background-utils.js` 的手工同步** — **已根治**（见「第 1.8 批」）
+  - ~~现状：`background-utils.js` 用注释列出与 `modules/` 的 SYNC 映射（`getVersion`/`timeNow`/`getFaviconUrl`/`defaultConfig`/`save_calendar_storage2` 等），因 MV3 的 SW 无法 `importScripts` ES module 而必须重复。~~
+  - ~~中间态护栏：`npm run verify:sw-sync`（`scripts/check-sw-sync.mjs`）逐函数比对两侧函数体与 38 键 `defaultValues`。~~ 该脚本已删除，重复的那份不再是手写的，无需再比对。
+  - 现状：无依赖的底层函数抽到 `chrome/scripts/modules/shared/`，由 `scripts/gen-sw-utils.mjs` 机械拼接成 `background-utils.js`。改函数只改 `shared/` 下那一份，`npm run gen` 重新生成并提交；`npm run verify:sw-sync` 改为 `gen-sw-utils.mjs --check`，生成与校验共用同一份逻辑。
 
-- [ ] **解开循环依赖（现有两组）**
-  - `calendar.js` ↔ `history-core.js`：`calendar_storage2` 由前者读取、后者写入，二者互相 import，初始化顺序敏感。
-  - `helpers.js` ↔ `config.js`：`helpers.js:4` 导入 `config.js` 的 `defaultValues`，而 `config.js:5` 又导入 `helpers.js` 的 `returnLang`/`get_host`。目前靠 ESM 提升侥幸可用，但依赖方向混乱。
+- [ ] **解开循环依赖（原有两组，已解开 1 组）**
+  - [x] `helpers.js` ↔ `config.js` — **已解开**：`defaultValues`/`defaultConfig` 下沉到 `modules/shared/config-defaults.js`，`helpers.js` 不再 import `config.js`，依赖方向变为单向。
+  - [ ] `calendar.js` ↔ `history-core.js`：`calendar_storage2` 由前者读取、后者写入，二者互相 import，初始化顺序敏感。
+    - 注：`calendar_storage2` 本体已下沉到 `modules/shared/calendar-storage.js`（两侧都改为从那里取），但 `calendar.js` 仍 import `history-core.js` 的 `history`、`history-core.js` 仍 import `calendar.js` 的 `save_calendar_storage2`，环还在。
   - 做法：把共享状态抽到独立的 `state.js`，让依赖变成单向的 `state ← helpers ← config`。
 
 - [ ] **完成模块化，删除 `func.js` 的 window 兼容层**
