@@ -158,94 +158,122 @@ function addNegativeCache(url) {
     setNegativeCache(cache);
 }
 
-self.addEventListener('fetch', (event) => {
-    if (isFaviconRequest(event.request.url)) {
-        event.respondWith(
-            (async function () {
-                var cache = await caches.open(FAVICON_CACHE);
-                
-                // Try shared cache first (same hostname cached from any service)
-                if (_shareFaviconCache) {
-                    var hostname = extractHostnameFromFaviconUrl(event.request.url);
-                    if (hostname) {
-                        var sharedRequest = new Request(FAVICON_SHARED_KEY_PREFIX + hostname);
-                        var sharedMatch = await cache.match(sharedRequest);
-                        if (sharedMatch) return sharedMatch;
-                    }
-                }
-                
-                // Fall back to exact URL match
-                var exactMatch = await cache.match(event.request);
-                if (exactMatch) return exactMatch;
-                
-                // Check negative cache: skip network if this URL recently failed
-                var shouldSkipNetwork = isNegativeCached(event.request.url);
-                
-                // Fetch from network (skip if negative cached to avoid repeat 404)
-                var response = shouldSkipNetwork ? null : await fetch(event.request);
-                
-                // Cache by exact URL (cache all responses that returned image data)
-                if (response && (response.ok || response.type === 'opaque')) {
-                    var clone1 = response.clone();
-                    cache.put(event.request, clone1);
-                    
-                    // Shared cache: ONLY for confirmed successful responses (response.ok === true)
-                    // Opaque responses (status 0, e.g. 404 from Google) cannot be verified,
-                    // caching them in shared would poison other services' fallback requests.
-                    if (_shareFaviconCache && response.ok) {
-                        var hostname = extractHostnameFromFaviconUrl(event.request.url);
-                        if (hostname) {
-                            var sharedKey = new Request(FAVICON_SHARED_KEY_PREFIX + hostname);
-                            cache.put(sharedKey, response.clone());
-                        }
-                    }
-                }
-                
-                // SW-level fallback: when primary favicon returns failure (non-ok, opaque, or skipped),
-                // add to negative cache and try the configured fallback service.
-                // Negative cache prevents repeat 404 requests within the TTL window.
-                if (!response || !response.ok || response.type === 'opaque') {
-                    // Add primary URL to negative cache if it was a real fetch failure
-                    if (response) addNegativeCache(event.request.url);
-                    
-                    var hostname = extractHostnameFromFaviconUrl(event.request.url);
-                    if (hostname) {
-                        var fallbackService = localStorage['favicon-service-fallback'] || '';
-                        if (fallbackService) {
-                            var fallbackUrl = getFaviconUrl('https://' + hostname, { service: fallbackService });
-                            if (fallbackUrl && typeof fallbackUrl === 'string' && fallbackUrl.indexOf('http') === 0 && isFaviconRequest(fallbackUrl)) {
-                                // Check negative cache for fallback URL too
-                                if (isNegativeCached(fallbackUrl)) {
-                                    console.info('SW: fallback also negative cached for', hostname);
-                                } else {
-                                    try {
-                                        var fallbackResponse = await fetch(fallbackUrl);
-                                        if (fallbackResponse && (fallbackResponse.ok || fallbackResponse.type === 'opaque')) {
-                                            // Cache fallback response for future requests
-                                            var fbClone1 = fallbackResponse.clone();
-                                            cache.put(new Request(fallbackUrl), fbClone1);
-                                            if (_shareFaviconCache) {
-                                                var sharedKey = new Request(FAVICON_SHARED_KEY_PREFIX + hostname);
-                                                cache.put(sharedKey, fallbackResponse.clone());
-                                            }
-                                            return fallbackResponse;
-                                        } else {
-                                            // Fallback also failed, add to negative cache
-                                            addNegativeCache(fallbackUrl);
-                                        }
-                                    } catch (e) {
-                                        console.warn('SW: fallback fetch failed for', hostname, e);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                // Return primary response (or null if skipped; frontend handles via load/error events)
-                return response;
-            })()
-        );
+// Best-effort cache write. cache.put() is deliberately not awaited (writing must
+// not delay the response), so an unhandled rejection -- e.g. QuotaExceededError --
+// would surface as "Uncaught (in promise)". Losing a cache entry is harmless.
+function cachePutSafe(cache, request, response) {
+    try {
+        var p = cache.put(request, response);
+        if (p && typeof p.catch === 'function') p.catch(function () {});
+    } catch (e) {}
+}
+
+// Try the configured fallback service for the same hostname.
+// Returns a Response, or null when there is nothing usable (no fallback
+// configured, negative cached, or the fallback itself failed).
+async function fetchFaviconFallback(request, cache) {
+    var hostname = extractHostnameFromFaviconUrl(request.url);
+    if (!hostname) return null;
+
+    var fallbackService = localStorage['favicon-service-fallback'] || '';
+    if (!fallbackService) return null;
+
+    var fallbackUrl = getFaviconUrl('https://' + hostname, { service: fallbackService });
+    if (!fallbackUrl || typeof fallbackUrl !== 'string' || fallbackUrl.indexOf('http') !== 0 || !isFaviconRequest(fallbackUrl)) {
+        return null;
     }
+    if (isNegativeCached(fallbackUrl)) {
+        console.info('SW: fallback also negative cached for', hostname);
+        return null;
+    }
+    try {
+        var fallbackResponse = await fetch(fallbackUrl);
+        if (fallbackResponse && (fallbackResponse.ok || fallbackResponse.type === 'opaque')) {
+            cachePutSafe(cache, new Request(fallbackUrl), fallbackResponse.clone());
+            if (_shareFaviconCache) {
+                cachePutSafe(cache, new Request(FAVICON_SHARED_KEY_PREFIX + hostname), fallbackResponse.clone());
+            }
+            return fallbackResponse;
+        }
+        // Fallback answered, but with a failure status -> negative cache it
+        addNegativeCache(fallbackUrl);
+    } catch (e) {
+        // Offline / DNS / CORS / service outage: routine for favicon services
+        addNegativeCache(fallbackUrl);
+        console.debug('SW: fallback favicon fetch failed for', hostname, e && e.message);
+    }
+    return null;
+}
+
+async function handleFaviconRequest(request) {
+    var cache = await caches.open(FAVICON_CACHE);
+
+    // Try shared cache first (same hostname cached from any service)
+    if (_shareFaviconCache) {
+        var sharedHostname = extractHostnameFromFaviconUrl(request.url);
+        if (sharedHostname) {
+            var sharedRequest = new Request(FAVICON_SHARED_KEY_PREFIX + sharedHostname);
+            var sharedMatch = await cache.match(sharedRequest);
+            if (sharedMatch) return sharedMatch;
+        }
+    }
+
+    // Fall back to exact URL match
+    var exactMatch = await cache.match(request);
+    if (exactMatch) return exactMatch;
+
+    // Check negative cache: skip network if this URL recently failed
+    var response = null;
+    if (!isNegativeCached(request.url)) {
+        try {
+            response = await fetch(request);
+        } catch (e) {
+            // Network-level failure (offline, DNS, blocked, service outage).
+            // Expected and frequent for third-party favicon services -> debug level only.
+            addNegativeCache(request.url);
+            console.debug('SW: favicon fetch failed for', request.url, e && e.message);
+        }
+    }
+
+    if (response && (response.ok || response.type === 'opaque')) {
+        cachePutSafe(cache, request, response.clone());
+
+        // Shared cache: ONLY for confirmed successful responses (response.ok === true)
+        // Opaque responses (status 0, e.g. 404 from Google) cannot be verified,
+        // caching them in shared would poison other services' fallback requests.
+        if (_shareFaviconCache && response.ok) {
+            var okHostname = extractHostnameFromFaviconUrl(request.url);
+            if (okHostname) {
+                cachePutSafe(cache, new Request(FAVICON_SHARED_KEY_PREFIX + okHostname), response.clone());
+            }
+        }
+        return response;
+    }
+
+    // Primary service returned a failure status (or was skipped) -> negative cache
+    // it and try the configured fallback service.
+    if (response) addNegativeCache(request.url);
+    var fallback = await fetchFaviconFallback(request, cache);
+    if (fallback) return fallback;
+
+    // Nothing worked. Returning null here made Chrome log
+    // "Failed to convert value to 'Response'." -- resolve to a network error
+    // instead, which simply fires the page's img error handler (the frontend
+    // degradation path) without touching the SW console.
+    return response || Response.error();
+}
+
+self.addEventListener('fetch', (event) => {
+    if (!isFaviconRequest(event.request.url)) return;
+    event.respondWith(
+        handleFaviconRequest(event.request).catch(function (e) {
+            // Last-resort guard: a rejected respondWith() promise makes Chrome log
+            // "The FetchEvent for ... resulted in a network error response:
+            // the promise was rejected." -- which cannot be caught anywhere else.
+            console.debug('SW: favicon handler failed for', event.request.url, e && e.message);
+            return Response.error();
+        })
+    );
 });
 
 // Initialize storage and DB when service worker starts
