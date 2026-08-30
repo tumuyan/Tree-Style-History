@@ -39,11 +39,9 @@ const SYNCED = [
 ];
 
 // Bodies that are already known to differ. Each entry must carry a reason and
-// a TODO reference; leaving one here means further drift is invisible, so the
-// list is meant to shrink, not grow.
-const ACCEPTED_DRIFT = new Map([
-    ['timeNow', 'background-utils 把 te 初始化为 ""，helpers 声明为未初始化的 var —— 两者行为在 rh-timeformat 既非 12 也非 24 时不同（TODO.md P2），修 timeNow 时统一并删除本条'],
-]);
+// a TODO reference; leaving one here means further drift is invisible for that
+// function, so the list is meant to stay empty.
+const ACCEPTED_DRIFT = new Map([]);
 
 // --- source scanning -------------------------------------------------------
 

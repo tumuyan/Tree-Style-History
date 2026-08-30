@@ -3,8 +3,8 @@
 // Why stubs are needed
 // --------------------
 // chrome/scripts/modules/*.js are ES modules that touch browser globals at
-// *import* time (e.g. config.js calls updateFilter() at top level, which reads
-// localStorage). Modules must therefore be imported with `await import(...)`
+// *import* time (config.js and calendar.js register an onStorageReady hook at
+// the top level). Modules must therefore be imported with `await import(...)`
 // AFTER installStubs() has run — a static `import` would be hoisted above it.
 //
 // The localStorage stub deliberately mimics the real StorageAdapter semantics:
@@ -22,6 +22,12 @@ export { CHROME_DIR };
  */
 export function installStubs() {
     const store = new Map();
+
+    // Callbacks queued by onStorageReady(). Nothing runs them until the test
+    // calls fireStorageReady(), which is how the real storage-adapter behaves:
+    // the cache is empty until chrome.storage.local.get() resolves, so every
+    // read before that point yields undefined.
+    const readyCallbacks = [];
 
     const localStorageStub = {
         getItem: (k) => (store.has(String(k)) ? store.get(String(k)) : undefined),
@@ -100,13 +106,25 @@ export function installStubs() {
     globalThis.chrome = chromeStub;
     globalThis.document = documentStub;
     if (!globalThis.window) globalThis.window = globalThis;
+    globalThis.onStorageReady = (cb) => { readyCallbacks.push(cb); };
 
     return {
         store,
         syncStore,
         localStorage: localStorageProxy,
         chrome: chromeStub,
-        reset() { store.clear(); syncStore.clear(); },
+        reset() {
+            store.clear();
+            syncStore.clear();
+            readyCallbacks.length = 0;
+        },
+        /** Run the queued onStorageReady callbacks, as the adapter does once the cache is filled. */
+        fireStorageReady() {
+            const pending = readyCallbacks.splice(0);
+            for (const cb of pending) cb();
+        },
+        /** How many callbacks are waiting for storage to become ready. */
+        pendingReady: () => readyCallbacks.length,
     };
 }
 

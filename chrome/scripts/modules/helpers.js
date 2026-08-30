@@ -16,12 +16,15 @@ function TimeToStr(time, skip_date, skip_year, skip_clock) {
     var currentTime = new Date(time);
     var hours = currentTime.getHours();
     var minutes = currentTime.getMinutes();
+    // Declared with a default: a 24h clock has no suffix, and an unset or
+    // corrupt rh-timeformat used to leave it undefined, which then rendered as
+    // the literal text "undefined" (see the last `return` below).
+    var te = '';
     if (time == undefined) {
         hours = '--';
         minutes = '--';
     } else {
         if (tf == '12') {
-            var te;
             if (hours > 11) {
                 te = ' ' + returnLang('PM');
             } else {
@@ -29,8 +32,6 @@ function TimeToStr(time, skip_date, skip_year, skip_clock) {
             }
             if (hours == 0) { hours = 12; }
             if (hours > 12) { hours = hours - 12; }
-        } else if (tf == '24') {
-            var te = '';
         }
         if (hours < 10) { hours = '0' + hours; }
         if (minutes < 10) { minutes = '0' + minutes; }
@@ -71,13 +72,13 @@ function timeNow(st) {
     var currentTime = st === 0 ? new Date() : new Date(st);
     var hours = currentTime.getHours();
     var minutes = currentTime.getMinutes();
-    var te;
+    // See TimeToStr: '' covers the 24h clock and any unset/corrupt value.
+    // Mirrored in background-utils.js — `npm run verify:sw-sync` compares them.
+    var te = '';
     if (tf == '12') {
         if (hours > 11) { te = ' ' + returnLang('PM'); } else { te = ' ' + returnLang('AM'); }
         if (hours == 0) { hours = 12; }
         if (hours > 12) { hours = hours - 12; }
-    } else if (tf == '24') {
-        te = '';
     }
     if (hours < 10) { hours = '0' + hours; }
     if (minutes < 10) { minutes = '0' + minutes; }
@@ -133,6 +134,17 @@ function escapeHtmlAttr(text) {
         .replace(/"/g, '&quot;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;');
+}
+
+/**
+ * Escape a string for safe interpolation into a RegExp literal.
+ *
+ * User-configurable values must never reach `new RegExp()` raw: a configuration
+ * holding 'a(' throws SyntaxError, and a plain '.' silently matches any
+ * character.
+ */
+function escapeRegExp(text) {
+    return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function truncate(str, ind, lng) {
@@ -388,7 +400,7 @@ export {
     _DATE, DAY,
     TimeToStr, timeNow, formatDate,
     echoLang, returnLang,
-    stripScripts, title_fix, escapeHtmlAttr, truncate, extractFileName, calcSize,
+    stripScripts, title_fix, escapeHtmlAttr, escapeRegExp, truncate, extractFileName, calcSize,
     getUrlVars, isBookmarkletUrl, extractBookmarkletCode, decodeBookmarkletCode, executeBookmarklet,
     chromeURL, getVersion, getVersionType,
     Clipboard,

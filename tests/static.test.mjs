@@ -297,7 +297,7 @@ const MODULES = [
 
 // Exports that stay module-private on purpose: they are filter state that no
 // page script reads, so mounting them would only widen the global surface.
-const MODULE_PRIVATE = new Set(['flist', 'flist_r', 'site_r']);
+const MODULE_PRIVATE = new Set(['flist', 'flist_r']);
 
 test('func.js re-exports every module symbol the page scripts rely on', () => {
     const funcSrc = fs.readFileSync(path.join(CHROME_DIR, 'scripts/func.js'), 'utf8');
@@ -361,8 +361,7 @@ test('config.js only references option-page ids that exist', () => {
 
     // Known gaps, each tracked in TODO.md — delete the entry as it is fixed.
     const KNOWN_GAPS = new Set([
-        'rhshare',      // no control in options.html: rh-share is neither shown nor saved
-        'mvlist-table', // no table in options.html: mostVisitedBlocklist() throws
+        'rhshare', // no control in options.html: rh-share is neither shown nor saved
     ]);
 
     const missing = [...referenced].filter((id) => !optionsIds.has(id) && !KNOWN_GAPS.has(id)).sort();

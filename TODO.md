@@ -5,8 +5,8 @@
 状态图例：`[ ]` 未开始 · `[x]` 已完成 · `[-]` 暂缓
 
 > **护栏已就位**：`npm run check`（ESLint + `node:test` + 4 个校验脚本）是唯一准入闸门，约 5 秒跑完，CI 强制执行。
-> 当前基线：**lint 0 error / 84 测试 · 69 通过 · 15 skip · 0 失败**。
-> 其中 15 个 skip 是已知缺陷的"待修规范"（函数体内写的是期望行为），与下面标注 `（有 skip 测试）` 的条目一一对应——**修完后请去掉对应 skip**。
+> 当前基线：**lint 0 error / 92 测试 · 86 通过 · 6 skip · 0 失败**。
+> 其中 6 个 skip 是已知缺陷的"待修规范"（函数体内写的是期望行为），对应下面标注 `（有 skip 测试）` 的条目（个别条目共用一个测试）——**修完后请去掉对应 skip**。
 
 ---
 
@@ -28,13 +28,27 @@
   - `static.test.mjs` 新增：`func.js` 的 `window.*` 挂载 ↔ 模块导出双向一致性、首方脚本禁用 `eval`/`new Function`、`config.js` 引用的选项页 id 必须存在、manifest 权限与实际 `chrome.*` 调用双向覆盖、HTML 属性插值必须转义、`.lang` 类缺失检测。
   - `scripts/check-sw-sync.mjs`（接入 `npm run verify`）：比对 `background-utils.js` 与 `modules/` 的手工同步副本（10 个同名函数 + 38 键 `defaultValues`），把 P3 的"人肉记忆"变成 CI 断言。
 
+### 第 1.5 批（已完成）：三个可测缺陷
+
+- [x] **修复 `filtUrl()` 子串匹配误伤**（`chrome/scripts/modules/config.js:681`）
+  - 原状：`flist.indexOf(site)` 在 `'|'` 拼接串上做子串搜索，不认标签边界。配置 `b.com` 会过滤掉 `b.co`；配置 `sub.example.com` 会过滤掉 `example.com`。
+  - 做法：新增 `domainsToSet()` 把列表切成整体条目存进 `flist_set`（并转小写），`filtUrl()` 改为集合查找。当时**刻意保留 `site_r` 分支与 `flist_r` 的构造方式不变**以缩小改动面；分支随后被证实从不执行，见「第 1.7 批」。
+  - 连带：`domainsToSet()` 顺手做了 `trim()`，配置里带空格的条目现在也能命中。
+- [x] **修复 `te` 未初始化导致输出 `undefined`**（`chrome/scripts/modules/helpers.js:23`、`74`）
+  - 原状：`var te;` 只在 `tf == '12'` / `tf == '24'` 分支里赋值，其余情况拼出 `13:05undefined`。
+  - 做法：`TimeToStr()` 与 `timeNow()` 都改为 `var te = '';` 预先初始化，并删掉 `timeNow()` 里已冗余的 `else if (tf == '24') { te = ''; }` 分支。
+  - 连带收益：删掉该分支后 `helpers.js` 与 `background-utils.js` 的 `timeNow()` **完全一致**，`check-sw-sync.mjs` 里最后一条 `ACCEPTED_DRIFT` 记录得以删除，同步检查现在零豁免。
+- [x] **修复 `addList()` 只替换第一个空格**（`chrome/scripts/modules/config.js:597`）
+  - 原状：`item.replace(' ', '')` → 粘贴 `" example.com "` 保留尾部空格 → 过不了 `rel.test()` → 弹「请输入合法 URL」并**整条丢弃**。
+  - 做法：改为 `replace(/\s+/g, '')`，制表符/换行一并处理。
+
 ---
 
 ## P0 — 必须尽快修复
 
 ### 安全
 
-- [ ] **修复历史记录 URL 未转义导致的 XSS**（`chrome/scripts/modules/history-core.js:237-243`、`288-295`）**（有 skip 测试，共 11 处：history-core 8 + config 3）**
+- [ ] **修复历史记录 URL 未转义导致的 XSS**（`chrome/scripts/modules/history-core.js:237-243`、`288-295`）**（有 skip 测试，原 11 处；第 1.6 批已修 1 处，现剩 10 处：history-core 8 + config 2）**
   - 现状：`url` 未转义即拼进 `innerHTML`，出现在 `href` / `value` / `title` 三个属性中，可被 `"` 提前闭合属性注入事件处理器。扩展页面持有 `history`/`bookmarks`/`tabs`/`sessions` 权限，危害等级高。
   - 做法：全部改走 `escapeHtmlAttr`（`modules/helpers.js:128`），或统一迁移到 `createElement` + `textContent` 建 DOM。
   - 关联位置：`modules/config.js:556`、`578`、`616`（用户输入的域名直接进 `title="..."` 属性）。
@@ -43,10 +57,10 @@
   - 现状：`rha[].host` 直接拼进 `querySelector('div[rel="' + host + '"]')`，含引号时抛异常导致渲染中断。
   - 做法：改用 `CSS.escape()` 或遍历比对 `getAttribute('rel')`。
 
-- [ ] **修复用户输入直接编译为正则**（`chrome/scripts/modules/config.js:674`）**（有 skip 测试）**
-  - 现状：`new RegExp('[^?=#]*(' + flist + ').*', 'i')`。`flil` 以 `|` 结尾产生空分支匹配一切；`.` 未转义。
+- [x] **修复用户输入直接编译为正则**（`chrome/scripts/modules/config.js:674`）— **已修复**（见「第 1 批」）
+  - ~~现状：`new RegExp('[^?=#]*(' + flist + ').*', 'i')`。`flil` 以 `|` 结尾产生空分支匹配一切；`.` 未转义。~~
   - **已实测**：域名列表中含正则元字符（如 `a(`）时 `new RegExp` 抛 `SyntaxError: Unterminated group`。由于 `updateFilter()` 在模块顶层被调用，这会**在 import 阶段炸掉 `func.js`，导致扩展所有页面白屏**（自我 DoS）。
-  - 做法：按 `|` 切分后逐项 `escapeRegExp` 再 `join('|')`，并对 `new RegExp` 做 try/catch 兜底。
+  - 已做：`flist_r` 改由归一化后的 `flist_set` 逐条 `escapeRegExp` 拼成，空集合保留 `/^false$/` 哨兵。转义后不可能再抛 `SyntaxError`，故**未**按原计划加 try/catch 兜底（吞掉异常只会掩盖新引入的构造错误）。
 
 - [ ] **给 SW 的 `callFunction` 加来源校验与白名单**（`chrome/scripts/background-sw.js:877-888`）
   - 现状：不校验 `sender`，直接 `self[message.function](...message.args)` 调用任意全局函数。
@@ -54,9 +68,9 @@
 
 ### 崩溃 / 数据丢失
 
-- [ ] **修复 `updateFilter()` 在模块顶层执行导致过滤域名列表被清空**（`chrome/scripts/modules/config.js:665`）**（有 skip 测试）**
-  - 现状：ES module 早于 `storage-adapter.js` 的 `chrome.storage.local.get` 回调执行，此刻缓存必为空 → `updateFilter()` 读到 `undefined` → 把 `'false'` 写回 `localStorage`，用户配置被持久化覆盖。连带导致 `history2.js:38`（已注释）等页面上 `flist` 恒为 `'false'`，**域名过滤功能实际失效**。
-  - 做法：把顶层调用移除，改由 `onStorageReady` 触发；`updateFilter()` 增加「缓存未就绪则不回写」保护。
+- [x] **修复 `updateFilter()` 在模块顶层执行导致过滤域名列表被清空**（`chrome/scripts/modules/config.js:665`）— **已修复**（见「第 1 批」）
+  - ~~现状：ES module 早于 `storage-adapter.js` 的 `chrome.storage.local.get` 回调执行，此刻缓存必为空 → `updateFilter()` 读到 `undefined` → 把 `'false'` 写回 `localStorage`，用户配置被持久化覆盖。~~
+  - 已做：顶层调用移除，改由 `window.onStorageReady(updateFilter)` 触发；`updateFilter()` 读到的值为 `undefined` 时直接返回，不回写；`filtUrl()` 在未就绪时惰性重试一次。
   - 验证：设置一个过滤域名 → 打开 `history2.html` → 回选项页确认列表未被重置。
 
 - [ ] **修复 `downloadOptions()` 严格模式 ReferenceError**（`chrome/scripts/modules/config.js:255`、`257`）
@@ -71,10 +85,11 @@
 
 ## P1 — 功能失效
 
-- [ ] **过滤列表应覆盖 `www` 子域**（`chrome/scripts/modules/config.js:690-696`）**（有 skip 测试）**
-  - 已实测：配置 `example.com` 后，`filtUrl('https://www.example.com/a')` 返回 `false`（不过滤）。
-  - 原因：`site_r = /(.+\.){3,}/` 只对 **4 段及以上**的主机名做降段处理，`www.example.com`（3 段）不触发，于是 `flist.indexOf('www.example.com')` 落空。
-  - 影响：用户添加了域名却仍能看到 `www.` 前缀站点的记录，过滤看起来"时灵时不灵"。
+- [x] **过滤列表应覆盖 `www` 子域**（`chrome/scripts/modules/config.js`）
+  - ~~影响：用户添加了域名却仍能看到 `www.` 前缀站点的记录，过滤看起来"时灵时不灵"。~~
+  - 原因有两层：`site_r = /(.+\.){3,}/` 只对 **4 段及以上**的主机名做降段处理（`www.example.com` 是 3 段，不触发）；且降段用的 `replace(/[\.]+\./, '')` 要求**连续两个点**，真实主机名里不存在——**该分支从不执行**。改成集合查找后，分支内外两个判断完全等价，死得更彻底。
+  - 做法：删掉 `site_r` 与降段分支，改为「主机未命中集合且以 `www.` 开头时，剥掉 `www.` 再查一次」。**只剥 `www`**：逐级剥所有标签会让配置的 `b.com` 误伤 `xb.com`（`filter entries match whole host labels, not substrings` 已锁定此行为）。
+  - 连带：`site_r` 已从 `config.js` 导出、`func.js` 导入，以及两处测试白名单（`modules.test.mjs` 的 `VALUE_EXPORTS`、`static.test.mjs` 的 `MODULE_PRIVATE`）中一并移除。
 
 - [ ] **`title_fix()` 会吞掉斜杠**（`chrome/scripts/modules/helpers.js:125`）**（有 skip 测试）**
   - 现状：`.replace(/\//g, '')` 把标题里的 `/` 全部删除，`FAQ / Help` 显示为 `FAQ  Help`。
@@ -101,28 +116,50 @@
 - [ ] **修复 `rh-list-order` 硬编码 5 项**（`chrome/scripts/modules/config.js:434`）**（有 skip 测试）**
   - 现状：`rhlo[0].id + ... + rhlo[4].id`，增删区块即 `TypeError`。改为动态拼接。
 
-- [ ] **修复 `addList` 只替换第一个空格**（`chrome/scripts/modules/config.js:597`）**（有 skip 测试）**
-  - 现状：`item.replace(' ', '')` → 改为 `replace(/\s+/g, '')`。
+- [x] **修复 `addList` 只替换第一个空格**（`chrome/scripts/modules/config.js:597`）
+  - 做法：`item.replace(' ', '')` → `replace(/\s+/g, '')`。**已完成**，见「第 1.5 批」。
   - **已实测**：`addList(' example.com ')` 得到 `'example.com '`，尾部空格过不了 `rel.test()`，于是弹「请输入合法 URL」并**整条丢弃**——不是加了个脏数据，是加不进去。
 
-### 新发现（第二轮测试暴露，尚未核实过真实 UI）
+### 第 1 批（已完成）：`updateFilter()` 竞态与正则元字符崩溃
 
-- [ ] **选项页缺少 `#mvlist` / `#mvlist-table`，「最常访问黑名单」整条链路失效** **（有 2 个 skip 测试）**
-  - 现状：`options.html` 只有 CSS（`options.css:325,335`）引用这两个 id，**HTML 里没有对应元素**。
-  - 后果一（崩溃）：`mostVisitedBlocklist()`（`config.js:556`）执行 `$('mvlist-table').appendChild(tr)`，一旦 `mv-blocklist` 非空即 `TypeError` → **从 popup 屏蔽过任意站点后，选项页打不开**。
-  - 后果二（数据丢失）：`saveOptions()`（`config.js:380`）读 `$$('#mvlist tr td:first-child')` 恒为空 → `mlil = 'false'` → **每次保存选项都会静默清空黑名单**。
-  - 黑名单由 `popup-core.js:460-464` 写入，所以"屏蔽站点"能生效于 popup，但在选项页一侧既看不见也留不住。
-  - 做法：在 `options.html` 补上 `#mvlist`/`#mvlist-table` 表格（对齐既有 `#flist`/`#flist-table`），或整条移除该特性。
+- [x] **去掉 `config.js` 顶层的 `updateFilter()` 调用，改为 `onStorageReady` 钩子**
+  - 原状：ES module 的求值早于 `storage-adapter.js` 解析完 `chrome.storage.local`，此刻读到 `undefined`，于是走进 `localStorage['rh-filtered'] = 'false'` 分支。这是一次真实的 `chrome.storage.local.set()`，与尚未返回的 `get(null)` 竞态；**写赢了就把用户的过滤列表清空**。
+  - 做法：删除该写入。键的初始化归 `defaultConfig()`（SW 启动 + 选项页），**读取者不当写入者**。刷新时机改由 `window.onStorageReady(updateFilter)` 承担（与 `calendar.js:14` 既有写法一致）。
+- [x] **`updateFilter()` 遇 `undefined` 提前返回，不覆盖已有状态**
+  - 区分「还没读到」与「用户没配过滤」：前者由新增的 `filterLoaded` 标志让 `filtUrl()` 在**使用时**惰性重试一次。
+  - 为什么两道机制都要：`window.onStorageReady` 让状态尽早正确（且不依赖是否有人调用 `filtUrl`）；惰性重试让 `filtUrl()` **不依赖脚本注册顺序**——否则就得指望 `func.js`（module，defer）永远排在 `popup.js`（defer）之前，这种隐式约束太脆。
+- [x] **`flist_r` 改为由归一化后的集合构建**
+  - 原状：`new RegExp('[^\?=#]*(' + flist + ').*', 'i')` 直接插值原始串 → 配置含 `a(` 时 **抛 SyntaxError**（过滤列表非空即白屏）；`.` 被当通配符；`'a.com|b.com|'` 结尾的 `|` 产生**空分支，匹配一切**。
+  - 做法：新增 `escapeRegExp()`（`modules/helpers.js`，与 `escapeHtmlAttr` 同列并挂到 `window`）后逐条转义拼接；集合为空时保留 `/^false$/` 哨兵，避免编译出 `[^?=#]*().*` 这种全匹配。
+- [x] 新增 6 个测试 + 解除 2 个 skip：导入无副作用、冷启动不写入、ready 后刷新、元字符不抛（含逐个字符遍历）、坏条目不牵连兄弟、空列表不全匹配、`.` 不当通配符。
+  - `tests/stubs.mjs` 新增 `onStorageReady` 队列与 `fireStorageReady()`；`tests/dom.mjs` 的假 `window` 转发 `onStorageReady`（此前整体替换 `window` 导致钩子静默不注册）。
 
-- [ ] **`filtUrl()` 用子串匹配，过滤域名会误伤** **（有 skip 测试）**
-  - 现状：`flist.indexOf(site) >= 0`（`config.js:686,693`）不做标签边界判断，且 `flist_r` 正则含空分支（`flist` 以 `|` 结尾）可匹配任意串。
-  - **已实测**：配置 `b.com` 后 `filtUrl('https://b.co/x')` 返回 `true`；配置 `sub.example.com` 后 `filtUrl('https://example.com/a')` 也返回 `true`。
-  - 做法：改为按 `|` 切分后精确比对（并保留 `www` 降段逻辑，见上条 P1）。
+### 第 1.6 批（已完成）：最常访问黑名单整条链路失效
 
-- [ ] **`timeNow()` / `TimeToStr()` 的 `te` 未初始化** **（有 2 个 skip 测试）**
-  - 现状：`helpers.js:23` 与 `:74` 声明 `var te;` 但只在 `tf == '12'` / `tf == '24'` 分支赋值。
-  - **已实测**：`rh-timeformat` 为其它值或未就绪时输出 `13:05undefined`（`undefined` 被字符串拼接出来）。
-  - 注意：`background-utils.js:49` 的副本写作 `var te = ''`，已经没有这个问题——两侧行为不一致，`check-sw-sync.mjs` 目前把它列为已知差异。**修的时候以 background-utils 的写法为准，并同步删掉 `ACCEPTED_DRIFT` 里的 `timeNow` 条目。**
+- [x] **补回选项页缺失的 `#mvlist` / `#mvlist-table`**
+  - 根因：`options.html` 里只有 CSS 引用这两个 id，HTML 从未写过对应元素；而 `option16`（Restore Items to Most Visited）与 `help16` 是**孤儿 i18n 键**（两语言都有、代码零引用）——说明这段 UI 是丢失的，不是没设计。`help16` 原文「Click on the cross next to the URL to restore it」直接描述了预期形态。
+  - 做法：在 `main-options` 里紧跟 `option3`（最常访问数量）补一行，结构对齐既有 `#flist`/`#flist-table`，复用 `option16` + `help16`。
+  - 该 UI 只读：条目由 popup 的 `uiDeleteItem(el,'mv')` 写入，选项页靠每行的 X 移除后保存来恢复站点。
+- [x] **顺带修掉 `mostVisitedBlocklist()` 的属性注入**（`config.js:555`）
+  - 为什么不留到 P0：`mostVisitedBlocklist()` 此前**从未真正执行过**（黑名单非空就抛错、为空就 no-op），是本次才启用的代码路径。启用一段已知的未转义渲染等于引入漏洞，故只修这一处；`filteredDomainsList()` 与 `addList()` 是**早已在线**的同类问题，仍归 P0 批次（11 处 → 剩 10 处）。
+  - 已实测：含 `"` 的 URL 渲染为 `&quot;`，属性未被闭合。
+- [x] 新增 4 个测试：渲染不崩溃、保存不清空、**点 X 移除后保存可恢复站点**、清空后写回 `'false'` 哨兵值。
+  - `tests/dom.mjs` 微调：`innerHTML` 注册出的 id 元素现在挂上 `parentNode`，使 `closest('tr')` 可解析——这是 X 按钮的真实工作方式。**仅一层父级**，仍不构建嵌套树。
+
+### 新发现（由测试暴露）
+
+- [x] **选项页缺少 `#mvlist` / `#mvlist-table`，「最常访问黑名单」整条链路失效** — **已修复**（见「第 1.6 批」）
+  - ~~现状：`options.html` 只有 CSS（`options.css:325,335`）引用这两个 id，HTML 里没有对应元素。~~
+  - ~~后果一（崩溃）：`mostVisitedBlocklist()` 执行 `$('mvlist-table').appendChild(tr)`，一旦 `mv-blocklist` 非空即 `TypeError` → 从 popup 屏蔽过任意站点后选项页打不开。~~
+  - ~~后果二（数据丢失）：`saveOptions()` 读 `$$('#mvlist tr td:first-child')` 恒为空 → `mlil = 'false'` → 每次保存静默清空黑名单。~~
+
+- [ ] **`filtUrl()` 用子串匹配，过滤域名会误伤** — **已修复**（见「第 1.5 批」）
+  - ~~现状：`flist.indexOf(site) >= 0`（`config.js:686,693`）不做标签边界判断，且 `flist_r` 正则含空分支（`flist` 以 `|` 结尾）可匹配任意串。~~
+  - **残余已消除**：见「第 1 批」——`flist_r` 现由归一化后的集合逐条 `escapeRegExp` 拼成，「空分支」与「元字符崩溃」均已解决，上方 P0 对应条目已标记完成。
+
+- [ ] **`timeNow()` / `TimeToStr()` 的 `te` 未初始化** — **已修复**（见「第 1.5 批」）
+  - ~~现状：`helpers.js:23` 与 `:74` 声明 `var te;` 但只在 `tf == '12'` / `tf == '24'` 分支赋值。~~
+  - 修法要点（供回看）：以 `background-utils.js` 的 `var te = ''` 为准统一，并删掉 `helpers.js` 里冗余的 `else if (tf == '24')` 分支，使 `check-sw-sync.mjs` 的 `ACCEPTED_DRIFT` 清空。
   - 触发条件：`defaultConfig()` 保证 `rh-timeformat` 有值，所以正常情况下碰不到；但在 storage 尚未就绪（`storage-adapter.js` 冷启动）的窗口内读取就会露出来。
 
 - [ ] **给 `rh-list-order` 的 `split(',')` 加空值保护**（`chrome/scripts/popup.js:64`、`134`）
@@ -172,7 +209,7 @@
 
 - [ ] **消除 `background-utils.js` 的手工同步**（**漂移已可被 CI 发现，根治仍待做**）
   - 现状：`background-utils.js` 用注释列出与 `modules/` 的 SYNC 映射（`getVersion`/`timeNow`/`getFaviconUrl`/`defaultConfig`/`save_calendar_storage2` 等），因 MV3 的 SW 无法 `importScripts` ES module 而必须重复。
-  - 已有护栏：`npm run verify:sw-sync`（`scripts/check-sw-sync.mjs`）逐函数比对两侧函数体与 38 键 `defaultValues`，单侧改动会让 CI 失败。当前仅 `timeNow` 列为已知差异。
+  - 已有护栏：`npm run verify:sw-sync`（`scripts/check-sw-sync.mjs`）逐函数比对两侧函数体与 38 键 `defaultValues`，单侧改动会让 CI 失败。**当前 0 豁免**：10 个函数与 `defaultValues` 全部一致（`ACCEPTED_DRIFT` 已清空）。请保持这个状态——新增豁免等于让该函数退出检查。
   - 根治做法：抽成同时兼容两种加载方式的 UMD 式文件，届时连同 `check-sw-sync.mjs` 一起删除。
 
 - [ ] **解开循环依赖（现有两组）**
@@ -204,11 +241,24 @@
 | 批次 | 内容 | 理由 |
 |---|---|---|
 | ✅ 第 0 批 | 自动化护栏 + 修 4 处未声明变量/死代码 + 补 i18n | **已完成**。此后每批改动都有 `npm run check` 兜底 |
-| 第 1 批 | 修 `updateFilter` 竞态与正则元字符崩溃（均有 skip 测试，去掉 skip 即可验证） | 数据丢失 + 白屏级崩溃，改动集中在 `config.js` 一个函数 |
-| 第 2 批 | 修 XSS（URL 未转义拼 `innerHTML`）与选择器注入 | 安全，需逐处替换并回归各页面渲染；建议先补渲染层测试 |
-| 第 3 批 | 修配置同步三处错误 + `www` 子域过滤 | 功能失效，同属配置子系统，一起回归 |
+| ✅ 第 1 批 | 修 `updateFilter` 竞态与正则元字符崩溃 | **已完成**（92 测试 · 7 skip）。数据丢失 + 白屏级崩溃两项均已消除 |
+| 第 2 批 | 修 XSS（剩 10 处：URL 未转义拼 `innerHTML`）与选择器注入 | 安全，需逐处替换并回归各页面渲染；建议先补渲染层测试 |
+| 第 3 批 | 修配置同步三处错误 | 功能失效，同属配置子系统，一起回归 |
 | 第 4 批 | SW 状态持久化（`chrome.storage.session`）、启动抓取异步化 | 涉及 MV3 架构调整，需先讨论方案 |
 | 第 5 批 | 清理 lint 警告存量 → `--max-warnings 0`；模块化收尾、技术栈统一 | 长期收益，可渐进推进 |
+
+> **插队说明**：第 1.5 / 1.6 / 1.7 批是顺手做掉的——它们都由新写的测试或 review 直接暴露，且改动小、有 skip 测试兜底，不值得单独排队。
+> 1.5 = `filtUrl` 子串误伤 + `te` 未初始化 + `addList` 空格；1.6 = 选项页 `#mvlist` 缺失（**会导致选项页打不开**）+ 其附带的属性注入；1.7 = `filtUrl` 降段死分支 + `www` 子域过滤。
+
+## 已消除的白屏 / 数据丢失路径
+
+以下三类此前均可由用户配置直接触发，现已全部有测试覆盖：
+
+| 触发条件 | 原后果 | 现状 |
+|---|---|---|
+| 过滤列表非空 | `new RegExp()` 抛 SyntaxError → 页面白屏 | 逐条转义，坏条目不影响兄弟项 |
+| 过滤列表含 `a(` 等元字符 | 同上 | 同上 |
+| 页面加载瞬间 | `updateFilter()` 写入 `'false'` 覆盖用户列表 | 读取者不写入，改由 ready 钩子刷新 |
 
 执行约定：
 1. 每批开始先跑 `npm run check` 确认起点是绿的。

@@ -2,7 +2,7 @@
 // Manages all configuration-related functions extracted from func.js.
 
 import { $, $$, createElement } from '../dom-helper.js';
-import { returnLang, get_host } from './helpers.js';
+import { returnLang, get_host, escapeHtmlAttr, escapeRegExp } from './helpers.js';
 
 
 // Default config values
@@ -552,7 +552,14 @@ function mostVisitedBlocklist() {
             for (var i = 0; i < mvbl.length; i++) {
                 if (mvbl[i] !== undefined && mvbl[i] !== '') {
                     var linkid = 'link-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
-                    var tr = createElement('tr', { html: '<td><div title="' + mvbl[i] + '">' + mvbl[i] + '</div></td><td style="width:20px;"><a href="#" id="' + linkid + '"><img alt="Restore" src="images/remove.png"></a></td>', 'class': 'op-item' });
+                    // Escaped: entries are URLs taken from browsing history, so
+                    // a quote in one would otherwise close this attribute. This
+                    // function only started running once #mvlist-table existed
+                    // in options.html, so the escaping was added together with
+                    // that element rather than left for the P0 XSS batch that
+                    // still covers filteredDomainsList() and addList() below.
+                    var mvblEsc = escapeHtmlAttr(mvbl[i]);
+                    var tr = createElement('tr', { html: '<td><div title="' + mvblEsc + '">' + mvblEsc + '</div></td><td style="width:20px;"><a href="#" id="' + linkid + '"><img alt="Restore" src="images/remove.png"></a></td>', 'class': 'op-item' });
                     $('mvlist-table').appendChild(tr);
                     $(linkid).addEventListener('click', function () {
                         this.closest('tr').remove();
@@ -593,7 +600,10 @@ function addFilteredItem() {
 }
 
 function addList(item) {
-    var fliv = item.replace(' ', '');
+    // \s+ rather than ' ': replace(' ', '') only removed the *first* space, so a
+    // pasted " example.com " kept its trailing space, failed the URL test below
+    // and was rejected outright with an "invalid URL" alert.
+    var fliv = item.replace(/\s+/g, '');
     if (fliv == 'false' || fliv == '')
         return false;
     var flic = 'test';
@@ -657,21 +667,69 @@ function mergeList() {
 
 // Filter variables and functions
 
-var flist = '';
+// 'false' rather than '': it is the sentinel filtUrl() and mostVisited() check
+// for, so nothing is filtered until updateFilter() has read a real list.
+var flist = 'false';
 var flist_r = /^false$/;
-var site_r = /(.+\.){3,}/;
+// The configured domains, split into whole entries — see domainsToSet().
+var flist_set = new Set();
+// Set once a real value has been read; until then filtUrl() retries on use.
+var filterLoaded = false;
 // var addon_url='';
-updateFilter();
+
+// Refresh once storage is readable.
+//
+// There is deliberately no updateFilter() call at module top level: ES modules
+// are evaluated before storage-adapter.js has resolved chrome.storage.local, so
+// every key reads as undefined at that point. The old top-level call then wrote
+// the "false" sentinel — an async chrome.storage.local.set() that raced the
+// pending get(null) and, when it won, destroyed the user's saved filter list.
+// defaultConfig() (service worker startup, options page) owns initialising the
+// key, so a reader must never be its writer.
+if (typeof window.onStorageReady === 'function') {
+    window.onStorageReady(updateFilter);
+}
+
+/**
+ * Split the stored 'a.com|b.com|' list into a set of whole, lower-cased
+ * domains.
+ *
+ * filtUrl() used to search `flist` with indexOf(), which matches substrings and
+ * therefore ignores label boundaries: a configured `b.com` filtered `b.co`, and
+ * `sub.example.com` filtered `example.com`. Comparing against a set of whole
+ * entries is what makes the boundary meaningful.
+ */
+function domainsToSet(list) {
+    var set = new Set();
+    if (typeof list !== 'string' || list === 'false') return set;
+    var parts = list.split('|');
+    for (var i = 0; i < parts.length; i++) {
+        var domain = parts[i].trim().toLowerCase();
+        if (domain !== '') set.add(domain);
+    }
+    return set;
+}
 
 function updateFilter() {
-    flist = localStorage['rh-filtered'];
-    if (flist == undefined || flist == '' || flist == 'false') {
-        flist = 'false';
-        flist_r = /^false$/;
-        localStorage['rh-filtered'] = flist;
-    } else {
-        flist_r = new RegExp('[^\?=#]*(' + flist + ').*', 'i');
-    }
+    var stored = localStorage['rh-filtered'];
+    // undefined means storage has not been read yet, which is NOT the same as
+    // "the user filters nothing". Bail out and let the next filtUrl() retry,
+    // rather than caching an empty list that happens to look final.
+    if (stored === undefined) return;
+    filterLoaded = true;
+    flist = (stored == '' || stored == 'false') ? 'false' : stored;
+    flist_set = domainsToSet(flist);
+
+    // Built from the normalised set rather than from the raw string:
+    //   * entries are regex-escaped, so a value like 'a(' no longer throws
+    //     SyntaxError and a '.' no longer acts as a wildcard;
+    //   * there is no empty alternative — the raw 'a.com|b.com|' ends in '|',
+    //     and interpolating it produced a branch that matched every URL.
+    // An empty set means "nothing is filtered", so keep the never-matching
+    // sentinel instead of compiling `[^?=#]*().*`, which matches anything.
+    flist_r = flist_set.size === 0
+        ? /^false$/
+        : new RegExp('[^?=#]*(' + [...flist_set].map(escapeRegExp).join('|') + ').*', 'i');
 
     // addon_url=document.URL.replace('background.html','');
     // console.log('addon_url = '+addon_url);
@@ -679,18 +737,31 @@ function updateFilter() {
 
 // 如果命中，返回true
 function filtUrl(url) {
+    // Safety net for callers that run before the onStorageReady hook above:
+    // retry until storage has actually been read. Without this, filtering would
+    // silently depend on page scripts and func.js registering their ready
+    // callbacks in the right order.
+    if (!filterLoaded) updateFilter();
+
     if (flist == undefined || flist == 'false' || url == undefined || url == '')
         return false;
 
-    var site = get_host(url);
-    if (flist.indexOf(site + '|') >= 0)
-        return true;
-
-    if (site_r.test(site)) {
-        site = site.replace(/[\.]+\./, '');
+    // A listed domain is meant to cover its www host as well: users filter
+    // "example.com" and expect www.example.com to go with it.
+    //
+    // The old code tried to get there by stripping a leading label, but its
+    // guard (`site_r`, /(.+\.){3,}/) only fired for hosts with 4+ labels and
+    // the replacement needed a doubled dot — no hostname has one — so the
+    // branch never ran and www.example.com slipped through.
+    //
+    // Only www is stripped, not every leading label: dropping those too would
+    // make a listed "b.com" filter "xb.com" as well.
+    var site = get_host(url).toLowerCase();
+    if (!flist_set.has(site) && site.startsWith('www.')) {
+        site = site.substring('www.'.length);
     }
 
-    if (flist.indexOf(site) >= 0) {
+    if (flist_set.has(site)) {
         return flist_r.test(url);
     }
 
@@ -718,6 +789,5 @@ export {
     updateFilter,
     filtUrl,
     flist,
-    flist_r,
-    site_r
+    flist_r
 };

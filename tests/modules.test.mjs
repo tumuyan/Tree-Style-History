@@ -140,7 +140,7 @@ const EXPECTED_EXPORTS = {
 };
 
 // Exports that are data rather than callables.
-const VALUE_EXPORTS = new Set(['defaultValues', 'calendar_storage2', 'flist', 'flist_r', 'site_r']);
+const VALUE_EXPORTS = new Set(['defaultValues', 'calendar_storage2', 'flist', 'flist_r']);
 
 for (const [file, names] of Object.entries(EXPECTED_EXPORTS)) {
     test(`module graph: ${file} imports and exports its public API`, async () => {
@@ -622,50 +622,131 @@ test('saveOptions uploads the rendered domain rows as the filter list', (t) => {
 });
 
 // ---------------------------------------------------------------------------
-// KNOWN DEFECTS — un-skip each one as part of its fix.
+// Filter list: storage-readiness race and regex compilation.
 // ---------------------------------------------------------------------------
 
 test('importing config.js must not write to storage before storage is ready',
-    { skip: 'TODO.md P0 — top-level updateFilter() overwrites rh-filtered with "false"' },
     async () => {
         // ES modules are evaluated before storage-adapter.js finishes loading
         // chrome.storage.local, so at evaluation time every key reads as
-        // undefined and updateFilter() persists the "empty" default, wiping the
-        // user's saved filter list.
+        // undefined. updateFilter() used to persist its "empty" default right
+        // then, and that write raced the pending read — winning it destroyed
+        // the user's saved filter list.
         env.reset();
         await importModuleFresh('modules/config.js');
         assert.deepEqual([...env.store.keys()], [], 'module evaluation must have no storage side effects');
     });
 
-test('updateFilter must tolerate regex metacharacters in the domain list',
-    { skip: 'TODO.md P0 — new RegExp() throws SyntaxError, e.g. for "a("' },
-    () => {
-        env.reset();
-        env.store.set('rh-filtered', 'a(');
-        assert.doesNotThrow(() => config.updateFilter());
-    });
+// These two use a fresh module instance: `filterLoaded` and `flist` are
+// module-level state, so a shared instance would leak earlier tests' lists.
+test('updateFilter leaves storage untouched when it has not been read yet', async () => {
+    env.reset();
+    const fresh = await importModuleFresh('modules/config.js');
 
-test('a configured domain also covers its www subdomain',
-    { skip: 'TODO.md P1 — site_r only strips labels from hosts with 4+ labels' },
-    () => {
-        env.reset();
-        env.store.set('rh-filtered', 'example.com|');
-        config.updateFilter();
-        assert.equal(config.filtUrl('https://www.example.com/a'), true);
-    });
+    fresh.updateFilter(); // storage is empty, so every key reads as undefined
+    assert.deepEqual([...env.store.keys()], [], 'must not write the "false" sentinel over an unread list');
+    assert.equal(fresh.filtUrl('https://a.com/x'), false, 'nothing is filtered while storage is unread');
 
-test('filter entries match whole host labels, not substrings',
-    { skip: 'TODO.md P1 — filtUrl 用 flist.indexOf(site) 做子串匹配，且正则含空分支' },
-    () => {
-        env.reset();
-        env.store.set('rh-filtered', 'b.com|');
-        config.updateFilter();
-        assert.equal(config.filtUrl('https://b.co/x'), false, 'shares the "b.co" prefix only');
+    // Once the cache fills in, the real list takes effect.
+    env.store.set('rh-filtered', 'a.com|');
+    fresh.updateFilter();
+    assert.equal(fresh.filtUrl('https://a.com/x'), true);
+});
 
-        env.store.set('rh-filtered', 'sub.example.com|');
-        config.updateFilter();
-        assert.equal(config.filtUrl('https://example.com/a'), false, 'the parent of a listed subdomain');
-    });
+test('config.js refreshes the filter when storage becomes ready', async () => {
+    env.reset();
+    const fresh = await importModuleFresh('modules/config.js');
+    assert.ok(env.pendingReady() > 0, 'config.js must register an onStorageReady hook');
+
+    // Populated between module evaluation and the ready callback — exactly the
+    // window the old top-level updateFilter() used to clobber.
+    env.store.set('rh-filtered', 'ready.test|');
+    env.fireStorageReady();
+
+    // Asserted on the exported list rather than via filtUrl(): filtUrl() has a
+    // lazy retry of its own, so only flist proves the *hook* ran.
+    assert.equal(fresh.flist, 'ready.test|');
+    assert.equal(fresh.filtUrl('https://ready.test/x'), true);
+    assert.equal(env.pendingReady(), 0);
+});
+
+test('updateFilter must tolerate regex metacharacters in the domain list', () => {
+    env.reset();
+    env.store.set('rh-filtered', 'a(');
+    assert.doesNotThrow(() => config.updateFilter());
+    // 'a(' is not a browsable domain, but it *is* what get_host() returns for
+    // such a URL, so the entry legitimately matches it. What matters here is
+    // that compiling the list no longer throws and nothing else is caught.
+    assert.equal(config.filtUrl('https://a(/x'), true);
+    assert.equal(config.filtUrl('https://other.test/x'), false);
+});
+
+test('updateFilter survives every regex metacharacter in a domain', () => {
+    for (const bad of ['a(', 'a)', '[a', 'a]', 'a{1', 'a+', 'a*', 'a?', 'a\\', 'a|b', 'a$b', 'a^b', 'a.b']) {
+        env.reset();
+        env.store.set('rh-filtered', bad + '|');
+        assert.doesNotThrow(() => config.updateFilter(), `metacharacter: ${bad}`);
+    }
+});
+
+test('a metacharacter in one entry must not break its siblings', () => {
+    env.reset();
+    env.store.set('rh-filtered', 'a(|ok.test|');
+    assert.doesNotThrow(() => config.updateFilter());
+    assert.equal(config.filtUrl('https://ok.test/x'), true, 'the valid entry still filters');
+    assert.equal(config.filtUrl('https://other.test/x'), false);
+});
+
+test('an empty domain list must not match every URL', () => {
+    // 'a.com|' ends in '|', so interpolating the raw string produced a regex
+    // with an empty alternative — which matches everything.
+    env.reset();
+    env.store.set('rh-filtered', '');
+    config.updateFilter();
+    assert.equal(config.filtUrl('https://anything.test/x'), false);
+
+    env.store.set('rh-filtered', 'false');
+    config.updateFilter();
+    assert.equal(config.filtUrl('https://anything.test/x'), false);
+});
+
+test('a dot in a domain filters only that domain', () => {
+    // '.' is a regex wildcard: 'a.com' unescaped would also match 'axcom'.
+    env.reset();
+    env.store.set('rh-filtered', 'a.com|');
+    config.updateFilter();
+    assert.equal(config.filtUrl('https://a.com/x'), true);
+    assert.equal(config.filtUrl('https://axcom/x'), false);
+});
+
+// ---------------------------------------------------------------------------
+// KNOWN DEFECTS — un-skip each one as part of its fix.
+// ---------------------------------------------------------------------------
+
+test('a configured domain also covers its www subdomain', () => {
+    env.reset();
+    env.store.set('rh-filtered', 'example.com|');
+    config.updateFilter();
+    assert.equal(config.filtUrl('https://www.example.com/a'), true);
+    assert.equal(config.filtUrl('https://example.com/a'), true, 'the listed domain itself');
+    assert.equal(config.filtUrl('https://other.test/a'), false);
+});
+
+test('filter entries match whole host labels, not substrings', () => {
+    env.reset();
+    env.store.set('rh-filtered', 'b.com|');
+    config.updateFilter();
+    assert.equal(config.filtUrl('https://b.co/x'), false, 'shares the "b.co" prefix only');
+    assert.equal(config.filtUrl('https://b.com/x'), true, 'the listed domain itself must still match');
+    assert.equal(config.filtUrl('https://xb.com/x'), false, 'shares the "b.com" suffix only');
+    assert.equal(config.filtUrl('https://www.b.com/x'), true, 'www is not a separate site for this purpose');
+    assert.equal(config.filtUrl('https://m.b.com/x'), false, 'only www is stripped, not every leading label');
+
+    env.store.set('rh-filtered', 'sub.example.com|');
+    config.updateFilter();
+    assert.equal(config.filtUrl('https://example.com/a'), false, 'the parent of a listed subdomain');
+    assert.equal(config.filtUrl('https://sub.example.com/a'), true, 'the listed subdomain must still match');
+});
 
 test('title_fix keeps slashes that belong to the page title',
     { skip: 'TODO.md P1 — helpers.js:125 用 replace(/\\//g, "") 删除了所有斜杠' },
@@ -673,30 +754,40 @@ test('title_fix keeps slashes that belong to the page title',
         assert.equal(helpers.title_fix('FAQ / Help'), 'FAQ / Help');
     });
 
-test('timeNow never appends "undefined" when the time format is unset',
-    { skip: 'TODO.md P2 — helpers.js:74 var te 未初始化，rh-timeformat 既非 12 也非 24 时输出 "13:05undefined"' },
-    () => {
-        env.store.delete('rh-timeformat');
-        assert.equal(helpers.timeNow(TS), '13:05');
-    });
+test('timeNow never appends "undefined" when the time format is unset', () => {
+    env.store.delete('rh-timeformat');
+    assert.equal(helpers.timeNow(TS), '13:05');
 
-test('TimeToStr never appends "undefined" when the time format is unset',
-    { skip: 'TODO.md P2 — helpers.js:23 var te 未初始化（与 timeNow 同源）' },
-    () => {
-        env.store.delete('rh-timeformat');
-        env.store.set('rh-date', 'mm/dd/yyyy');
-        assert.equal(helpers.TimeToStr(TS), '01/02/2024 13:05');
-    });
+    // Both supported formats keep working.
+    env.store.set('rh-timeformat', '12');
+    assert.equal(helpers.timeNow(TS), '01:05 PM');
+    env.store.set('rh-timeformat', '24');
+    assert.equal(helpers.timeNow(TS), '13:05');
+});
 
-test('addList strips every whitespace character from the input',
-    { skip: 'TODO.md P1 — config.js:596 用 replace(" ", "") 只替换第一个空格' },
-    () => {
-        formDefaults();
-        // A trailing space survives replace(' ', '') and fails the URL test, so
-        // the domain is rejected outright with an "invalid URL" alert.
-        assert.equal(config.addList(' example.com '), true);
-        assert.match(dom.el('flist-table').children[0].innerHTML, /title="example\.com"/);
-    });
+test('TimeToStr never appends "undefined" when the time format is unset', () => {
+    env.store.delete('rh-timeformat');
+    env.store.set('rh-date', 'mm/dd/yyyy');
+    assert.equal(helpers.TimeToStr(TS), '01/02/2024 13:05');
+
+    env.store.set('rh-timeformat', '12');
+    assert.equal(helpers.TimeToStr(TS), '01/02/2024 01:05 PM');
+    env.store.set('rh-timeformat', '24');
+    assert.equal(helpers.TimeToStr(TS), '01/02/2024 13:05');
+});
+
+test('addList strips every whitespace character from the input', () => {
+    formDefaults();
+    // A trailing space survives replace(' ', '') and then fails the URL test,
+    // so the domain is rejected outright with an "invalid URL" alert — it is
+    // not added dirty, it is not added at all.
+    assert.equal(config.addList(' example.com '), true);
+    assert.match(dom.el('flist-table').children[0].innerHTML, /title="example\.com"/);
+    assert.equal(dom.el('flist-add-i').value, '', 'the input is cleared after a successful add');
+
+    assert.equal(config.addList('\tother.test\n'), true);
+    assert.equal(dom.el('flist-table').children.length, 2);
+});
 
 test('saveOptions tolerates an order list that is not exactly five blocks',
     { skip: 'TODO.md P1 — config.js:433 硬编码 rhlo[0]..rhlo[4]' },
@@ -754,29 +845,69 @@ test('saveOptions(true) reports success after a successful upload',
         }
     });
 
-test('a non-empty most-visited blocklist must not break the options page',
-    { skip: 'TODO.md P1 — options.html 缺少 #mvlist-table，mostVisitedBlocklist() 抛 TypeError' },
-    (t) => {
-        t.mock.timers.enable({ apis: ['setTimeout'] });
-        formDefaults();
-        env.store.set('mv-blocklist', 'blocked.test|');
-        try {
-            assert.doesNotThrow(() => config.loadOptions(false));
-        } finally {
-            t.mock.timers.reset();
-        }
-    });
+test('a non-empty blocklist renders on the options page without breaking it', (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    formDefaults();
+    env.store.set('mv-blocklist', 'https://a.test/|https://b.test/|');
+    try {
+        assert.doesNotThrow(() => config.loadOptions(false));
 
-test('saveOptions must not wipe a non-empty most-visited blocklist',
-    { skip: 'TODO.md P1 — options.html 缺少 #mvlist，saveOptions 读不到行，mlil 恒为 "false"' },
-    (t) => {
-        t.mock.timers.enable({ apis: ['setTimeout'] });
-        formDefaults();
-        env.store.set('mv-blocklist', 'blocked.test|');
-        try {
-            config.saveOptions(false);
-            assert.equal(env.store.get('mv-blocklist'), 'blocked.test|');
-        } finally {
-            t.mock.timers.reset();
-        }
-    });
+        // Reading the list must not have wiped it, and the rows must be there
+        // for saveOptions() to read back (it derives the value from the DOM).
+        assert.equal(env.store.get('mv-blocklist'), 'https://a.test/|https://b.test/|');
+        const rows = dom.el('mvlist-table').children;
+        assert.equal(rows.length, 2);
+        assert.match(rows[0].innerHTML, /https:\/\/a\.test\//);
+        assert.match(rows[1].innerHTML, /https:\/\/b\.test\//);
+    } finally {
+        t.mock.timers.reset();
+    }
+});
+
+test('saveOptions must not wipe a non-empty most-visited blocklist', (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    formDefaults();
+    env.store.set('mv-blocklist', 'https://a.test/|');
+    try {
+        config.loadOptions(false);
+        config.saveOptions(false);
+        assert.equal(env.store.get('mv-blocklist'), 'https://a.test/|');
+    } finally {
+        t.mock.timers.reset();
+    }
+});
+
+test('removing a blocklist row and saving restores that site to most visited', (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    formDefaults();
+    env.store.set('mv-blocklist', 'https://a.test/|https://b.test/|');
+    try {
+        config.loadOptions(false);
+
+        // Click the X on the first row, exactly as the options page does.
+        const rows = dom.el('mvlist-table').children;
+        const removeId = /id="(link-\d+)"/.exec(rows[0].innerHTML)[1];
+        dom.el(removeId).dispatch('click');
+        assert.equal(dom.el('mvlist-table').children.length, 1, 'the row must be gone from the DOM');
+
+        config.saveOptions(false);
+        assert.equal(env.store.get('mv-blocklist'), 'https://b.test/|', 'only the removed site is restored');
+    } finally {
+        t.mock.timers.reset();
+    }
+});
+
+test('emptying the blocklist writes the "false" sentinel, not an empty string', (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    formDefaults();
+    env.store.set('mv-blocklist', 'https://a.test/|');
+    try {
+        config.loadOptions(false);
+        dom.el('mvlist-table').innerHTML = '';
+        config.saveOptions(false);
+        // mostVisited() and popup-core.js both compare against 'false'.
+        assert.equal(env.store.get('mv-blocklist'), 'false');
+    } finally {
+        t.mock.timers.reset();
+    }
+});

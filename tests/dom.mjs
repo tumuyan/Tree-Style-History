@@ -81,7 +81,14 @@ export function createDom(options = {}) {
                 el._text = el._html.replace(/<[^>]*>/g, '');
                 el.children.length = 0; // matches the DOM: assigning innerHTML replaces children
                 for (const id of extractIds(el._html)) {
-                    if (!byId.has(id)) byId.set(id, makeEl('div'));
+                    if (byId.has(id)) continue;
+                    const node = makeEl('div');
+                    // Parent them to the element that owns the HTML. The shim
+                    // still does not build a nested tree — ids cannot nest —
+                    // but one level up is enough for closest('tr') to resolve,
+                    // which is how the blocklist rows wire up their X button.
+                    node.parentNode = el;
+                    byId.set(id, node);
                 }
                 el.cells = extractCellText(el._html).map((text) => {
                     const cell = makeEl('td');
@@ -200,6 +207,14 @@ export function createDom(options = {}) {
         ctrlState: 'false',
         shiftState: 'false',
     };
+
+    // config.js and calendar.js register an onStorageReady hook at module
+    // scope by reading it off `window`. This shim replaces `window` outright,
+    // so forward it — otherwise those hooks silently never run here.
+    Object.defineProperty(win, 'onStorageReady', {
+        get: () => globalThis.onStorageReady,
+        configurable: true,
+    });
 
     globalThis.document = document;
     globalThis.window = win;

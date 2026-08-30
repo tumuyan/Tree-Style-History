@@ -20,7 +20,7 @@ import {
     _DATE, DAY,
     TimeToStr, timeNow, formatDate,
     echoLang, returnLang,
-    stripScripts, title_fix, escapeHtmlAttr, truncate, extractFileName, calcSize,
+    stripScripts, title_fix, escapeHtmlAttr, escapeRegExp, truncate, extractFileName, calcSize,
     getUrlVars, isBookmarkletUrl, extractBookmarkletCode, decodeBookmarkletCode, executeBookmarklet,
     chromeURL, getVersion, getVersionType,
     Clipboard,
@@ -46,8 +46,7 @@ import {
     updateFilter,
     filtUrl,
     flist,
-    flist_r,
-    site_r
+    flist_r
 } from './modules/config.js';
 
 import {
@@ -119,6 +118,7 @@ window.returnLang = returnLang;
 window.stripScripts = stripScripts;
 window.title_fix = title_fix;
 window.escapeHtmlAttr = escapeHtmlAttr;
+window.escapeRegExp = escapeRegExp;
 window.truncate = truncate;
 window.extractFileName = extractFileName;
 window.calcSize = calcSize;

@@ -177,6 +177,27 @@
                             </div>
                         </td>
                     </tr>
+                    <!--
+                        mostVisitedBlocklist() renders into #mvlist-table and
+                        saveOptions() reads the rows back out of it, so without
+                        these two the options page throws a TypeError on load as
+                        soon as mv-blocklist is non-empty (i.e. after blocking
+                        any site from the popup) and every save silently resets
+                        the list to "false".
+                        Entries are added from the popup only; the X on each row
+                        is how a site is restored.
+                    -->
+                    <tr>
+                        <td class="cell-left">
+                            <label class="lang" data-lang-string="option16"></label>
+                            <span id="help16" title="" class="help-tip" alt="Help"></span>
+                        </td>
+                        <td class="cell-right">
+                            <div id="mvlist">
+                                <table id="mvlist-table"></table>
+                            </div>
+                        </td>
+                    </tr>
                     <tr>
                         <td class="cell-left">
                             <label for="rbitemsno" class="lang" data-lang-string="option4"></label>
