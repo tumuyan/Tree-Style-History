@@ -547,5 +547,8 @@
     },
     "editBookmarkUrlPrompt": {
         "message": "输入书签地址："
+    },
+    "deleteCacheTip": {
+        "message": "清除缓存"
     }
 }

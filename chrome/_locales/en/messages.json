@@ -535,5 +535,20 @@
     },
     "editBookmarkUrlPrompt": {
         "message": "Enter bookmark URL:"
+    },
+    "optionloadrange4": {
+        "message": "Minimum number of items to load"
+    },
+    "help22": {
+        "message": "On browser start the extension checks whether the cached history covers the configured number of days. If it does not, extra resources are spent re-caching."
+    },
+    "help23": {
+        "message": ""
+    },
+    "help24": {
+        "message": "Cached records outside this range are cleared automatically. Set to 0 to keep them."
+    },
+    "help25": {
+        "message": "If the selected day has fewer records than this value, earlier days are loaded automatically until the count is reached."
     }
 }

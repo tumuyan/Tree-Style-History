@@ -252,9 +252,8 @@ function downloadOptions() {
 
     chrome.storage.sync.get(null, function (result) {
         $('downloadConfig').value = returnLang('saving');
-        console.log('Value currently is ' + result.key); ve = result;
 
-        for (i in result) {
+        for (const i in result) {
             if (i.indexOf('filterlist') < 0) {
                 let j = i.replace('_', '-');
                 if (result != undefined)
@@ -640,7 +639,7 @@ function mergeList() {
 
         let c = 0;
         {
-            fbl = cache.split('|');
+            const fbl = cache.split('|');
             if (fbl.length > 0) {
                 for (let i = 0; i < fbl.length; i++) {
                     if (fbl[i] !== undefined && fbl[i] !== '') {

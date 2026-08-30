@@ -1,0 +1,60 @@
+# GitHub Actions CI.
+#
+# This file stays thin on purpose: every check lives in an npm script so that
+# GitHub Actions and CNB (.cnb.yml) execute identical code. Do not inline
+# `node -e` blocks here — add a script under scripts/ and expose it via npm.
+
+name: CI
+
+on:
+  push:
+    paths-ignore:
+      - '**/*.md'
+      - '*.md'
+      - '**/*.png'
+      - '*.png'
+      - '**/*.gif'
+      - '*.gif'
+      - '**/*.jpg'
+      - '*.jpg'
+      - '**/*.jpeg'
+      - '*.jpeg'
+      - 'package.*'
+  pull_request:
+
+jobs:
+  check:
+    name: Lint + tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Fails on ESLint *errors* only. Warnings track the existing backlog;
+      # switch to `eslint . --max-warnings 0` once it is cleared.
+      - name: Lint
+        run: npm run lint
+
+      # test:ci emits a readable spec report to stdout AND junit.xml.
+      - name: Test
+        run: npm run test:ci
+
+      - name: Validate JSON, script syntax and CI parity
+        run: npm run verify
+
+      # Keep the machine-readable report even when tests fail, so the artifact
+      # is available for triage.
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-report
+          path: junit.xml
+          if-no-files-found: ignore

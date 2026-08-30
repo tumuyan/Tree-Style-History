@@ -284,7 +284,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var oby = localStorage['rh-orderby'];
         var ord = localStorage['rh-order'];
 
-        for (i = 0; i < hi.length; i++) {
+        for (var i = 0; i < hi.length; i++) {
 
             if (hi[i] !== undefined) {
 
@@ -400,7 +400,6 @@ document.addEventListener('DOMContentLoaded', function () {
                         alertLoadingHistory(true);
                         var uioneInput = document.body.querySelector('#rh-bar-uione input');
                         if (uioneInput) uioneInput.checked = false;
-                        selectedItem = undefined;
                         // Tips removed - native title provides tooltip
                         var gts = $$('#' + into + ' div.group-title');
                         if (gts.length > 0) { toggleGroup(gts[0].getAttribute('title')); }
@@ -530,7 +529,6 @@ document.addEventListener('DOMContentLoaded', function () {
                         alertLoadingHistory(true);
                         var uioneInput = document.body.querySelector('#rh-bar-uione input');
                         if (uioneInput) uioneInput.checked = false;
-                        selectedItem = undefined;
                         // Tips removed - native title provides tooltip
                         var gts = $$('#' + into + ' div.group-title');
                         if (gts.length > 0) { toggleGroup(gts[0].getAttribute('title')); }
@@ -769,7 +767,6 @@ document.addEventListener('DOMContentLoaded', function () {
             $('master-check-all').checked = false;
             $('master-check-all').value = 'false';
         }
-        selectedItem = undefined;
         updateBookmarkButtons();
     }
 

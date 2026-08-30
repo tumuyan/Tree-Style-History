@@ -1,0 +1,56 @@
+$:
+  vscode:
+    - runner:
+        cpus: 8
+      services:
+        - docker
+        - vscode
+      env:
+        PYTHONUNBUFFERED: "1"
+
+# 引用源：以 "." 开头的 key 不会作为流水线执行，仅供锚点复用。
+# 与 .github/workflows/ci.yml 共用同一批 npm 脚本，避免两套 CI 逻辑漂移。
+.ci-stages: &ci-stages
+  - name: 安装依赖
+    script: npm ci
+  - name: 代码检查
+    script: npm run lint
+  - name: 运行测试
+    script: npm run test:ci
+  - name: 校验 JSON 与脚本语法
+    script: npm run verify
+
+# 触发路径过滤：先匹配全部，再排除纯文档/图片变更。
+# 取反语法出自官方语法手册："!(...)" 形式，且需以 "**" 打底；
+.ci-ifmodify: &ci-ifmodify
+  - "**"
+  - "!(**/*.md)"
+  - "!*.md"
+  - "!(**/*.png)"
+  - "!*.png"
+  - "!(**/*.gif)"
+  - "!*.gif"
+  - "!(**/*.jpg)"
+  - "!*.jpg"
+  - "!(**/*.jpeg)"
+  - "!*.jpeg"
+  - "!package.*"
+
+# push：所有分支都触发，但纯文档/图片变更时跳过（本仓库有 100+ 张截图与图标）。
+# pull_request：跑「预合并后的 Commit」——这是 push 无法替代的价值
+"**":
+  push:
+    - name: 自动测试
+      runner:
+        cpus: 4
+      docker:
+        image: node:22
+      ifModify: *ci-ifmodify
+      stages: *ci-stages
+  pull_request:
+    - name: 自动测试
+      runner:
+        cpus: 4
+      docker:
+        image: node:22
+      stages: *ci-stages
