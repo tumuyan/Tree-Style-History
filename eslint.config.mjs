@@ -224,6 +224,7 @@ export default [
             'chrome/scripts/func.js',
             'chrome/scripts/dom-helper.js',
             'chrome/scripts/modules/*.js',
+            'chrome/scripts/modules/shared/*.js',
         ],
         languageOptions: {
             sourceType: 'module',

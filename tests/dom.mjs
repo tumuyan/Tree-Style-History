@@ -208,9 +208,9 @@ export function createDom(options = {}) {
         shiftState: 'false',
     };
 
-    // config.js and calendar.js register an onStorageReady hook at module
-    // scope by reading it off `window`. This shim replaces `window` outright,
-    // so forward it — otherwise those hooks silently never run here.
+    // config.js and modules/shared/calendar-storage.js register an onStorageReady
+    // hook at module scope. This shim replaces `window` outright, so forward it
+    // — otherwise those hooks silently never run here.
     Object.defineProperty(win, 'onStorageReady', {
         get: () => globalThis.onStorageReady,
         configurable: true,

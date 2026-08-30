@@ -3,58 +3,8 @@
 
 import { $, $$, createElement } from '../dom-helper.js';
 import { returnLang, get_host, escapeHtmlAttr, escapeRegExp } from './helpers.js';
+import { defaultValues, defaultConfig } from './shared/config-defaults.js';
 
-
-// Default config values
-
-var defaultValues = {
-    "rh-itemsno": 16,
-    "rct-itemsno": 4,
-    "rt-itemsno": 6,
-    "mv-itemsno": 0,
-    "rb-itemsno": 3,
-    "mv-blocklist": "false",
-    "rh-historypage": "yes",
-    "rh-date": "mm/dd/yyyy",
-    "rh-width": "275px",
-    "load-range": 7,
-    "load-range2": 3,
-    "load-range3": 120,
-    "load-range4": 150,
-    "less-item": "no",
-    "rh-search": "yes",
-    "rh-list-order": "rh-order,rct-order,rb-order,mv-order,rt-order",
-    "rh-time": "yes",
-    "rh-group": "yes",
-    "rh-orderby": "date",
-    "rh-order": "desc",
-    "rh-timeformat": "24",
-    "rh-click": "newtab",
-    "rm-click": "default",
-    "rm-path": "yes",
-    'use-contextmenu': "yes",
-    "rh-share": "yes",
-    "rh-filtered": "false",
-    "rh-pinned": "false",
-    "rhs-showurl": "no",
-    "rhs-showsep": "no",
-    "rhs-showext": "no",
-    "rhs-showbg": "no",
-    "show-popup": "yes",
-    "favicon-service": "duckduckgo",
-    "share-favicon-cache": "yes",
-    "favicon-service-fallback": "",
-    "popup-zoom": 100,
-    "page-zoom": 100
-};
-
-function defaultConfig(clean) {
-    for (var v in defaultValues) {
-        if (clean || !localStorage[v] || localStorage[v] == null || localStorage[v] == '') {
-            localStorage[v] = defaultValues[v];
-        }
-    }
-}
 
 
 // Load Options lang

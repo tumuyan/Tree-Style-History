@@ -1,17 +1,24 @@
 // Tree Style History - Helper Utilities Module
 // Pure utility functions with minimal side effects.
+//
+// The functions that must also run inside the Service Worker live in
+// `modules/shared/` — the dependency-free bottom layer that
+// `scripts/gen-sw-utils.mjs` mechanically flattens into
+// `scripts/background-utils.js`. They are imported for internal use and
+// re-exported, so the public API (`func.js` mounts these on `window`) is
+// unchanged.
 
-import { defaultValues } from './config.js';
+import { _DATE, timeNow, returnLang, advanceDateToToday } from './shared/format.js';
+import { isBookmarkletUrl } from './shared/url.js';
+
+export { _DATE, DAY, timeNow, returnLang, getVersion, getVersionType } from './shared/format.js';
+export { isBookmarkletUrl, get_host } from './shared/url.js';
+export { getFaviconUrl, getFaviconOnerror } from './shared/favicon.js';
 
 // --- Date/Time ---
 
-var _DATE = new Date();
-_DATE.setHours(0); _DATE.setMinutes(0); _DATE.setSeconds(0); _DATE.setMilliseconds(0);
-var DAY = 24 * 3600 * 1000;
-
 function TimeToStr(time, skip_date, skip_year, skip_clock) {
-    if (new Date() - _DATE > DAY)
-        _DATE = _DATE + DAY;
+    advanceDateToToday();
     var tf = localStorage['rh-timeformat'];
     var currentTime = new Date(time);
     var hours = currentTime.getHours();
@@ -67,24 +74,6 @@ function TimeToStr(time, skip_date, skip_year, skip_clock) {
     return datestr + ' ' + hours + ':' + minutes + te;
 }
 
-function timeNow(st) {
-    var tf = localStorage['rh-timeformat'];
-    var currentTime = st === 0 ? new Date() : new Date(st);
-    var hours = currentTime.getHours();
-    var minutes = currentTime.getMinutes();
-    // See TimeToStr: '' covers the 24h clock and any unset/corrupt value.
-    // Mirrored in background-utils.js — `npm run verify:sw-sync` compares them.
-    var te = '';
-    if (tf == '12') {
-        if (hours > 11) { te = ' ' + returnLang('PM'); } else { te = ' ' + returnLang('AM'); }
-        if (hours == 0) { hours = 12; }
-        if (hours > 12) { hours = hours - 12; }
-    }
-    if (hours < 10) { hours = '0' + hours; }
-    if (minutes < 10) { minutes = '0' + minutes; }
-    return hours + ':' + minutes + te;
-}
-
 function formatDate(str) {
     var datestr = localStorage['rh-date'];
     if (str == undefined) {
@@ -110,10 +99,6 @@ function formatDate(str) {
 
 function echoLang(str) {
     document.write(chrome.i18n.getMessage(str));
-}
-
-function returnLang(str) {
-    return chrome.i18n.getMessage(str);
 }
 
 // --- String utilities ---
@@ -180,11 +165,6 @@ function getUrlVars() {
     return vars;
 }
 
-function isBookmarkletUrl(url) {
-    if (typeof url !== 'string') return false;
-    return /^javascript\s*:/i.test(url.trim());
-}
-
 function extractBookmarkletCode(url) {
     if (!isBookmarkletUrl(url)) return '';
     return url.replace(/^javascript\s*:\s*/i, '');
@@ -244,14 +224,6 @@ function chromeURL(url) {
     chrome.tabs.create({ url: url, selected: true });
 }
 
-function getVersion() {
-    return chrome.runtime.getManifest().version;
-}
-
-function getVersionType() {
-    return 'browserAction';
-}
-
 // --- Clipboard ---
 
 var Clipboard = {};
@@ -287,79 +259,7 @@ function popup_scrollbar_fix() {
     }
 }
 
-// --- URL parsing ---
-
-function get_host(url) {
-    try {
-        var parsed = new URL(url);
-        var host = parsed.hostname;
-        if (host) return host;
-    } catch (e) {
-        try {
-            var parsed = new URL('https://' + url);
-            var host = parsed.hostname;
-            if (host && host.indexOf('.') !== -1) return host;
-        } catch (e2) {}
-    }
-    return "#";
-}
-
-function getFaviconUrl(url, options) {
-    options = options || {};
-    if (!url || typeof url !== 'string') {
-        return options.hasOwnProperty('fallback') ? options.fallback : '';
-    }
-    if (isBookmarkletUrl(url)) {
-        return options.hasOwnProperty('bookmarkletFallback') ? options.bookmarkletFallback : 'images/iconmonstr-script-6.svg';
-    }
-    if (url.indexOf('extension://') !== -1 || url.indexOf('edge://extensions') !== -1) {
-        try {
-            if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) {
-                return url.indexOf(chrome.runtime.id) !== -1 ? 'images/tree-38.png' : 'images/Extension-icon-vector-04.svg';
-            }
-        } catch (e) {}
-        return 'images/Extension-icon-vector-04.svg';
-    }
-    if (url.indexOf('chrome://') === 0 || url.indexOf('about:') === 0 || url.indexOf('edge://') === 0 || url.indexOf('opera://') === 0 || url.indexOf('brave://') === 0) {
-        return 'images/Browser-icon-vector-03.svg';
-    }
-    if (url.indexOf('file://') === 0) {
-        return 'images/iconmonstr-file-3.svg';
-    }
-    var service = options.service || localStorage['favicon-service'] || defaultValues['favicon-service'];
-    var trimmedUrl = url.trim();
-    if (!trimmedUrl) return options.hasOwnProperty('fallback') ? options.fallback : '';
-    var hostValue = '#';
-    try { hostValue = get_host(trimmedUrl); } catch (err) { hostValue = '#'; }
-    if (service === 'chrome') {
-        return hostValue === '#' ? 'chrome://favicon/' : 'chrome://favicon/' + trimmedUrl;
-    }
-    var parsedUrl = null;
-    try { parsedUrl = new URL(trimmedUrl); }
-    catch (err) {
-        try { parsedUrl = new URL('https://' + trimmedUrl); }
-        catch (err2) { parsedUrl = null; }
-    }
-    var fallback = options.hasOwnProperty('fallback') ? options.fallback : 'images/blank.png';
-    if (!parsedUrl || hostValue === '#') return fallback;
-    var protocol = parsedUrl.protocol;
-    if (protocol !== 'http:' && protocol !== 'https:') return fallback;
-    var hostname = parsedUrl.hostname;
-    if (!hostname) return fallback;
-    if (service === 'google') return 'https://www.google.com/s2/favicons?sz=64&domain_url=' + encodeURIComponent(parsedUrl.origin + '/');
-    if (service === 'duckduckgo') return 'https://icons.duckduckgo.com/ip3/' + hostname + '.ico';
-    if (service === 'favicon_im') return 'https://favicon.im/' + hostname + '?throw-error-on-404=true';
-    if (service === 'faviconkit') return 'https://ico.faviconkit.net/favicon/' + hostname + '?sz=64';
-    if (service === 'faviconsnap') return 'https://faviconsnap.com/api/favicon?url=' + encodeURIComponent(parsedUrl.origin + '/') + '&size=64';
-    return 'chrome://favicon/' + trimmedUrl;
-}
-
-// Get fallback favicon URL for CSP-compliant error handling via addEventListener
-function getFaviconOnerror(url) {
-    var fallbackService = localStorage['favicon-service-fallback'] || '';
-    if (!fallbackService) return '';
-    return getFaviconUrl(url, { service: fallbackService });
-}
+// --- Favicon rendering ---
 
 // Setup favicon image element with error and load-based fallback detection
 // Some services (e.g. Google) return a default 16x16 icon with HTTP 404 status.
@@ -396,14 +296,15 @@ function setupFaviconElement(imgEl, primaryUrl, fallbackUrl) {
 }
 
 // --- Exports ---
+// The shared-bottom-layer symbols are re-exported in the `export ... from`
+// blocks at the top of this file; everything below is page-only.
 export {
-    _DATE, DAY,
-    TimeToStr, timeNow, formatDate,
-    echoLang, returnLang,
+    TimeToStr, formatDate,
+    echoLang,
     stripScripts, title_fix, escapeHtmlAttr, escapeRegExp, truncate, extractFileName, calcSize,
-    getUrlVars, isBookmarkletUrl, extractBookmarkletCode, decodeBookmarkletCode, executeBookmarklet,
-    chromeURL, getVersion, getVersionType,
+    getUrlVars, extractBookmarkletCode, decodeBookmarkletCode, executeBookmarklet,
+    chromeURL,
     Clipboard,
     popup_scrollbar_fix,
-    get_host, getFaviconUrl, getFaviconOnerror, setupFaviconElement
+    setupFaviconElement
 };

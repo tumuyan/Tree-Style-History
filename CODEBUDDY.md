@@ -33,9 +33,13 @@ npm run check   # 本地门禁：lint + test + verify，约 3 秒
 | `npm run test:e2e` | 本地 | 真实 Chromium 侧载扩展，逐个打开 6 个页面断言无 JS 错误 |
 | `npm run test:e2e:ci` | **CI** | 同上，并额外生成 `junit-e2e.xml`（**不**覆盖 `junit.xml`） |
 | `npm run browser:install` | **CI** | 下载 Chromium 与 apt 系统库，e2e 的前置步骤 |
+| `npm run gen` | 通用 | 重新生成**全部**生成物（改完 `modules/shared/` 必跑） |
+| `npm run gen:sw-utils` | 通用 | 只生成 `background-utils.js` |
 | `npm run verify:json` | 通用 | 校验 manifest 与两个语言文件是合法 JSON |
-| `npm run verify:syntax` | 通用 | `node --check` 全部 21 个首方脚本 |
-| `npm run verify` | 通用 | 上面两项之和 |
+| `npm run verify:syntax` | 通用 | `node --check` 全部首方脚本（含 `modules/shared/`） |
+| `npm run verify:ci-parity` | 通用 | 两套 CI 的路径过滤是否等价 |
+| `npm run verify:sw-sync` | 通用 | `background-utils.js` 是否与 `modules/shared/` 同步 |
+| `npm run verify` | 通用 | 上面四项之和 |
 | `npm run check` | 本地 | lint + test + verify |
 | `npm run check:ci` | **CI** | lint + test:ci + verify |
 
@@ -65,7 +69,8 @@ npm run check   # 本地门禁：lint + test + verify，约 3 秒
 ### 测试覆盖范围与编写约定
 
 - 测试用 Node 内置 `node:test`，**没有测试框架依赖**。`tests/stubs.mjs` 提供 `localStorage` / `chrome` / `document` 桩，并刻意复刻了 `storage-adapter.js` 的字符串化语义（所有值写进去都会变成字符串）。
-- `npm test` 覆盖三类：静态检查（`tests/static.test.mjs`：manifest 合法性、MV3 约束、HTML 资源引用、i18n 覆盖）、模块行为（`tests/modules.test.mjs`）、模块图完整性（各模块公开导出仍存在）。
+- `npm test` 覆盖四类：静态检查（`tests/static.test.mjs`：manifest 合法性、MV3 约束、HTML 资源引用、i18n 覆盖）、模块行为（`tests/modules.test.mjs`）、模块图完整性（各模块公开导出仍存在）、生成物一致性（`tests/sw-sync.test.mjs`）。
+- `tests/shared.test.mjs` 单测 `modules/shared/` 这一层。它可以**静态 `import`**（不像 `modules.test.mjs` 必须 `await import`），因为这些模块没有导入期副作用；唯一例外是 `calendar-storage.js`（它在导入期无条件调 `onStorageReady()`），所以没有在这里测。
 - `npm run test:e2e` 是**唯一能验证"页面真的能打开"**的一层：用 Playwright 自带的 Chromium 侧载 `chrome/`，逐个打开 popup / history / history2 / closed / bookmark / options 六个页面，断言无未捕获异常、无扩展自身发出的 `console.error`。官方做法与踩坑记录都写在 `e2e/pages.spec.mjs` 文件头注释里，要点：
   - 扩展**只能在 persistent context 中加载**，且必须用 `channel: 'chromium'`——Chrome/Edge 已移除侧载用的命令行 flag，headless shell 也不支持扩展，所以 Playwright 自带的 Chromium 是唯一选择。
   - MV3 的扩展 id 从 service worker 的 URL 里取（没有 background page 可读了）。
@@ -74,7 +79,7 @@ npm run check   # 本地门禁：lint + test + verify，约 3 秒
   - 这套断言经过**变异验证**（往 `popup.js` 注入 `throw` + `console.error`，确认只有该页面变红），不是"永远绿"的假测试。
   - 新增 e2e 用例时沿用同一模式：`collectErrors(page)` → `goto` → `settle(page)` → 断言 `jsErrors` 为空。**不要**用 `networkidle`。
   - 手工验证路径（无法自动化时）：`chrome://extensions` → 加载已解压的 `chrome/`，再逐个打开页面看控制台。
-- **重要约定**：`test(name, { skip: '原因' }, fn)` 表示**已知缺陷**，函数体内写的是*期望*行为。修 bug 时把对应 skip 去掉即可（先看到红，再改到绿）。当前 3 个 skip，与 `TODO.md` 条目一一对应。
+- **重要约定**：`test(name, { skip: '原因' }, fn)` 表示**已知缺陷**，函数体内写的是*期望*行为。修 bug 时把对应 skip 去掉即可（先看到红，再改到绿）。当前 6 个 skip，与 `TODO.md` 条目一一对应。
 - 模块在**导入期**就会读写 `localStorage`（如 `config.js` 顶层调用 `updateFilter()`），测试中必须用 `await import(...)`，静态 `import` 会被提升到装桩之前。观察导入期副作用时用 `importModuleFresh()` 绕过 ESM 缓存。
 
 工具链只存在于仓库根目录（`package.json` / `eslint.config.mjs` / `scripts/` / `tests/` / `node_modules/`），**不会进入 `chrome/`**，因此不影响扩展的打包与加载。
@@ -108,7 +113,7 @@ Service Worker 侧（`background-sw.js`、`background-utils.js`、`db-manager.js
    `localStorage` 在 SW 中根本不存在——本项目之所以能在 `background-sw.js` 里到处写 `localStorage[...]`，是因为 `importScripts('storage-adapter.js')` 用 `Object.defineProperty` 把它替换掉了。**不要移除这个 import。**
 3. **CSP 禁止动态代码执行**。扩展页面内不得出现 `eval`、内联 `<script>`、内联事件处理器（`onclick=` 等）、远程托管的 `<script src>`。这几条都有自动化断言。
    注意：zTree 内部有 `eval`（`jquery.ztree.core.js:1105`），仅在其异步加载分支中，目前未触发。
-4. **`importScripts` 无法加载 ES module**。这是 `background-utils.js` 里手工复制一份 `getVersion`/`timeNow`/`getFaviconUrl`/`defaultConfig` 等原因——SW 无法复用 `modules/` 下的 ESM。改这些函数必须同步两处。
+4. **`importScripts` 无法加载 ES module**。SW 无法复用 `modules/` 下的 ESM，所以两侧共用的那批函数（`getVersion`/`timeNow`/`getFaviconUrl`/`defaultConfig`/`save_calendar_storage2` …）放在 `chrome/scripts/modules/shared/`——**无依赖的底层**，由 `scripts/gen-sw-utils.mjs` 机械展开成经典脚本 `background-utils.js`。**改这些函数只需改 `shared/` 下那一份**，然后 `npm run gen` 重新生成并提交；`npm run verify:sw-sync` 会拦住忘记生成的情况。见下方「架构」一节。
 5. **`chrome://favicon/` 在 MV3 中已不可靠**。这是本项目要配置第三方 favicon 服务、并由 SW 拦截 `fetch` 做缓存的根本原因，也是 README 里"部分页面无法正常显示 favicon"的来源。
 6. **`chrome.storage.sync` 配额很紧**：单个 key 8KB、总量 100KB。所以过滤域名要按每 100 条切片成 `filterlist0..N` 保存。
 7. **扩展页与 popup 的 CSP 更严格**，在 popup 中点击小书签可能不触发脚本执行（README 已记录）。
@@ -153,7 +158,20 @@ MV3 取消了后台页面，因此代码分成两套互不相通的运行时：
 
 `scripts/dom-helper.js` 是 ES module 版的 `$`/`$$`/`createElement`，用来取代 3.3.0 中移除的 MooTools。
 
-**`scripts/background-utils.js` 是有意重复的代码**：MV3 的 Service Worker 不能用 `importScripts` 加载 ES module，所以 `getVersion`、`returnLang`、`timeNow`、`getFaviconUrl`、`defaultConfig`、`calendar_storage2` 等函数在文件头注释中标注了与 `modules/` 的对应关系。**修改这些函数时必须同步改两处**，文件顶部有 SYNC WARNING 注释。
+**`scripts/background-utils.js` 是生成文件，不要手改**：MV3 的 Service Worker 不能用 `importScripts` 加载 ES module，所以 SW 与页面共用的那批**无依赖**函数放在 `chrome/scripts/modules/shared/`（`config-defaults.js`、`format.js`、`url.js`、`favicon.js`、`calendar-storage.js`），由 `scripts/gen-sw-utils.mjs` 去掉 import/export 标记后按拓扑顺序拼接成 `background-utils.js`。
+
+- 改这些函数 → 只改 `shared/` 下那一份 → `npm run gen` → 提交重新生成的文件。
+- `npm run verify:sw-sync`（即 `gen-sw-utils.mjs --check`）在 `verify` 里跑，文件过期即失败。
+- 生成器只认**单行** `import ...;` / `export ...;` / `export { ... };`；`export default`、跨行的 `import` 或 `export {` 会让生成**直接失败**并给出提示，不会产出坏文件（`vm.Script` 解析自检是兜底的第二道）。
+- 生成器会在生成前校验模块图，两种错误都会**显式报错**而不会静默产出缺斤少两的文件：①`modules/shared/` 里有文件没登记进 `gen-sw-utils.mjs` 的 `FILES`（否则它永远不会进入生成物）；②某个 shared 模块 import 了不在 `FILES` 里、或排在它后面的文件（import 行是被删掉的，一旦目标没被更早拼接，引用就退化成隐式全局，语法检查看不见，只在 SW 运行时炸）。**往 `shared/` 加文件必须同时加进 `FILES` 并按依赖顺序放好。**
+- 生成器只规范化各模块**拼接处**的换行，不动模块内部的空行——它们可能在模板字符串里。因此删掉 import 行后留下的连续空行会保留，这是刻意的。
+- 页面侧照常通过 `modules/helpers.js`、`modules/config.js`、`modules/calendar.js` 的 `export ... from` 转出，公开 API 不变。
+
+**新增生成器的做法**（与本仓库其他命令家族一致的约定）：裸名跑全部、`:子项`跑单个。写 `scripts/gen-<name>.mjs`，加 `"gen:<name>"` 成员，再把裸名改成
+`"gen": "npm run gen:sw-utils && npm run gen:<name>"`（照 `verify` 的写法用 `&&` 串，不另建聚合脚本）。
+校验侧对应加 `verify:<name>` 并串进 `verify`。成员名保持稳定，文档/CI 里已有的引用不会失效。
+
+放入 `shared/` 的前提是**无依赖**：不能 import `dom-helper.js`、`config.js`，也不能碰 `document`。有这些依赖的函数留在各自的领域模块里，SW 用不到它们。
 
 ### 4. 页面与数据流
 

@@ -1,36 +1,20 @@
 // Tree Style History - Calendar Module
 // Calendar/date picker related functions extracted from func.js
+//
+// `calendar_storage2` / `save_calendar_storage2` live in
+// `modules/shared/calendar-storage.js` — the dependency-free bottom layer that
+// `scripts/gen-sw-utils.mjs` also flattens into `scripts/background-utils.js`.
+// Re-exported here so the public API stays unchanged.
 
 import { $, $$, createElement } from '../dom-helper.js';
-import { returnLang, formatDate, _DATE, DAY, isBookmarkletUrl, getFaviconUrl, get_host, TimeToStr, truncate, title_fix, escapeHtmlAttr, chromeURL } from './helpers.js';
+import { returnLang, formatDate, DAY, isBookmarkletUrl, getFaviconUrl, get_host, TimeToStr, truncate, title_fix, escapeHtmlAttr, chromeURL } from './helpers.js';
 import { updateFilter, filtUrl, flist } from './config.js';
 import { history } from './history-core.js';
+import { calendar_storage2, save_calendar_storage2 } from './shared/calendar-storage.js';
 
 // --- Calendar storage ---
 
-var calendar_storage2 = {};
-
-// Initialize calendar_storage2 from localStorage via storage-adapter
-if (typeof window.onStorageReady === 'function') {
-    window.onStorageReady(function () {
-        var str = window.localStorage['calendar-storage2'];
-        if (str != undefined) {
-            calendar_storage2 = JSON.parse(str);
-        }
-    });
-}
-
-function save_calendar_storage2(obj, n, f) {
-    if (obj['text'] == '' && obj['maxResults'] >= 9999 && obj['endTime'] - 86400000 == obj['startTime']) {
-        if ((obj['startTime'] - _DATE + 1) % 86400000 == 0) {
-            if (f || calendar_storage2[obj['startTime']] == undefined || calendar_storage2[obj['startTime']] < 1) {
-                calendar_storage2[obj['startTime']] = n;
-                console.log('n=' + n);
-                localStorage['calendar-storage2'] = JSON.stringify(calendar_storage2);
-            }
-        }
-    }
-}
+export { calendar_storage2, save_calendar_storage2 };
 
 // --- Leap year ---
 
@@ -224,10 +208,10 @@ function calendar(w, e, clickCallback) {
 }
 
 // --- Exports ---
+// `calendar_storage2` / `save_calendar_storage2` are re-exported at the top of
+// this file, alongside the `import` that brings them in from the shared layer.
 export {
-    calendar_storage2,
     isLeapYear,
     calendar,
-    showCalendar,
-    save_calendar_storage2
+    showCalendar
 };

@@ -24,7 +24,9 @@
     "verify:json": "node scripts/check-json.mjs",
     "verify:syntax": "node scripts/check-syntax.mjs",
     "verify:ci-parity": "node scripts/check-ci-parity.mjs",
-    "verify:sw-sync": "node scripts/check-sw-sync.mjs",
+    "gen": "npm run gen:sw-utils",
+    "gen:sw-utils": "node scripts/gen-sw-utils.mjs",
+    "verify:sw-sync": "node scripts/gen-sw-utils.mjs --check",
     "verify": "npm run verify:json && npm run verify:syntax && npm run verify:ci-parity && npm run verify:sw-sync",
     "check": "npm run lint && npm run test && npm run verify",
     "check:ci": "npm run lint && npm run test:ci && npm run verify"

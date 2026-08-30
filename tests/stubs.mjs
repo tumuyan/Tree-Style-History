@@ -3,8 +3,8 @@
 // Why stubs are needed
 // --------------------
 // chrome/scripts/modules/*.js are ES modules that touch browser globals at
-// *import* time (config.js and calendar.js register an onStorageReady hook at
-// the top level). Modules must therefore be imported with `await import(...)`
+// *import* time (config.js and modules/shared/calendar-storage.js register an
+// onStorageReady hook at the top level). Modules must therefore be imported with `await import(...)`
 // AFTER installStubs() has run — a static `import` would be hoisted above it.
 //
 // The localStorage stub deliberately mimics the real StorageAdapter semantics:
