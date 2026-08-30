@@ -71,6 +71,10 @@ moo.js 是MooTools 框架文件，jquery-*.js 是jquery库文件，jquery.ztree.
 chrome/scripts/目录下 background-utils.js 文件是被 background-sw.js 引用的文件，内容基本由 func.js 精简而来。
 
 ## Changlog
+3.3.1 (2026/06/19)  
+修复设置丢失的bug 
+优化自定义缩放的外观
+
 3.3.0 (2026/06/07)  
 重构: MooTools 完全移除，全部替换为原生 JavaScript；`func.js` 拆分为 5 个 ES6 模块  
 Favicon优化: 增加服务API，缓存请求成功的图片和失败的url，增加次选机制  
