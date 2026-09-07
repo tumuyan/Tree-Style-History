@@ -4,7 +4,9 @@
 // `calendar_storage2` / `save_calendar_storage2` live in
 // `modules/shared/calendar-storage.js` — the dependency-free bottom layer that
 // `scripts/gen-sw-utils.mjs` also flattens into `scripts/background-utils.js`.
-// Re-exported here so the public API stays unchanged.
+// Re-exported here so the public API stays unchanged; modules that only need
+// them should import the bottom layer directly rather than route through this
+// one, which depends on history-core.js.
 
 import { $, $$, createElement } from '../dom-helper.js';
 import { returnLang, formatDate, DAY, isBookmarkletUrl, getFaviconUrl, get_host, TimeToStr, truncate, escapeHtmlAttr, chromeURL } from './helpers.js';

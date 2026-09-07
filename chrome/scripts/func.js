@@ -216,20 +216,17 @@ document.addEventListener('DOMContentLoaded', function () {
         document.body.style.zoom = zoom + '%';
     }
 
-    // Href hashes — prevent default click on empty links
-    setInterval(function () {
-        Array.from($$('a[href="#"]')).forEach(function (el) {
-            if (el.classList.contains('hrefhash')) {
-                // Already handled
-            } else {
-                el.addEventListener('click', function (e) {
-                    e.preventDefault();
-                    return false;
-                });
-                el.classList.add('hrefhash');
-            }
-        });
-    }, 250);
+    // Href hashes — prevent default click on empty links.
+    // One delegated listener: this used to be a 250ms setInterval that
+    // rescanned the whole document forever and bound a listener per link, so
+    // the page never went idle and late-rendered rows were missed for up to a
+    // quarter second.
+    document.addEventListener('click', function (e) {
+        var link = e.target.closest && e.target.closest('a[href="#"]');
+        if (link) {
+            e.preventDefault();
+        }
+    });
 });
 
 // ============================================================================

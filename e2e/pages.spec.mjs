@@ -126,8 +126,9 @@ function collectErrors(page) {
  *   2. `history2.html` / `closed.html` render in chunks driven by
  *      `setInterval(..., 5)` and read IndexedDB.
  *
- * `networkidle` is deliberately NOT used: `func.js` installs a 250 ms
- * `setInterval` that never clears, so the page is never idle.
+ * `networkidle` is deliberately NOT used: the pages keep requesting favicons
+ * from third-party services, and offline every one of those fails, so the
+ * network settles late and unreliably. Wait on the storage cache instead.
  */
 async function settle(page) {
     await page.evaluate(() => (window.storageAdapter ? window.storageAdapter.ready() : undefined));

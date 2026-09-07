@@ -8,7 +8,10 @@ importScripts('db-manager.js');
 
 // Startup timing
 const _tSW = performance.now();
-var _tSW_init, _tSW_db;  // timing markers for startup summary
+// Declared here rather than where they are assigned: `initializeExistingTabs()`
+// reads all three, and a `const` further down the file is in the temporal dead
+// zone until execution reaches it.
+var _tSW_init, _tSW_db, _tSW_load;  // timing markers for startup summary
 
 // Idempotent flag: prevent double initialization from onStorageReady + onInstalled/onStartup
 var _storageInitialized = false;
@@ -539,10 +542,6 @@ chrome.tabs.onUpdated.addListener(function (id, info, tab) {
     }
 
     updatedTab(tab);
-
-    if (getVersionType() == 'pageAction') {
-        chrome.pageAction.show(id);
-    }
 });
 
 chrome.tabs.onActivated.addListener(function (activeInfo) {
@@ -885,6 +884,44 @@ function add_tab_history(visitItems, i, loadfrom, url_item) {
     }
 }
 
+// Entry points a page may reach through the message channel. Dispatch used to
+// be `self[message.function](...)`, which made every global in this service
+// worker — internal helpers included — callable by name from any sender.
+const CALLABLE_FUNCTIONS = {
+    // The only name messageAdapter ever passes. Its MV3 route calls dbManager
+    // directly, so this just keeps the documented fallback working.
+    deleteDb: () => dbManager.deleteDB(),
+};
+
+function handleCallFunction(message, sender, sendResponse) {
+    if (!sender || sender.id !== chrome.runtime.id) {
+        sendResponse({ error: 'Rejected: foreign sender' });
+        return true;
+    }
+
+    // Own property only: a bare `CALLABLE_FUNCTIONS[name]` would also resolve
+    // inherited members such as `toString` and `constructor`, which would put
+    // the whitelist back to "any function reachable by name".
+    const fn = Object.hasOwn(CALLABLE_FUNCTIONS, message.function)
+        ? CALLABLE_FUNCTIONS[message.function]
+        : undefined;
+    if (typeof fn !== 'function') {
+        sendResponse({ error: 'Function not found' });
+        return true;
+    }
+
+    // Answered from a promise callback, so `true` is returned to keep the port
+    // open past this turn of the event loop.
+    Promise.resolve()
+        .then(() => fn(...(Array.isArray(message.args) ? message.args : [])))
+        .then(
+            (result) => sendResponse({ result }),
+            (error) => sendResponse({ error: error.message })
+        );
+
+    return true;
+}
+
 // Message handler for MV3 compatibility
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (!message || !message.action) {
@@ -903,17 +940,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             break;
 
         case 'callFunction':
-            if (typeof message.function === 'string' && typeof self[message.function] === 'function') {
-                try {
-                    const result = self[message.function](...(message.args || []));
-                    sendResponse({ result });
-                } catch (error) {
-                    sendResponse({ error: error.message });
-                }
-            } else {
-                sendResponse({ error: 'Function not found' });
-            }
-            break;
+            // Returned because the reply is sent from a promise callback.
+            return handleCallFunction(message, sender, sendResponse);
 
         case 'refreshContextMenu':
             // Re-read favicon cache config from storage
@@ -942,4 +970,4 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 console.log("Service Worker loaded (" + (performance.now() - _tSW).toFixed(1) + "ms)");
-const _tSW_load = performance.now();
+_tSW_load = performance.now();

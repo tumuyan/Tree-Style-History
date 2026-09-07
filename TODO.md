@@ -5,8 +5,8 @@
 状态图例：`[ ]` 未开始 · `[x]` 已完成 · `[-]` 暂缓
 
 > **护栏已就位**：`npm run check`（ESLint + `node:test` + 4 个校验脚本）是唯一准入闸门，约 5 秒跑完，CI 强制执行。
-> 当前基线：**lint 0 error / 142 warning · 115 测试 · 113 通过 · 2 skip · 0 失败**（另：e2e 9 测试 · 9 通过）。
-> 其中 2 个 skip 是已知缺陷的"待修规范"（函数体内写的是期望行为），对应下面标注 `（有 skip 测试）` 的条目（个别条目共用一个测试）——**修完后请去掉对应 skip**。
+> 当前基线：**lint 0 error / 140 warning · 117 测试 · 117 通过 · 0 skip · 0 失败**（另：e2e 9 测试 · 9 通过）。
+> 2 个 skip 已在「第 3 批」消除（`rh-list-order` 硬编码与失效的 `treeOptionsDetail`）。**当前无 skip**；后续若需标注已知缺陷，沿用 `test(name, { skip: '原因' }, fn)` 写法（函数体内写期望行为，修完去掉 skip）。
 
 ---
 
@@ -63,9 +63,10 @@
   - **已实测**：域名列表中含正则元字符（如 `a(`）时 `new RegExp` 抛 `SyntaxError: Unterminated group`。由于 `updateFilter()` 在模块顶层被调用，这会**在 import 阶段炸掉 `func.js`，导致扩展所有页面白屏**（自我 DoS）。
   - 已做：`flist_r` 改由归一化后的 `flist_set` 逐条 `escapeRegExp` 拼成，空集合保留 `/^false$/` 哨兵。转义后不可能再抛 `SyntaxError`，故**未**按原计划加 try/catch 兜底（吞掉异常只会掩盖新引入的构造错误）。
 
-- [ ] **给 SW 的 `callFunction` 加来源校验与白名单**（`chrome/scripts/background-sw.js:877-888`）
-  - 现状：不校验 `sender`，直接 `self[message.function](...message.args)` 调用任意全局函数。
-  - 做法：校验 `sender.id === chrome.runtime.id`，改为显式函数白名单。
+- [x] **给 SW 的 `callFunction` 加来源校验与白名单** — **已修复**（见「第 3 批」）
+  - ~~现状：不校验 `sender`，直接 `self[message.function](...message.args)` 调用任意全局函数。~~
+  - 已做：抽出 `handleCallFunction()`，先校验 `sender.id === chrome.runtime.id`，再从显式表 `CALLABLE_FUNCTIONS` 取函数（当前唯一成员 `deleteDb`）。
+  - 顺带：回复改从 promise 回调发出并 `return true` 保活端口，否则异步 `sendResponse` 会被提前关闭的端口吞掉。
 
 ### 崩溃 / 数据丢失
 
@@ -74,13 +75,13 @@
   - 已做：顶层调用移除，改由 `window.onStorageReady(updateFilter)` 触发；`updateFilter()` 读到的值为 `undefined` 时直接返回，不回写；`filtUrl()` 在未就绪时惰性重试一次。
   - 验证：设置一个过滤域名 → 打开 `history2.html` → 回选项页确认列表未被重置。
 
-- [ ] **修复 `downloadOptions()` 严格模式 ReferenceError**（`chrome/scripts/modules/config.js:255`、`257`）
-  - 现状：`ve = result` 与 `for (i in result)` 中的 `ve`、`i` 均未声明（已确认模块作用域内无声明），ES module 恒严格模式，必抛 `ReferenceError` → 「下载参数」按钮 100% 失效。
-  - 连带修复：`i.replace('_', '-')` 只替换第一个下划线，与 `saveOptions` 的 `i.replace('-', '_')` 不对称（`favicon-service-fallback` 往返后损坏）。
+- [x] **修复 `downloadOptions()` 严格模式 ReferenceError**（`chrome/scripts/modules/config.js`）— **已修复**（见「第 2.2 批」）
+  - ~~现状：`ve = result` 与 `for (i in result)` 中的 `ve`、`i` 均未声明。~~
+  - 已做：`for (const i in result)`；`i.replace(/_/g, '-')` 全局替换下划线，与写入侧严格互逆（静态断言「配置键不得含下划线」锁住前提）。
 
-- [ ] **修复 `mergeList()` 严格模式 ReferenceError**（`chrome/scripts/modules/config.js:643`）
-  - 现状：`fbl = cache.split('|')` 未声明（`fbl` 仅在 `filteredDomainsList()` 内有 `var`），「合并线上列表」按钮必崩。
-  - 连带修复：`for (let i = 0; i < 11; i++)` 硬编码，超过 11 个分片（约 1100 域名）静默丢数据，改为遍历到无数据为止。
+- [x] **修复 `mergeList()` 严格模式 ReferenceError**（`chrome/scripts/modules/config.js`）— **已修复**（见「第 2.2 批」）
+  - ~~现状：`fbl = cache.split('|')` 未声明；`for (let i = 0; i < 11; i++)` 硬编码分片数。~~
+  - 已做：`const fbl`；分片数改按 `filterlist_slices` 计数读取，历史上更长的列表留下的高编号分片不再被读回。
 
 ---
 
@@ -96,9 +97,10 @@
   - ~~现状：`.replace(/\//g, '')` 把标题里的 `/` 全部删除，`FAQ / Help` 显示为 `FAQ  Help`。~~
   - `title_fix()` 已删除，代之以按上下文分工的两个纯转义函数（`escapeHtmlAttr` / `escapeHtmlText`），都不再删除任何字符。
 
-- [ ] **清理 `options.html:37` 的失效 i18n 属性** **（有 skip 测试）**
-  - 现状：`<div class="tab-content" data-lang-string="treeOptionsDetail">` 没有 `.lang` 类，而 `func.js` 只处理 `.lang` 元素 → 该键永不渲染，且 messages.json 里也没有它。
-  - 做法：删除该属性，或补上 `.lang` 类并补键。
+- [x] **清理 `options.html` 的失效 i18n 属性** — **已修复**（见「第 3 批」）
+  - ~~现状：空 div 带 `data-lang-string="treeOptionsDetail"` 却没有 `.lang` 类。~~
+  - 已做：整个空 div 删掉——`treeOptionsDetail` 在两语言 messages.json 里都不存在，且 `.tab-content` 默认 `display:none`，补键也只是渲染出一个隐形盒子。
+  - 解除 `static.test.mjs` 的 skip，并经变异验证（插入一个只有 `data-lang-string` 的元素 → 立刻报红）。
 
 ### 配置同步（三处错误，同一函数）
 
@@ -114,8 +116,9 @@
 
 ### 其它
 
-- [ ] **修复 `rh-list-order` 硬编码 5 项**（`chrome/scripts/modules/config.js:434`）**（有 skip 测试）**
-  - 现状：`rhlo[0].id + ... + rhlo[4].id`，增删区块即 `TypeError`。改为动态拼接。
+- [x] **修复 `rh-list-order` 硬编码 5 项**（`chrome/scripts/modules/config.js`）— **已修复**（见「第 3 批」）
+  - ~~现状：`rhlo[0].id + ... + rhlo[4].id`，增删区块即 `TypeError`。~~
+  - 已做：`Array.from(rhlo, (li) => li.id).join(',')`。解除 `modules.test.mjs` 的 skip（用 2 个区块保存），并经变异验证。
 
 - [x] **修复 `addList` 只替换第一个空格**（`chrome/scripts/modules/config.js:597`）
   - 做法：`item.replace(' ', '')` → `replace(/\s+/g, '')`。**已完成**，见「第 1.5 批」。
@@ -201,6 +204,28 @@
   - 解除后随即发现它**已经失明**：判定靠 `\.url\b` / `fbl\[` 这类变量名模式识别用户数据，而插值点刚被改名成 `*Attr`，于是连裸的 `rha[thisc.counter].url` 都不再命中——它变绿是因为看不见，不是因为代码对。改为白名单判定：内联 `escapeHtmlAttr(…)`，或由它赋值的局部变量（复用文本守卫的 `escapedLocals()`），二者必居其一。
   - 顺带把 `bookmark.js` 纳入检查范围（8 处属性插值，此前无人看守）。**变异验证**：把 `href` 改回裸 URL，`history-core.js` 与 `bookmark.js` 各自报红并指出具体属性。
 
+### 第 3 批（已完成）：配置子系统回归 + SW 消息通道收紧
+
+- [x] **`saveOptions()` 动态拼接 `rh-list-order`**：`rhlo[0].id + … + rhlo[4].id` 改为 `Array.from(rhlo, li => li.id).join(',')`。解除对应 skip，先红后绿验证过（只喂 2 个 li，硬编码版立刻 `TypeError`）。
+- [x] **`popup.js` 的顺序解析加空值保护**：`localStorage['rh-list-order']` 在首次保存前是 `undefined`，`.split()` 直接崩；且「Popup structure」与「Popup init」两段重复计算。改为算一次 + `filter(Boolean)`（空串否则拆出 `['']`，被当成未知区块白走一遍）。
+- [x] **删掉 `options.html` 里那个空的 `.tab-content`**：带 `data-lang-string="treeOptionsDetail"` 却没有 `.lang`，而 `func.js` 只处理 `.lang`，所以永不渲染；两个语言文件里也都没有这个键。解除对应 skip。**变异验证**：临时插一个无 `.lang` 的 `data-lang-string` 元素，测试立刻报红。
+- [x] **SW 的 `callFunction` 收紧**（P0 安全）：拆出 `handleCallFunction()` 与 `CALLABLE_FUNCTIONS` 白名单表，`sender.id !== chrome.runtime.id` 一律拒绝。
+  - 新增 2 条静态守卫：①不得再出现 `self[message.function]` 形式的派发；②必须校验 `sender.id`。均经变异验证（改回 `self[...]`、删掉校验，各红一次）。
+  - 守卫读的是**剥掉注释后**的源码：本文件在注释里把旧写法原样记了下来，不剥注释会被自己误伤。
+  - 顺带把回复改成异步（`return true` 保持端口）：`deleteDb` 返回 Promise，直接塞进 `sendResponse` 会撞结构化克隆。
+- [x] **`sw-sync.test.mjs` 的钉子从 `getVersionType` 换成 `getVersion`**：前者随 MV2 死代码一起从 SW 消失了。
+- 注：原计划里的「`showOptions` 的 `typeof` 包装」已不复存在——该函数早已更名为 `loadOptions()`，现版本中也没有 `typeof` 包装问题，此项作废。
+
+### 第 3.5 批（已完成）：P2 小修 + 解开第二组循环依赖
+
+顺手做掉的一批——都由上一批的审查直接暴露、改动小、不值得单独排队。
+
+- [x] `_tSW_load` 移到文件顶部 `var` 声明（TDZ 隐患）
+- [x] `history2.js` 的 `let t` 改名为 `transitionIcon`，不再遮蔽 `feach_History()` 的翻页计数器
+- [x] 删掉 `chrome.pageAction.show()` 这条 MV2 死分支
+- [x] `updateClosedTabsStatus()` 改为单个 `cursorRequest` 同时挂 `onsuccess` / `onerror`
+- [x] `func.js` 的 250ms 全表轮询 → `document` 上一次事件委托（含 e2e 注释与 CODEBUDDY.md 的同步更新）
+- [x] **解开 `calendar.js` ↔ `history-core.js`**：`history-core.js` 直接 import `shared/calendar-storage.js`，不再经 `calendar.js` 绕路。新增 `the ES module graph is acyclic` 断言（解析 `from '…'` 建图 + DFS 找环，报出完整路径）；**变异验证**：把 import 改回 `./calendar.js`，测试立刻红。
 ### 第 1.8 批（已完成）：`background-utils.js` 改为生成 + 修跨午夜日期滚动
 
 - [x] **消除 `background-utils.js` 的手工同步**（对应 P3 同名条目）
@@ -215,6 +240,20 @@
 - [x] **`tests/sw-sync.test.mjs` 的检查集合改为从 `shared/` 源码自动提取**
   - 手写版漏了 `background-sw.js:515` 调用的 `getVersionType`。自动提取后零误报，且新增导出会自动纳入。
 - [x] 顺带解开 `helpers.js` ↔ `config.js` 循环依赖（P3 同名条目已更新为「已解开 1 组」）。
+
+### 第 3 批（已完成）：两个 skip 的收尾 + 四项小缺陷
+
+- [x] **`rh-list-order` 不再硬编码 5 个区块**（`modules/config.js`）
+  - `Array.from(rhlo, (li) => li.id).join(',')`。解除 `modules.test.mjs` 的 skip，变异验证：改回 `rhlo[0..2]` 立刻红。
+- [x] **删除 `options.html` 里永不渲染的 `treeOptionsDetail`**（含其空 div）
+  - 解除 `static.test.mjs` 的 skip，变异验证：插入一个只有 `data-lang-string` 的元素立刻红。该文件注释里写了被禁的写法，所以守卫先 `stripJsComments()` 再匹配——否则会匹配到散文。
+- [x] **`popup.js` 顺序列表只解析一次并防空值**，顺带消掉一处 `var` 重复声明（142 → 141 warning）。
+- [x] **SW 的 `callFunction` 收紧**（P0 安全）：`handleCallFunction()` 先校验 `sender.id === chrome.runtime.id`，再从显式表 `CALLABLE_FUNCTIONS` 取函数。
+  - 白名单当前只有 `deleteDb`——这是 `messageAdapter` 唯一会传的名字，其余全局函数不再可按名调用。
+  - 两条静态守卫均经变异验证（改回 `self[message.function]` / 删掉 sender 校验，各自报红）。
+  - 注意：回复从 promise 回调发出，所以 `case 'callFunction'` 必须 `return true`，否则端口先关、`sendResponse` 失效。
+- [x] **`_tSW_load` 提到文件顶部声明**（消 TDZ）、**`history2.js` 的 `t` 改名 `transitionIcon`**（消遮蔽）、**删掉恒假的 `pageAction` 分支**（MV2 死代码）、**`updateClosedTabsStatus()` 只开一个游标**。
+- [x] **`func.js` 的 250ms 轮询换成事件委托**，连带更新 `e2e/pages.spec.mjs` 与 `CODEBUDDY.md` 里已经失效的「不能用 `networkidle`」理由。
 
 ### 新发现（由测试暴露）
 
@@ -232,8 +271,9 @@
   - 修法要点（供回看）：以 `background-utils.js` 的 `var te = ''` 为准统一，并删掉 `helpers.js` 里冗余的 `else if (tf == '24')` 分支，使 `check-sw-sync.mjs` 的 `ACCEPTED_DRIFT` 清空。（该脚本后来随「第 1.8 批」的改造一起删除。）
   - 触发条件：`defaultConfig()` 保证 `rh-timeformat` 有值，所以正常情况下碰不到；但在 storage 尚未就绪（`storage-adapter.js` 冷启动）的窗口内读取就会露出来。
 
-- [ ] **给 `rh-list-order` 的 `split(',')` 加空值保护**（`chrome/scripts/popup.js:64`、`134`）
-  - 现状：无空值保护，且同一表达式重复计算两次。
+- [x] **给 `rh-list-order` 的 `split(',')` 加空值保护**（`chrome/scripts/popup.js`）— **已修复**（见「第 3 批」）
+  - ~~现状：无空值保护，且同一表达式重复计算两次。~~
+  - 已做：只在「Popup structure」处解析一次（`(localStorage['rh-list-order'] || '').split(',').filter(Boolean)`），初始化循环复用同一变量——顺带消掉一处 `var rhporder` 重复声明。
 
 ---
 
@@ -247,21 +287,24 @@
   - 现状：`processVisits()` 对 `urls_wait_load` 逐个串行 `await chrome.history.getVisits`（默认 7 天、上限 300 天，可达数万条），无进度持久化；SW 中途被杀则前功尽弃；每条都调一次 `chrome.action.setBadgeText` 未节流。
   - 做法：`Promise.allSettled` 分片并发、游标写入 storage、徽章节流更新。
 
-- [ ] **修复 `updateClosedTabsStatus()` 重复打开游标**（`chrome/scripts/db-manager.js:372-394`）
-  - 现状：对同一 index 调两次 `openCursor`，第二次只为挂 `onerror`，白白多开游标且有事务提前提交风险。应在同一次调用上同时挂 `onsuccess`/`onerror`。
+- [x] **修复 `updateClosedTabsStatus()` 重复打开游标**（`chrome/scripts/db-manager.js`）— **已修复**（见「第 3 批」）
+  - ~~现状：对同一 index 调两次 `openCursor`，第二次只为挂 `onerror`。~~
+  - 已做：保留一个 `cursorRequest`，`onsuccess`/`onerror` 挂在同一请求上。
 
-- [ ] **移除 `func.js` 的 250ms 永久轮询**（`chrome/scripts/func.js:220-232`）
-  - 现状：每个扩展页面开一个永不清除的 `setInterval`，全表扫描 `a[href="#"]` 并逐个绑监听。
-  - 做法：改为 `document` 上的一次事件委托（`e.target.closest('a[href="#"]')`）。
+- [x] **移除 `func.js` 的 250ms 永久轮询**（`chrome/scripts/func.js`）— **已修复**（见「第 3 批」）
+  - ~~现状：每个扩展页面开一个永不清除的 `setInterval`，全表扫描 `a[href="#"]` 并逐个绑监听。~~
+  - 已做：改为 `document` 上一次 click 事件委托。
+  - 连带：e2e 与 CODEBUDDY.md 里「页面永远不安静所以不能用 `networkidle`」的理由失效，已改为「第三方 favicon 请求让网络空闲点既晚又不稳定」——`goto` + `settle` 的写法不变。
 
-- [ ] **修复 `_tSW_load` 的 TDZ 隐患**（`chrome/scripts/background-sw.js:344` 使用，`:917` 才 `const` 声明）
-  - 现状：靠同步执行顺序侥幸不触发，任何结构调整都会炸。改为文件顶部声明。
+- [x] **修复 `_tSW_load` 的 TDZ 隐患**（`chrome/scripts/background-sw.js`）— **已修复**（见「第 3 批」）
+  - 已做：并入顶部 `var _tSW_init, _tSW_db, _tSW_load;`，文件末尾改为赋值。
 
-- [ ] **修复 `history2.js` 变量遮蔽**（`chrome/scripts/history2.js:289`）
-  - 现状：`let t = transition_value[v.transition]` 遮蔽了 `feach_History(loadfrom, loadto, t)` 的形参 `t`，递归翻页依赖遮蔽不生效才正确。重命名局部变量。
+- [x] **修复 `history2.js` 变量遮蔽**（`chrome/scripts/history2.js`）— **已修复**（见「第 3 批」）
+  - 已做：局部变量改名 `transitionIcon`（含 `tag[transitionIcon]` 与节点名拼接），形参 `t` 不再被遮蔽。
 
-- [ ] **清理 MV2 死代码**（`chrome/scripts/background-sw.js:515-517`）
-  - 现状：`getVersionType()` 恒返回 `'browserAction'`，`chrome.pageAction.show()` 永不执行。
+- [x] **清理 MV2 死代码**（`chrome/scripts/background-sw.js`）— **已修复**（见「第 3 批」）
+  - 已做：`getVersionType() == 'pageAction'` 分支与 `chrome.pageAction.show()` 删除（函数恒返回 `'browserAction'`）。`getVersionType` 本身保留——`func.js` 与 `popup-core.js` 仍在用。
+  - 连带：`tests/sw-sync.test.mjs` 里「background-sw.js 调用了 `getVersionType`」这条回归断言换成 `defaultConfig`（原断言指向的调用点已随本条删除）。
 
 - [ ] **统一 `addCloseRedord` 的命名与 id 语义**（`chrome/scripts/background-sw.js:380-393`）
   - 现状：函数名拼写错误；`id: oid + '_' + tid` 与 `oid: oid - 1` 语义不一致。
@@ -273,7 +316,7 @@
 
 ## P3 — 架构与可维护性
 
-- [ ] **清理 lint 警告存量**：共 146 处 — 89 处 `no-redeclare`（同作用域 `var` 重复声明，其中 16 处是 `background-utils.js` 与 `eslint.config.mjs` 的 `crossFileGlobals` 同名，属生成文件的固有重复）、54 处 `no-unused-vars`（多为 `catch (e)` 未使用绑定）、1 处 `no-empty`、2 处 `require-atomic-updates`。
+- [ ] **清理 lint 警告存量**：共 140 处 — 88 处 `no-redeclare`（同作用域 `var` 重复声明，其中 16 处是 `background-utils.js` 与 `eslint.config.mjs` 的 `crossFileGlobals` 同名，属生成文件的固有重复）、54 处 `no-unused-vars`（多为 `catch (e)` 未使用绑定）、1 处 `no-empty`、2 处 `require-atomic-updates`。
   - 现状：这些设为 warning，不阻塞 CI。`no-redeclare` 之所以不设为 error，是因为它合法无害，90 条会淹没真实错误。
   - 收尾动作：清零后把 `npm run lint` 改为 `eslint . --max-warnings 0`，彻底锁死。
 
@@ -282,11 +325,11 @@
   - ~~中间态护栏：`npm run verify:sw-sync`（`scripts/check-sw-sync.mjs`）逐函数比对两侧函数体与 38 键 `defaultValues`。~~ 该脚本已删除，重复的那份不再是手写的，无需再比对。
   - 现状：无依赖的底层函数抽到 `chrome/scripts/modules/shared/`，由 `scripts/gen-sw-utils.mjs` 机械拼接成 `background-utils.js`。改函数只改 `shared/` 下那一份，`npm run gen` 重新生成并提交；`npm run verify:sw-sync` 改为 `gen-sw-utils.mjs --check`，生成与校验共用同一份逻辑。
 
-- [ ] **解开循环依赖（原有两组，已解开 1 组）**
+- [ ] **解开循环依赖（原有两组，已全部解开）**
   - [x] `helpers.js` ↔ `config.js` — **已解开**：`defaultValues`/`defaultConfig` 下沉到 `modules/shared/config-defaults.js`，`helpers.js` 不再 import `config.js`，依赖方向变为单向。
-  - [ ] `calendar.js` ↔ `history-core.js`：`calendar_storage2` 由前者读取、后者写入，二者互相 import，初始化顺序敏感。
-    - 注：`calendar_storage2` 本体已下沉到 `modules/shared/calendar-storage.js`（两侧都改为从那里取），但 `calendar.js` 仍 import `history-core.js` 的 `history`、`history-core.js` 仍 import `calendar.js` 的 `save_calendar_storage2`，环还在。
-  - 做法：把共享状态抽到独立的 `state.js`，让依赖变成单向的 `state ← helpers ← config`。
+  - [x] `calendar.js` ↔ `history-core.js` — **已解开**（见「第 3.5 批」）：`history-core.js` 改为直接 `import { save_calendar_storage2 } from './shared/calendar-storage.js'`，不再经 `calendar.js` 绕一圈。剩下 `calendar.js → history-core.js` 单向，环消失。
+    - 未采用原计划的 `state.js`：共享状态本体（`calendar_storage2`）早已在 `modules/shared/` 里，真正的环只是一条绕道的 import，抽新模块反而多一层。
+    - 新增 `the ES module graph is acyclic` 静态断言锁住：解析 `from '…'` 建图 + DFS 找环，环存在即报出完整路径。
 
 - [ ] **完成模块化，删除 `func.js` 的 window 兼容层**
   - 现状：`func.js` 把几十个函数逐个挂 `window`，`popup.js`/`history.js`/`closed.js`/`bookmark.js` 仍通过全局变量调用——物理拆了文件、逻辑仍是全局脚本。
@@ -324,9 +367,9 @@
 | ✅ 第 2 批 | 修 XSS 与选择器注入 | **已完成**。URL / 域名 / 标题三类插值点全部按上下文转义 |
 | ✅ 第 2.1 批 | 修 `filterlist` 写入侧三处错误 + 残留分片清理 + 成功判定 | **已完成**。原「第 3 批」主体已并入 |
 | ✅ 第 2.2 批 | 删 `title_fix`、转义按上下文分工、`CSS.escape` 运行时测试、`downloadOptions` 下划线、`mergeList` 计数读取 | **已完成**。第 2 批的审查收尾 |
-| 第 3 批 | `saveOptions` 硬编码 `rhlo[0..4]`、`showOptions` 的 `typeof` 包装 | 功能失效，同属配置子系统，一起回归 |
-| 第 4 批 | SW 状态持久化（`chrome.storage.session`）、启动抓取异步化 | 涉及 MV3 架构调整，需先讨论方案 |
-| 第 5 批 | 清理 lint 警告存量 → `--max-warnings 0`；模块化收尾、技术栈统一 | 长期收益，可渐进推进 |
+| ✅ 第 3 批 | `rh-list-order` 硬编码、失效的 `treeOptionsDetail`、`popup.js` 空值保护、SW `callFunction` 收紧，外加 5 项小缺陷（TDZ / 变量遮蔽 / MV2 死代码 / 重复游标 / 250ms 轮询） | **已完成**。2 个 skip 全部消除，当前 0 skip |
+| 第 4 批 | SW 状态持久化（`chrome.storage.session`）、启动抓取并发分片与断点续传 | 涉及 MV3 架构调整，需先讨论方案。**树状结构的可靠性取决于此** |
+| 第 5 批 | `addCloseRedord` 命名与 id 语义、zTree `eval` 风险；清理 lint 警告存量 → `--max-warnings 0`；模块化收尾、技术栈统一 | 长期收益，可渐进推进 |
 
 > **插队说明**：第 1.5 / 1.6 / 1.7 批是顺手做掉的——它们都由新写的测试或 review 直接暴露，且改动小、有 skip 测试兜底，不值得单独排队。
 > 1.5 = `filtUrl` 子串误伤 + `te` 未初始化 + `addList` 空格；1.6 = 选项页 `#mvlist` 缺失（**会导致选项页打不开**）+ 其附带的属性注入；1.7 = `filtUrl` 降段死分支 + `www` 子域过滤。

@@ -4,7 +4,9 @@
 import { $, $$, createElement } from '../dom-helper.js';
 import { returnLang, TimeToStr, formatDate, truncate, get_host, getFaviconUrl, getFaviconOnerror, setupFaviconElement, escapeHtmlAttr, escapeHtmlText } from './helpers.js';
 import { filtUrl } from './config.js';
-import { save_calendar_storage2 } from './calendar.js';
+// Straight from the bottom layer, not via calendar.js: that module imports
+// `history` from here, and going through it closed an import cycle.
+import { save_calendar_storage2 } from './shared/calendar-storage.js';
 
 // Module-level variables
 var selectedItem;

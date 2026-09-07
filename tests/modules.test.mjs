@@ -928,9 +928,7 @@ test('addList strips every whitespace character from the input', () => {
     assert.equal(dom.el('flist-table').children.length, 2);
 });
 
-test('saveOptions tolerates an order list that is not exactly five blocks',
-    { skip: 'TODO.md P1 — config.js:433 硬编码 rhlo[0]..rhlo[4]' },
-    (t) => {
+test('saveOptions tolerates an order list that is not exactly five blocks', (t) => {
         t.mock.timers.enable({ apis: ['setTimeout'] });
         formDefaults();
         dom.el('rhlistorder').innerHTML = '';

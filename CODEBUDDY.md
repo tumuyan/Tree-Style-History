@@ -74,7 +74,7 @@ npm run check   # 本地门禁：lint + test + verify，约 3 秒
 - `npm run test:e2e` 是**唯一能验证"页面真的能打开"**的一层：用 Playwright 自带的 Chromium 侧载 `chrome/`，逐个打开 popup / history / history2 / closed / bookmark / options 六个页面，断言无未捕获异常、无扩展自身发出的 `console.error`。官方做法与踩坑记录都写在 `e2e/pages.spec.mjs` 文件头注释里，要点：
   - 扩展**只能在 persistent context 中加载**，且必须用 `channel: 'chromium'`——Chrome/Edge 已移除侧载用的命令行 flag，headless shell 也不支持扩展，所以 Playwright 自带的 Chromium 是唯一选择。
   - MV3 的扩展 id 从 service worker 的 URL 里取（没有 background page 可读了）。
-  - **不能用 `networkidle` 判断渲染完成**：`func.js` 装了一个永不清除的 250ms `setInterval`，页面永远不安静。改为 `goto(waitUntil:'load')` → 等 `storageAdapter.ready()` → 固定 settle 1.5s。
+  - **不能用 `networkidle` 判断渲染完成**：页面会持续向第三方 favicon 服务发请求，离线时全部失败，网络空闲点既晚又不稳定。改为 `goto(waitUntil:'load')` → 等 `storageAdapter.ready()` → 固定 settle 1.5s。
   - 网络错误只记录、不判失败：popup 的 favicon 走第三方服务与 `chrome://favicon/`，无外网时必然全挂，那是图标降级，不是页面坏了。只有扩展自身代码产出的错误才算数。
   - 这套断言经过**变异验证**（往 `popup.js` 注入 `throw` + `console.error`，确认只有该页面变红），不是"永远绿"的假测试。
   - 新增 e2e 用例时沿用同一模式：`collectErrors(page)` → `goto` → `settle(page)` → 断言 `jsErrors` 为空。**不要**用 `networkidle`。

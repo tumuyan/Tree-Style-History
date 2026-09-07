@@ -367,9 +367,12 @@
                     const index = store.index('close');
                     const range = IDBKeyRange.upperBound(-1);
 
-                    const updates = [];
+                    // One cursor, not two: the second openCursor() existed only
+                    // to hang .onerror on it, and it also risked the first
+                    // transaction committing before the walk finished.
+                    const cursorRequest = index.openCursor(range);
 
-                    index.openCursor(range).onsuccess = (event) => {
+                    cursorRequest.onsuccess = (event) => {
                         const cursor = event.target.result;
                         if (cursor) {
                             const value = cursor.value;
@@ -391,7 +394,7 @@
                         }
                     };
 
-                    index.openCursor(range).onerror = (event) => reject(event);
+                    cursorRequest.onerror = (event) => reject(event);
                 });
             });
         }

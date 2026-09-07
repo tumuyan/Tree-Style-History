@@ -464,7 +464,10 @@ function saveOptions(sync) {
     so['rt-itemsno'] = $('rtitemsno').value;
     so['rb-itemsno'] = $('rbitemsno').value;
     so['mv-itemsno'] = $('mvitemsno').value;
-    so['rh-list-order'] = rhlo[0].id + ',' + rhlo[1].id + ',' + rhlo[2].id + ',' + rhlo[3].id + ',' + rhlo[4].id;
+    // Derived from however many blocks the list currently holds: it used to
+    // index rhlo[0]..rhlo[4] by hand, so adding or removing a block in
+    // loadOptions() turned saving the page into a TypeError.
+    so['rh-list-order'] = Array.from(rhlo, function (li) { return li.id; }).join(',');
     so['rh-historypage'] = $('rhhistorypage').options[$('rhhistorypage').selectedIndex].value;
     so['show-popup'] = $('showPopup').options[$('showPopup').selectedIndex].value;
     so['rh-date'] = $('rhdate').options[$('rhdate').selectedIndex].value;

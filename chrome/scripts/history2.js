@@ -286,13 +286,15 @@ document.addEventListener('DOMContentLoaded', function () {
             var cursor = e.target.result;
             if (cursor != undefined) {
                 let v = cursor.value;
-                let t = transition_value[v.transition];
+                // Not `t`: that name is feach_History()'s page counter, and the
+                // recursion in the branch below depends on reaching it.
+                let transitionIcon = transition_value[v.transition];
 
                 if (filtUrl(v.url) == false) {
                     let node = {
                         id: v.visitId,
                         pId: parseInt(v.referringVisitId),
-                        name: TimeToStr(v.visitTime, true, true) + " - " + v.title.replace(/[<>]/g, ' ') + ' ' + t,
+                        name: TimeToStr(v.visitTime, true, true) + " - " + v.title.replace(/[<>]/g, ' ') + ' ' + transitionIcon,
                         // url: v.url,
                         icon: getFaviconUrl(v.url.replace(/(?<![\/])\/[^\/].+/, "")),
                         open: true,
@@ -300,7 +302,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         t: v.url //+ " "+v.referringVisitId + ">"+v.visitId
                     };
 
-                    tag[t] = true;
+                    tag[transitionIcon] = true;
 
                     pIDs[v.referringVisitId] = true;
 

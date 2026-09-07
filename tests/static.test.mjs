@@ -171,6 +171,25 @@ test('service worker does not use DOM or timer-based scheduling', () => {
     assert.ok(!/\bsetInterval\s*\(/.test(sw), 'service worker must use chrome.alarms, not setInterval');
 });
 
+test('service worker never calls a function named by the message itself', () => {
+    // Comments are stripped: this file documents the removed dispatch by
+    // writing it out, which would otherwise match the very thing we forbid.
+    const sw = stripJsComments(fs.readFileSync(path.join(CHROME_DIR, 'scripts/background-sw.js'), 'utf8'));
+
+    // `self[message.function](...)` exposed every service-worker global —
+    // internal helpers included — to anyone who could reach the port. Dispatch
+    // has to go through an explicit table of names.
+    assert.doesNotMatch(sw, /self\s*\[\s*message\s*\.\s*function\s*\]/);
+    assert.match(sw, /CALLABLE_FUNCTIONS\s*\[\s*message\.function\s*\]/);
+});
+
+test('service worker checks the sender before running a callFunction request', () => {
+    const sw = fs.readFileSync(path.join(CHROME_DIR, 'scripts/background-sw.js'), 'utf8');
+
+    // Without this, any page or extension that can guess the name gets to run it.
+    assert.match(sw, /sender\.id\s*!==\s*chrome\.runtime\.id/);
+});
+
 test('service worker imports its dependencies via importScripts', () => {
     const sw = fs.readFileSync(path.join(CHROME_DIR, 'scripts/background-sw.js'), 'utf8');
     // storage-adapter is mandatory: without it `localStorage` is undefined in a SW.
@@ -260,9 +279,7 @@ test('every returnLang()/echoLang() key used in JS exists in both locales', () =
     }
 });
 
-test('every data-lang-string element also carries the .lang class',
-    { skip: 'TODO.md P1 — options.html:37 的 treeOptionsDetail 有 data-lang-string 但没有 .lang' },
-    () => {
+test('every data-lang-string element also carries the .lang class', () => {
         // func.js fills only elements matching '.lang', so an element with just
         // data-lang-string renders as an empty box — silently, with no console
         // error to point at the cause.
@@ -313,6 +330,51 @@ test('func.js re-exports every module symbol the page scripts rely on', () => {
         }
     }
     assert.deepEqual(unmounted, []);
+});
+
+test('the ES module graph is acyclic', () => {
+    // ES modules tolerate cycles, but which of two mutually importing modules
+    // finishes evaluating first decides whether a binding is defined or in the
+    // temporal dead zone at import time. Two cycles used to exist here; the
+    // helpers<->config one was broken by moving defaultValues into shared/,
+    // the calendar<->history-core one by importing the bottom layer directly.
+    const graph = new Map();
+    const walk = (dir) => {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            const p = path.join(dir, entry.name);
+            if (entry.isDirectory()) { walk(p); continue; }
+            if (!entry.name.endsWith('.js')) continue;
+            const rel = path.relative(CHROME_DIR, p);
+            const src = fs.readFileSync(p, 'utf8');
+            const deps = [...src.matchAll(/\bfrom\s*['"]([^'"]+)['"]/g)]
+                .map((m) => m[1])
+                .filter((spec) => spec.startsWith('.'))
+                .map((spec) => path.relative(CHROME_DIR, path.resolve(path.dirname(p), spec)));
+            graph.set(rel, deps);
+        }
+    };
+    walk(path.join(CHROME_DIR, 'scripts', 'modules'));
+
+    assert.ok(graph.size >= 5, `expected the module directory to be walked, saw ${graph.size} files`);
+
+    const state = new Map();
+    const stack = [];
+    const cycles = [];
+    const visit = (node) => {
+        if (state.get(node) === 'done') return;
+        if (state.get(node) === 'open') {
+            cycles.push([...stack.slice(stack.indexOf(node)), node].join(' -> '));
+            return;
+        }
+        state.set(node, 'open');
+        stack.push(node);
+        for (const dep of graph.get(node) || []) visit(dep);
+        stack.pop();
+        state.set(node, 'done');
+    };
+    for (const node of graph.keys()) visit(node);
+
+    assert.deepEqual(cycles, [], `import cycles found:\n${cycles.join('\n')}`);
 });
 
 test('every window.* assignment in func.js resolves to a real binding', () => {

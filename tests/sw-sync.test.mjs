@@ -30,8 +30,8 @@ const sw = readFileSync(SW_FILE, 'utf8');
  *
  * This is the whole point of the test: the set is read from the source of
  * truth, so it cannot fall behind the way a hand-written list did (the first
- * version of this file listed 6 names and missed `getVersionType`, which
- * background-sw.js:515 calls).
+ * version of this file listed 6 names and missed `getVersionType`, which the
+ * service worker used to call).
  */
 function sharedExports() {
     const names = new Set();
@@ -80,11 +80,12 @@ test('background-sw.js only uses shared symbols the generated file defines', () 
     const used = [...shared].filter((name) => new RegExp(`\\b${name}\\b`).test(sw));
 
     // Regression guard for the hand-written-list bug: the original version of
-    // this test checked 6 names and missed this one, so a one-sided edit would
-    // have gone unnoticed.
+    // this test checked 6 names and missed `getVersionType`, so a one-sided
+    // edit would have gone unnoticed. Pinning two names keeps the check from
+    // passing just because the `used` set happens to be empty.
     assert.ok(
-        used.includes('getVersionType'),
-        'background-sw.js calls getVersionType(); it must be covered by this check',
+        used.includes('getVersion'),
+        'background-sw.js calls getVersion(); it must be covered by this check',
     );
     assert.ok(
         used.includes('save_calendar_storage2'),

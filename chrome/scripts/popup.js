@@ -61,7 +61,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Popup structure
 
-    var rhporder = localStorage['rh-list-order'].split(',');
+    // Parsed once and reused for the init pass below: the storage value is
+    // absent until the very first save, and an empty string splits into ['']
+    // which would still be walked as a (harmless) unknown block.
+    var rhporder = (localStorage['rh-list-order'] || '').split(',').filter(Boolean);
 
     for (var o in rhporder) {
         if (rhporder[o] == 'rh-order') {
@@ -131,8 +134,6 @@ document.addEventListener('DOMContentLoaded', function () {
     // Popup init
 
     // -- Insert - 按照rh-list-order的顺序填充数据
-    var rhporder = localStorage['rh-list-order'].split(',');
-    
     for (var o in rhporder) {
         if (rhporder[o] == 'rh-order' && $('rh-inject')) { recentHistory(); }
         else if (rhporder[o] == 'rct-order' && $('rct-inject')) { recentlyClosedTabs(); }
