@@ -107,16 +107,44 @@ function stripScripts(text) {
     return text.replace(/<script[^>]*>([\s\S]*?)<\/script>/gi, '');
 }
 
-function title_fix(text) {
-    return stripScripts(text).replace(/\"/g, '&#34;').replace(/\</g, '').replace(/\>/g, '').replace(/\//g, '');
-}
-
 function escapeHtmlAttr(text) {
     if (text === undefined || text === null) return '';
     return String(text)
         .replace(/&/g, '&amp;')
         .replace(/'/g, '&#39;')
         .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
+/**
+ * Escape a string for interpolation as element TEXT CONTENT, i.e.
+ * `'>' + value + '<'`.
+ *
+ * The counterpart of escapeHtmlAttr(), which covers `attr="' + value + '"`.
+ * Two functions rather than one taking a mode flag: the name records which
+ * context the value was escaped for, and a name is what a static check can
+ * grep for. Quotes are left alone here — in a text position they need no
+ * escaping, and escaping them rewrites the title the user actually wrote.
+ *
+ * Replaces the old title_fix(), which deleted '<', '>' and '/' instead of
+ * escaping them. Deleting is what made slashes disappear from history titles,
+ * and its partial escaping of '"' meant the result could not be escaped again
+ * without the entity showing up as literal text.
+ *
+ * Note what this does NOT do: strip <script> blocks. Once '<' is escaped the
+ * markup cannot run, so removing it would only lose text the user wrote — the
+ * same temptation title_fix() gave in to. escapeHtmlAttr() does not strip
+ * either: the two differ in exactly one respect, how they treat quotes, and
+ * that difference is the whole reason they have two names.
+ *
+ * As in escapeHtmlAttr(), '&' has to go first: escaping it last would turn the
+ * '&' of an entity this function just produced into '&amp;'.
+ */
+function escapeHtmlText(text) {
+    if (text === undefined || text === null) return '';
+    return String(text)
+        .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;');
 }
@@ -301,7 +329,7 @@ function setupFaviconElement(imgEl, primaryUrl, fallbackUrl) {
 export {
     TimeToStr, formatDate,
     echoLang,
-    stripScripts, title_fix, escapeHtmlAttr, escapeRegExp, truncate, extractFileName, calcSize,
+    stripScripts, escapeHtmlAttr, escapeHtmlText, escapeRegExp, truncate, extractFileName, calcSize,
     getUrlVars, extractBookmarkletCode, decodeBookmarkletCode, executeBookmarklet,
     chromeURL,
     Clipboard,

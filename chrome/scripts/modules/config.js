@@ -2,7 +2,7 @@
 // Manages all configuration-related functions extracted from func.js.
 
 import { $, $$, createElement } from '../dom-helper.js';
-import { returnLang, get_host, escapeHtmlAttr, escapeRegExp } from './helpers.js';
+import { returnLang, get_host, escapeHtmlAttr, escapeHtmlText, escapeRegExp } from './helpers.js';
 import { defaultValues, defaultConfig } from './shared/config-defaults.js';
 
 
@@ -205,7 +205,10 @@ function downloadOptions() {
 
         for (const i in result) {
             if (i.indexOf('filterlist') < 0) {
-                let j = i.replace('_', '-');
+                // Every underscore, not just the first: saveOptions() turns every
+                // '-' into '_' on the way up, so 'favicon-service-fallback' used
+                // to come back as 'favicon-service_fallback' — a key nobody reads.
+                let j = i.replace(/_/g, '-');
                 if (result != undefined)
                     localStorage[j] = result[i];
             }
@@ -319,6 +322,88 @@ function loadSlider(id, min, max, current) {
 
 // Save options
 
+// Config keys use '-' and must never contain '_': saveOptions() replaces every
+// '-' with '_' on the way into chrome.storage.sync and downloadOptions() every
+// '_' back with '-'. Both are global replaces, so the pair is only reversible
+// while no key holds an underscore — 'a-b' and 'a_b' would both upload as
+// 'a_b' and collide on the way down. Asserted in tests/modules.test.mjs.
+//
+// The filter list is uploaded as `filterlist0`, `filterlist1`, … because
+// chrome.storage.sync caps a single item at 8KB (~100 domains per slice).
+const FILTERLIST_PREFIX = 'filterlist';
+// Matches a slice, but deliberately not FILTERLIST_SLICES_KEY (it ends in
+// letters), so the count is never mistaken for one of the slices it counts.
+const FILTERLIST_SLICE_KEY = /^filterlist\d+$/;
+// How many slices the last upload wrote — see dropStaleSlices()/mergeList().
+const FILTERLIST_SLICES_KEY = 'filterlist_slices';
+// Domains per slice. 100 domains average well under the 8KB per-item quota.
+const SLICE_SIZE = 100;
+
+// The callback flavour of chrome.storage reports failures out of band, via
+// chrome.runtime.lastError. The upload path never read it, so a write that
+// blew the quota failed silently while the UI reported success. These wrappers
+// turn the outcome into a settled promise instead.
+function syncSet(obj) {
+    return new Promise(function (resolve, reject) {
+        chrome.storage.sync.set(obj, function () {
+            if (chrome.runtime.lastError)
+                reject(new Error(chrome.runtime.lastError.message));
+            else
+                resolve();
+        });
+    });
+}
+
+function syncRemove(keys) {
+    return new Promise(function (resolve, reject) {
+        chrome.storage.sync.remove(keys, function () {
+            if (chrome.runtime.lastError)
+                reject(new Error(chrome.runtime.lastError.message));
+            else
+                resolve();
+        });
+    });
+}
+
+function syncGet(keys) {
+    return new Promise(function (resolve, reject) {
+        chrome.storage.sync.get(keys, function (result) {
+            if (chrome.runtime.lastError)
+                reject(new Error(chrome.runtime.lastError.message));
+            else
+                resolve(result);
+        });
+    });
+}
+
+/**
+ * Uploading a shorter list used to leave the higher-numbered slices in sync
+ * storage forever. A reader could not tell those apart from current ones, so
+ * every domain the user had since deleted came straight back on the next
+ * mergeList().
+ */
+function dropStaleSlices(keep) {
+    return syncGet(null).then(function (result) {
+        const stale = Object.keys(result).filter(function (key) {
+            return FILTERLIST_SLICE_KEY.test(key)
+                && Number(key.slice(FILTERLIST_PREFIX.length)) >= keep;
+        });
+        if (stale.length == 0)
+            return undefined;
+        return syncRemove(stale);
+    });
+}
+
+/**
+ * Gather the option form, write it to localStorage and — when `sync` — upload
+ * it to chrome.storage.sync.
+ *
+ * Returns a promise that settles once the upload does, so a caller can
+ * sequence work after it. It does NOT report whether the upload succeeded: a
+ * rejected write is surfaced on the button and logged, then swallowed here so
+ * one failed write cannot reject out of the click handler. Await this to order
+ * work, not to check the result.
+ */
 function saveOptions(sync) {
 
     var so = {};
@@ -344,8 +429,6 @@ function saveOptions(sync) {
 
     var mls = [];
 
-    let group = 0;
-    let item = 0;
     let cache = '';
 
     if (mli.length > 0) {
@@ -360,14 +443,15 @@ function saveOptions(sync) {
         for (var f = 0; f < fli.length; f++) {
             flil += fli[f].textContent + '|';
 
-            if (item < 100) {
-                cache += fli[f].textContent + '|';
-            } else {
-                mls[group] = cache;
-                group++;
-                item = 0;
-                cache = fli[f].textContent + '|';
+            // Start a new slice every SLICE_SIZE domains: the whole point of
+            // slicing is staying under the per-item quota, and `item` was never
+            // incremented, so `item < 100` held forever and every domain ended
+            // up in one slice that then blew the quota silently.
+            if (f > 0 && f % SLICE_SIZE == 0) {
+                mls[mls.length] = cache;
+                cache = '';
             }
+            cache += fli[f].textContent + '|';
         }
 
         mls[mls.length] = cache;
@@ -413,39 +497,57 @@ function saveOptions(sync) {
         console.log(i + '=' + so[i]);
     }
 
+    let upload;
     if (sync) {
-
-
-        let c = 0
+        const config = {};
         for (var i in so) {
+            // Uploaded as slices instead: one domain list easily exceeds the
+            // 8KB per-item quota.
             if (i == 'rh-filtered')
                 continue;
-
-            let o = {};
-            o[i.replace('-', '_')] = so[i];
-            chrome.storage.sync.set(o, function () {
-                c++;
-            });
+            // Every dash, not just the first: downloadOptions() turns every
+            // '_' back into '-', so the two have to be exact mirror images.
+            config[i.replace(/-/g, '_')] = so[i];
         }
 
-        for (let j = 0; j <= mls.length; j++) {
-
-            let o = {};
-            o['filterlist' + j] = so[i];
-            chrome.storage.sync.set(o, function () {
-                c++;
-            });
+        const slices = {};
+        for (let j = 0; j < mls.length; j++) {
+            // This used to write `so[i]` — `i` being the leaked loop variable
+            // from the block above, i.e. always the last config key — so every
+            // slice held the page-zoom value and the domains were never
+            // uploaded at all.
+            slices[FILTERLIST_PREFIX + j] = mls[j];
         }
+        slices[FILTERLIST_SLICES_KEY] = String(mls.length);
 
-        setTimeout(function () {
-            console.log('c=' + c + ' mls=' + mls.length + ' so=' + so.length);
-            if (c - mls.length == 26)
-                $('saveUpload').value = returnLang('saved')
-            else
-                $('saveUpload').value = returnLang('saveFail')
-        }, 1500);
-
-        setTimeout(function () { $('saveUpload').value = returnLang('saveUpload') }, 3000);
+        // Success used to be judged by counting callbacks after a 1500ms
+        // guess and comparing the total against a hard-coded 26; there are 38
+        // config keys, so it could never have matched and every successful
+        // upload was reported as a failure. Promise.all settles when the
+        // writes actually settle, and a rejected write is now visible.
+        //
+        // Held in a variable rather than returned here on purpose: the tail of
+        // this function (updateFilter(), the context-menu refresh) has to run
+        // for a synced save too.
+        // dropStaleSlices() runs alongside the write rather than after it, and
+        // that is safe: it only ever removes slice numbers >= the new count,
+        // while syncSet(slices) only writes numbers below it. The two cannot
+        // disagree whichever order chrome.storage processes them in.
+        upload = Promise.all([
+            syncSet(config),
+            syncSet(slices),
+            dropStaleSlices(mls.length),
+        ]).then(
+            function () {
+                $('saveUpload').value = returnLang('saved');
+            },
+            function (err) {
+                console.error('Failed to upload options:', err);
+                $('saveUpload').value = returnLang('saveFail');
+            },
+        ).finally(function () {
+            setTimeout(function () { $('saveUpload').value = returnLang('saveUpload') }, 3000);
+        });
     } else {
         setTimeout(function () { $('save').value = returnLang('saved') }, 1500);
         setTimeout(function () { $('save').value = returnLang('saveOptions') }, 3000);
@@ -460,6 +562,9 @@ function saveOptions(sync) {
         });
     }
 
+    // Settles once the upload does, so a caller can wait for it. Rejections are
+    // already surfaced through the button above; nothing else should throw.
+    return upload || Promise.resolve();
 }
 
 
@@ -508,8 +613,12 @@ function mostVisitedBlocklist() {
                     // in options.html, so the escaping was added together with
                     // that element rather than left for the P0 XSS batch that
                     // still covers filteredDomainsList() and addList() below.
-                    var mvblEsc = escapeHtmlAttr(mvbl[i]);
-                    var tr = createElement('tr', { html: '<td><div title="' + mvblEsc + '">' + mvblEsc + '</div></td><td style="width:20px;"><a href="#" id="' + linkid + '"><img alt="Restore" src="images/remove.png"></a></td>', 'class': 'op-item' });
+                    // One escaper per context: the same value goes into a title
+                    // attribute and into the visible text, and the text
+                    // escaper leaves quotes alone rather than rewriting them.
+                    var mvblAttr = escapeHtmlAttr(mvbl[i]);
+                    var mvblText = escapeHtmlText(mvbl[i]);
+                    var tr = createElement('tr', { html: '<td><div title="' + mvblAttr + '">' + mvblText + '</div></td><td style="width:20px;"><a href="#" id="' + linkid + '"><img alt="Restore" src="images/remove.png"></a></td>', 'class': 'op-item' });
                     $('mvlist-table').appendChild(tr);
                     $(linkid).addEventListener('click', function () {
                         this.closest('tr').remove();
@@ -531,7 +640,12 @@ function filteredDomainsList() {
             for (var i = 0; i < fbl.length; i++) {
                 if (fbl[i] !== undefined && fbl[i] !== '') {
                     var linkid = 'link-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
-                    var tr = createElement('tr', { html: '<td><div title="' + fbl[i] + '">' + fbl[i] + '</div></td><td style="width:20px;"><a href="#" id="' + linkid + '"><img alt="Restore" src="images/remove.png"></a></td>', 'class': 'op-item' });
+                    // One escaper per context: the same value goes into a title
+                    // attribute and into the visible text, and the text escaper
+                    // leaves quotes alone rather than rewriting them.
+                    var fblAttr = escapeHtmlAttr(fbl[i]);
+                    var fblText = escapeHtmlText(fbl[i]);
+                    var tr = createElement('tr', { html: '<td><div title="' + fblAttr + '">' + fblText + '</div></td><td style="width:20px;"><a href="#" id="' + linkid + '"><img alt="Restore" src="images/remove.png"></a></td>', 'class': 'op-item' });
                     $('flist-table').appendChild(tr);
                     $(linkid).addEventListener('click', function () {
                         this.closest('tr').remove();
@@ -572,7 +686,10 @@ function addList(item) {
             }
             if (flic == 'test') {
                 var linkid = 'link-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
-                var tr = createElement('tr', { html: '<td><div title="' + fliv + '">' + fliv + '</div></td><td style="width:20px;"><a href="#" id="' + linkid + '"><img alt="Restore" src="images/remove.png"></a></td>', 'class': 'op-item' });
+                // One escaper per context, as in filteredDomainsList() above.
+                var flivAttr = escapeHtmlAttr(fliv);
+                var flivText = escapeHtmlText(fliv);
+                var tr = createElement('tr', { html: '<td><div title="' + flivAttr + '">' + flivText + '</div></td><td style="width:20px;"><a href="#" id="' + linkid + '"><img alt="Restore" src="images/remove.png"></a></td>', 'class': 'op-item' });
                 $('flist-table').appendChild(tr);
                 $('flist-add-i').value = '';
                 $(linkid).addEventListener('click', function () {
@@ -588,29 +705,36 @@ function addList(item) {
 
 // 合并本地列表和在线列表（但是不保存）
 function mergeList() {
-    chrome.storage.sync.get(null, function (result) {
+    return syncGet(null).then(function (result) {
 
         let cache = '';
-        for (let i = 0; i < 11; i++) {
-            let r = result['filterlist' + i];
+        // Read exactly the slices the last upload recorded. Probing for the
+        // first missing slice instead — the earlier approach, and before that a
+        // hard-coded 11 — swallowed every slice left behind by a longer previous
+        // list and resurrected domains the user had since deleted.
+        //
+        // Missing metadata means the data predates filterlist_slices (or the
+        // upload never happened), so there is nothing safe to merge: Number()
+        // turns undefined into NaN and the loop below does not run.
+        const slices = Number(result[FILTERLIST_SLICES_KEY]);
+        for (let i = 0; i < slices; i++) {
+            let r = result[FILTERLIST_PREFIX + i];
             if (r != undefined && r != '')
                 cache += r;
         }
 
         let c = 0;
-        {
-            const fbl = cache.split('|');
-            if (fbl.length > 0) {
-                for (let i = 0; i < fbl.length; i++) {
-                    if (fbl[i] !== undefined && fbl[i] !== '') {
-                        if (addList(fbl[i]))
-                            c++;
-                    }
-                }
+        const fbl = cache.split('|');
+        for (let i = 0; i < fbl.length; i++) {
+            if (fbl[i] !== undefined && fbl[i] !== '') {
+                if (addList(fbl[i]))
+                    c++;
             }
         }
 
         alert(returnLang('addItemNum') + c);
+    }).catch(function (err) {
+        console.error('Failed to merge the online filter list:', err);
     });
 }
 

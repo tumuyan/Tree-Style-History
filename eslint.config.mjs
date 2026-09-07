@@ -47,8 +47,8 @@ const crossFileGlobals = {
     echoLang: 'writable',
     returnLang: 'writable',
     stripScripts: 'writable',
-    title_fix: 'writable',
     escapeHtmlAttr: 'writable',
+    escapeHtmlText: 'writable',
     truncate: 'writable',
     extractFileName: 'writable',
     calcSize: 'writable',
@@ -285,6 +285,9 @@ export default [
             globals: {
                 ...globals.node,
                 ...globals.browser,
+                // Injected into the page, not the runner: page.evaluate() bodies
+                // run inside the extension, where chrome.* is a global.
+                chrome: 'readonly',
             },
         },
         rules: {

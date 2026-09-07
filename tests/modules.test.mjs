@@ -118,7 +118,7 @@ const EXPECTED_EXPORTS = {
     'dom-helper.js': ['$', '$$', 'createElement', 'emptyElement', 'getStyle'],
     'modules/helpers.js': [
         'TimeToStr', 'timeNow', 'formatDate', 'echoLang', 'returnLang', 'stripScripts',
-        'title_fix', 'escapeHtmlAttr', 'truncate', 'calcSize', 'getUrlVars',
+        'escapeHtmlAttr', 'escapeHtmlText', 'truncate', 'calcSize', 'getUrlVars',
         'isBookmarkletUrl', 'extractBookmarkletCode', 'executeBookmarklet',
         'chromeURL', 'getVersion', 'getVersionType', 'get_host', 'getFaviconUrl',
         'getFaviconOnerror', 'setupFaviconElement',
@@ -182,10 +182,58 @@ test('get_host extracts the hostname and falls back to "#"', () => {
     assert.equal(helpers.get_host('not a url'), '#');
 });
 
-test('title_fix drops script blocks and angle brackets', () => {
-    // `<script>…</script>` is removed wholesale; stray < > and / are stripped.
-    assert.equal(helpers.title_fix('<script>alert(1)</script>a/b'), 'ab');
-    assert.equal(helpers.title_fix('<img src=x onerror=alert(1)>'), 'img src=x onerror=alert(1)');
+test('escapeHtmlText keeps slashes and quotes that belong to the title', () => {
+    // title_fix() deleted '/' outright, so "Docs / API" rendered as "Docs  API".
+    // Quotes belong to the title too, and in a text position they need no
+    // escaping — escaping them rewrites what the user actually wrote.
+    assert.equal(helpers.escapeHtmlText('FAQ / Help'), 'FAQ / Help');
+    assert.equal(helpers.escapeHtmlText('He said "hi"'), 'He said "hi"');
+});
+
+test('escapeHtmlText neutralises markup without deleting it', () => {
+    assert.equal(helpers.escapeHtmlText('<img src=x onerror=alert(1)>'),
+        '&lt;img src=x onerror=alert(1)&gt;');
+    // A <script> block is escaped like any other markup, not deleted: once '<'
+    // is escaped it cannot run, and stripping it would only lose text the user
+    // wrote — the habit that made title_fix() eat slashes.
+    assert.equal(helpers.escapeHtmlText('<script>alert(1)</script>a/b'),
+        '&lt;script&gt;alert(1)&lt;/script&gt;a/b');
+});
+
+test('escapeHtmlText escapes ampersands first, so one pass is enough', () => {
+    // '&' has to go first: escaping it last would turn the '&' of an entity
+    // this function just produced into '&amp;'.
+    assert.equal(helpers.escapeHtmlText('a & b'), 'a &amp; b');
+    // Hence applying it twice is visibly wrong rather than silently wrong. That
+    // is deliberate: double escaping is the failure mode to catch, and it is
+    // exactly how a title ended up displaying as a literal '&#34;' (bookmark.js).
+    assert.equal(helpers.escapeHtmlText(helpers.escapeHtmlText('a & b')), 'a &amp;amp; b');
+    assert.equal(helpers.escapeHtmlText('a &lt; b'), 'a &amp;lt; b');
+});
+
+test('escapeHtmlText tolerates a missing title', () => {
+    // chrome.history hands back entries with no title at all, and the render
+    // loops still interpolate the field.
+    assert.equal(helpers.escapeHtmlText(undefined), '');
+    assert.equal(helpers.escapeHtmlText(null), '');
+});
+
+test('formatItem shows a page title verbatim instead of executing it', async () => {
+    // A page title is attacker-controlled, and formatItem() interpolates it as
+    // text content. Escaping lives here now rather than upstream in
+    // title_fix(), which deleted '<', '>' and '/' — so "Docs / API" lost its
+    // slashes, and any attempt to escape again produced literal entities.
+    const popupCore = await importModule('modules/popup-core.js');
+    const title = 'Docs / API "v2" <b>x</b>';
+
+    const html = popupCore.formatItem({
+        url: 'https://example.test/p', title, time: '13:05', type: 'rh',
+        favicon: 'https://example.test/favicon.ico',
+    }).innerHTML;
+
+    assert.doesNotMatch(html, /<b>x<\/b>/, 'the markup in the title became a real element');
+    assert.match(html, /&lt;b&gt;x&lt;\/b&gt;/, 'the markup must be shown, not run');
+    assert.match(html, /Docs \/ API "v2"/, 'slashes and quotes belong to the title');
 });
 
 test('isBookmarkletUrl recognises javascript: URLs', () => {
@@ -551,12 +599,12 @@ test('a value survives a save/load round-trip unchanged', (t) => {
     }
 });
 
-test('downloadOptions restores the values that saveOptions(true) uploaded', (t) => {
+test('downloadOptions restores the values that saveOptions(true) uploaded', async (t) => {
     t.mock.timers.enable({ apis: ['setTimeout'] });
     formDefaults();
     env.syncStore.clear();
     try {
-        config.saveOptions(true);
+        await config.saveOptions(true);
 
         env.store.clear(); // simulate a fresh profile pulling the config back down
         config.downloadOptions();
@@ -565,7 +613,104 @@ test('downloadOptions restores the values that saveOptions(true) uploaded', (t) 
         assert.equal(env.store.get('rh-historypage'), 'yes');
         assert.equal(env.store.get('favicon-service'), 'duckduckgo');
         assert.equal(env.store.get('favicon-service-fallback'), '', 'the sync layer stores key names with underscores');
+        assert.equal(env.store.get('share-favicon-cache'), 'yes', 'every underscore is turned back into a dash, not just the first');
         assert.equal(env.store.get('filterlist0'), undefined, 'filterlist slices are storage buckets, not config keys');
+        assert.equal(env.store.get('filterlist_slices'), undefined, 'so is the slice count');
+    } finally {
+        t.mock.timers.reset();
+    }
+});
+
+test('no config key contains an underscore', () => {
+    // The sync layer renames keys: saveOptions() replaces every '-' with '_' on
+    // the way into chrome.storage.sync, and downloadOptions() replaces every '_'
+    // back with '-'. Both are global replaces, so the round-trip is only
+    // reversible while no key contains '_' — 'a-b' and 'a_b' would both upload
+    // as 'a_b' and come back as 'a-b', silently colliding. The invariant is not
+    // visible from either function alone, so it is asserted here.
+    const offenders = Object.keys(config.defaultValues).filter((key) => key.includes('_'));
+    assert.deepEqual(offenders, [], 'a key containing an underscore cannot survive the sync round-trip');
+});
+
+/**
+ * Render `domains` as filter rows and upload them, the way the options page
+ * does before the user switches browser.
+ *
+ * Seed the upload through saveOptions() rather than writing filterlistN keys
+ * straight into env.syncStore: that is what let the original bug through — the
+ * old test hand-wrote slices that the code never actually produced.
+ */
+async function uploadDomains(domains) {
+    const table = dom.el('flist-table');
+    table.innerHTML = '';
+    for (const domain of domains) {
+        const row = dom.makeEl('tr');
+        row.innerHTML = `<td>${domain}</td>`;
+        table.appendChild(row);
+    }
+    await config.saveOptions(true);
+}
+
+/** The domains currently rendered in the filter table, in order. */
+function renderedDomains() {
+    return dom.el('flist-table').children.map((row) => row.cells[0].textContent);
+}
+
+test('mergeList reads every slice the last upload wrote', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    formDefaults();
+    env.syncStore.clear();
+    try {
+        // 250 domains -> three slices. The loop used to stop at a hard-coded
+        // 11 and then at the first missing slice; neither has anything to do
+        // with the number of slices the upload actually wrote.
+        await uploadDomains(Array.from({ length: 250 }, (_, i) => `d${i}.com`));
+        assert.equal(env.syncStore.get('filterlist_slices'), '3');
+
+        dom.el('flist-table').innerHTML = '';
+        await config.mergeList();
+
+        assert.equal(renderedDomains().length, 250, 'every slice contributed its domains');
+    } finally {
+        t.mock.timers.reset();
+    }
+});
+
+test('re-uploading a shorter filter list does not resurrect removed domains', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    formDefaults();
+    env.syncStore.clear();
+    try {
+        await uploadDomains(Array.from({ length: 150 }, (_, i) => `d${i}.com`));
+        assert.equal(env.syncStore.get('filterlist_slices'), '2');
+
+        await uploadDomains(['only.test']);
+        assert.equal(env.syncStore.get('filterlist_slices'), '1');
+        assert.equal(env.syncStore.get('filterlist1'), undefined, 'the stale slice was left behind');
+
+        // The consequence that matters: a fresh profile pulling the list back
+        // down must not get d100..d149 again.
+        dom.el('flist-table').innerHTML = '';
+        await config.mergeList();
+        assert.deepEqual(renderedDomains(), ['only.test']);
+    } finally {
+        t.mock.timers.reset();
+    }
+});
+
+test('mergeList ignores slices from an upload that predates the slice count', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    formDefaults();
+    env.syncStore.clear();
+    try {
+        // What a pre-fix upload actually left in sync storage: every slice
+        // holding the page-zoom value, and no count to check them against.
+        env.syncStore.set('filterlist0', '100');
+        env.syncStore.set('filterlist1', '100');
+
+        await config.mergeList();
+
+        assert.deepEqual(renderedDomains(), [], 'garbage slices must not become domains');
     } finally {
         t.mock.timers.reset();
     }
@@ -748,12 +893,6 @@ test('filter entries match whole host labels, not substrings', () => {
     assert.equal(config.filtUrl('https://sub.example.com/a'), true, 'the listed subdomain must still match');
 });
 
-test('title_fix keeps slashes that belong to the page title',
-    { skip: 'TODO.md P1 — helpers.js:125 用 replace(/\\//g, "") 删除了所有斜杠' },
-    () => {
-        assert.equal(helpers.title_fix('FAQ / Help'), 'FAQ / Help');
-    });
-
 test('timeNow never appends "undefined" when the time format is unset', () => {
     env.store.delete('rh-timeformat');
     assert.equal(helpers.timeNow(TS), '13:05');
@@ -808,42 +947,75 @@ test('saveOptions tolerates an order list that is not exactly five blocks',
         }
     });
 
-test('saveOptions(true) uploads the domain list sliced into groups',
-    { skip: 'TODO.md P1 — config.js:481-488 写入 so[i]（残留变量）且 item 从不自增' },
-    (t) => {
-        t.mock.timers.enable({ apis: ['setTimeout'] });
-        formDefaults();
-        env.syncStore.clear();
-        try {
-            const domains = Array.from({ length: 150 }, (_, i) => `d${i}.com`);
-            for (const domain of domains) {
-                const row = dom.makeEl('tr');
-                row.innerHTML = `<td>${domain}</td>`;
-                dom.el('flist-table').appendChild(row);
-            }
-            config.saveOptions(true);
-
-            assert.equal(env.syncStore.get('filterlist0'), domains.slice(0, 100).map((d) => d + '|').join(''));
-            assert.equal(env.syncStore.get('filterlist1'), domains.slice(100).map((d) => d + '|').join(''));
-        } finally {
-            t.mock.timers.reset();
+test('saveOptions(true) uploads the domain list sliced into groups', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    formDefaults();
+    env.syncStore.clear();
+    try {
+        const domains = Array.from({ length: 150 }, (_, i) => `d${i}.com`);
+        for (const domain of domains) {
+            const row = dom.makeEl('tr');
+            row.innerHTML = `<td>${domain}</td>`;
+            dom.el('flist-table').appendChild(row);
         }
-    });
+        await config.saveOptions(true);
 
-test('saveOptions(true) reports success after a successful upload',
-    { skip: 'TODO.md P1 — config.js:492 硬编码 c - mls.length == 26' },
-    (t) => {
-        t.mock.timers.enable({ apis: ['setTimeout'] });
-        formDefaults();
-        env.syncStore.clear();
-        try {
-            config.saveOptions(true);
-            t.mock.timers.tick(1500);
-            assert.equal(dom.el('saveUpload').value, 'saved');
-        } finally {
-            t.mock.timers.reset();
-        }
-    });
+        assert.equal(env.syncStore.get('filterlist0'), domains.slice(0, 100).map((d) => d + '|').join(''));
+        assert.equal(env.syncStore.get('filterlist1'), domains.slice(100).map((d) => d + '|').join(''));
+        assert.equal(env.syncStore.get('filterlist_slices'), '2', 'the slice count travels with the upload');
+    } finally {
+        t.mock.timers.reset();
+    }
+});
+
+test('saveOptions(true) reports success after a successful upload', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    formDefaults();
+    env.syncStore.clear();
+    try {
+        await config.saveOptions(true);
+        assert.equal(dom.el('saveUpload').value, 'saved');
+    } finally {
+        t.mock.timers.reset();
+    }
+});
+
+test('saveOptions(true) still rebuilds the in-memory filter', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    formDefaults();
+    env.syncStore.clear();
+    try {
+        // The upload path is asynchronous, so it is tempting to return early
+        // from the sync branch. updateFilter() and the context-menu refresh
+        // live after it and must run for a synced save too, or the filter the
+        // page keeps using is the one from before the edit.
+        await config.saveOptions(true);
+        assert.equal(config.filtUrl('https://example.com/page'), false, 'an empty list filters nothing');
+
+        config.addList('example.com');
+        await config.saveOptions(true);
+        assert.equal(config.filtUrl('https://example.com/page'), true, 'the filter was not rebuilt');
+    } finally {
+        t.mock.timers.reset();
+    }
+});
+
+test('saveOptions(true) reports failure when a write is rejected', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    formDefaults();
+    env.syncStore.clear();
+    // chrome.storage reports quota failures out of band, through lastError.
+    // The old counting-based check could never see one: it compared a callback
+    // tally against a hard-coded 26 when there are 38 config keys.
+    env.chrome.runtime.lastError = { message: 'QUOTA_BYTES_PER_ITEM exceeded' };
+    try {
+        await config.saveOptions(true);
+        assert.equal(dom.el('saveUpload').value, 'saveFail');
+    } finally {
+        delete env.chrome.runtime.lastError;
+        t.mock.timers.reset();
+    }
+});
 
 test('a non-empty blocklist renders on the options page without breaking it', (t) => {
     t.mock.timers.enable({ apis: ['setTimeout'] });
@@ -909,5 +1081,95 @@ test('emptying the blocklist writes the "false" sentinel, not an empty string', 
         assert.equal(env.store.get('mv-blocklist'), 'false');
     } finally {
         t.mock.timers.reset();
+    }
+});
+
+// ---------------------------------------------------------------------------
+// Attribute selectors built from browsing data
+//
+// The grouped render loops find their group rows with
+// `[rel="' + CSS.escape(host) + '"]`, where the host comes from a visited URL.
+// The static guard in static.test.mjs proves the call is *written*; these prove
+// the escaped selector still *matches*, which is the assumption the whole thing
+// rests on and is not obvious from the name: CSS.escape() produces an
+// identifier escape (`example.com` -> `example\.com`), and it is being used
+// inside a QUOTED attribute selector, where the browser applies string
+// unescaping instead. Worth testing rather than assuming — and without a
+// runtime test, dropping the escape is invisible: the page would simply never
+// find its own groups again.
+// ---------------------------------------------------------------------------
+
+/**
+ * The group scaffolding the render loop builds for one host: a title carrying
+ * the `<a rel=host>` toggle, and the holder `<div rel=host>` the toggle opens.
+ *
+ * The real markup nests the `<a>` inside the title's innerHTML, and this shim
+ * does not parse innerHTML into a tree, so both nodes are appended as flat
+ * children of the view. Enough for the lookup under test to mean something.
+ */
+function seedGroup(into, host) {
+    const root = dom.el(into);
+    root.innerHTML = '';
+    root.children.length = 0;
+    root.style.display = 'block'; // so getActiveHistory() resolves to 'history'
+
+    const toggle = dom.makeEl('a');
+    toggle.setAttribute('rel', host);
+    root.appendChild(toggle);
+
+    const holder = dom.makeEl('div');
+    holder.setAttribute('rel', host);
+    holder.style.display = 'none';
+    root.appendChild(holder);
+
+    return { toggle, holder };
+}
+
+test('CSS.escape produces the escapes the browser undoes in a quoted selector', () => {
+    // Pins the stub (Node has no CSS global) to the real algorithm — every
+    // assertion below is only as good as this one.
+    assert.equal(CSS.escape('example.com'), 'example\\.com');
+    assert.equal(CSS.escape('ex"ample.com'), 'ex\\"ample\\.com');
+    // A leading digit goes out as hex plus a terminating space, which is the
+    // other form a reader has to understand.
+    assert.equal(CSS.escape('2fa.example'), '\\32 fa\\.example');
+});
+
+test('toggleGroup opens a group whose host would break a naive selector', async () => {
+    const historyCore = await importModule('modules/history-core.js');
+    // A quote in the host closes the attribute selector early. Not a security
+    // hole on its own — the damage is that querySelector() throws instead of
+    // matching, which aborts the chunked render loop and leaves the page half
+    // drawn. toggleGroup() logs and does nothing when the lookup throws, so a
+    // group the user cannot open is the observable symptom.
+    const host = 'ex"ample.com';
+    const { holder } = seedGroup('rh-views-insert', host);
+
+    historyCore.toggleGroup(host);
+
+    assert.equal(holder.style.display, 'block', 'the group was not found, so it could never be opened');
+});
+
+test('the same lookup without CSS.escape is the failure being prevented', () => {
+    const host = 'ex"ample.com';
+    const root = seedGroup('rh-views-insert', host).toggle.parentNode;
+
+    // Reproduces the browser: an attribute selector whose value carries an
+    // unescaped quote is not a valid selector, so querySelector() throws.
+    assert.throws(() => root.querySelector(`div[rel="${host}"]`), SyntaxError);
+    // Escaped, the identical lookup finds the group.
+    assert.equal(root.querySelector(`div[rel="${CSS.escape(host)}"]`).style.display, 'none');
+});
+
+test('every shape of host stays selectable once escaped', async () => {
+    const historyCore = await importModule('modules/history-core.js');
+    // One host per branch of CSS.escape(): a dot (identifier escape), a quote
+    // and square brackets (an IPv6 literal host), a leading digit and a leading
+    // dash-digit pair (hex escape plus terminator).
+    const hosts = ['example.com', 'ex"ample.com', '[::1]', '2fa.example', '-2fa.example'];
+    for (const host of hosts) {
+        const { holder } = seedGroup('rh-views-insert', host);
+        historyCore.toggleGroup(host);
+        assert.equal(holder.style.display, 'block', `toggleGroup could not find ${JSON.stringify(host)}`);
     }
 });

@@ -1,6 +1,6 @@
 import { $, $$, createElement } from '../dom-helper.js';
 import {
-    returnLang, escapeHtmlAttr, title_fix, timeNow, formatDate,
+    returnLang, escapeHtmlAttr, escapeHtmlText, timeNow, formatDate,
     getFaviconUrl, isBookmarkletUrl, get_host, executeBookmarklet,
     getFaviconOnerror, setupFaviconElement,
     Clipboard, getVersion, getVersionType
@@ -78,7 +78,10 @@ function formatItem(data) {
 
     var url = data.url;
     var type = data.type;
-    var title = title_fix(data.title);
+    // Raw, and escaped at the interpolation site below. It used to go through
+    // title_fix() here, which deleted '<', '>' and '/' — so "Docs / API" showed
+    // up as "Docs  API".
+    var title = data.title;
     var favicon = data.favicon;
     var time = data.time;
 
@@ -189,11 +192,17 @@ function formatItem(data) {
         item += '<img class="favicon" alt="Favicon">';
     }
 
-    item += '<span class="title" title="' + escapeHtmlAttr(tip) + '"><span class="edit-items-ui" data-url="' + escapeHtmlAttr(url) + '" data-title="' + escapeHtmlAttr(tip) + '">' + ui + '</span>' + title + '</span>';
+    // `tip` and `url` sit in attributes (escapeHtmlAttr); `title` is text
+    // content and takes escapeHtmlText. It was interpolated raw here, relying
+    // on title_fix() having deleted the angle brackets upstream — which the
+    // storage side no longer does.
+    item += '<span class="title" title="' + escapeHtmlAttr(tip) + '"><span class="edit-items-ui" data-url="' + escapeHtmlAttr(url) + '" data-title="' + escapeHtmlAttr(tip) + '">' + ui + '</span>' + escapeHtmlText(title) + '</span>';
 
     // For bookmarklets, show simplified URL in the extra-url section
     var urlDisplay = isBookmarkletUrl(url) ? 'javascript:...' : url.replace(/^(.*?)\:\/\//, '').replace(/\/$/, '');
-    item += '<span ' + saext + ' class="extra-url"><span ' + sext + ' class="extra">' + returnLang("visits") + ': ' + visits + extsep + '</span><span ' + surl + ' class="url">' + escapeHtmlAttr(urlDisplay) + '</span></span>';
+    // Also a text position: urlDisplay is derived from the URL, and the
+    // attribute escaper would rewrite its quotes to &quot;.
+    item += '<span ' + saext + ' class="extra-url"><span ' + sext + ' class="extra">' + returnLang("visits") + ': ' + visits + extsep + '</span><span ' + surl + ' class="url">' + escapeHtmlText(urlDisplay) + '</span></span>';
 
 
 

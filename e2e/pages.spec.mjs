@@ -182,3 +182,70 @@ for (const file of PAGES) {
         assert.ok(title.length > 0, `${file} has an empty <title>`);
     });
 }
+
+test('bookmark.html renders a bookmark title verbatim in grouped mode', { skip: SKIP }, async () => {
+    // The six suites above only prove the pages do not throw; every one of them
+    // renders an EMPTY list, so the render loops that build an item never run.
+    // This seeds a real bookmark so they do.
+    //
+    // Deliberately hostile: a page title is attacker-controlled, and this one
+    // carries every character that used to be mangled. Slashes were deleted
+    // outright by title_fix(); quotes were pre-escaped and then escaped again
+    // into a literal '&#34;'; tags used to be deleted rather than escaped, so
+    // they never proved anything.
+    const TITLE = 'Docs / API "v2" <b>x</b>';
+
+    // Seeded from options.html: the bookmark has to exist before the navigation,
+    // and every extension page can reach chrome.bookmarks.
+    let bookmarkId;
+    {
+        const seed = await context.newPage();
+        const { jsErrors } = collectErrors(seed);
+        await seed.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: 'load' });
+        await settle(seed);
+        bookmarkId = await seed.evaluate(async (title) => {
+            localStorage['rh-group'] = 'yes';
+            // The proxy flushes to chrome.storage.local asynchronously, and the
+            // seed page closes right after this. Optional chaining because not
+            // every page exposes the adapter — see settle().
+            await window.storageAdapter?.ready();
+            const node = await chrome.bookmarks.create({
+                title,
+                url: 'https://tree-style-history.test/path',
+            });
+            return node.id;
+        }, TITLE);
+        assert.deepEqual(jsErrors, [], 'seeding the bookmark threw');
+        await seed.close();
+    }
+
+    const page = await context.newPage();
+    const { jsErrors, netErrors } = collectErrors(page);
+    await page.goto(`chrome-extension://${extensionId}/bookmark.html`, { waitUntil: 'load' });
+    await settle(page);
+    // textContent rather than innerText: a collapsed group is absent from
+    // innerText, and whether the first group ends up expanded is an
+    // implementation detail this assertion must not depend on.
+    const rendered = await page.evaluate(() => document.body.textContent);
+    const injected = await page.evaluate(() => document.querySelectorAll('.title b').length);
+    await page.close();
+
+    try {
+        assert.deepEqual(jsErrors, [], `the grouped render loop threw (${netErrors.length} network error(s) ignored)`);
+        // Two failure modes, one assertion each:
+        //   * not escaped at all -> `<b>` really exists in the DOM
+        //   * escaped twice     -> the entity shows up verbatim in the text
+        // Only a single pass of escapeHtmlText() satisfies both.
+        assert.equal(injected, 0, 'the <b> in the title became a real element');
+        assert.match(rendered, /Docs \/ API "v2" <b>x<\/b>/, 'the title must be shown verbatim, entities included');
+    } finally {
+        // Guarded: if create() above threw, bookmarkId is undefined and an
+        // unguarded remove() would throw again and mask the real failure.
+        if (bookmarkId) {
+            const cleanup = await context.newPage();
+            await cleanup.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: 'load' });
+            await cleanup.evaluate((id) => chrome.bookmarks.remove(id), bookmarkId);
+            await cleanup.close();
+        }
+    }
+});

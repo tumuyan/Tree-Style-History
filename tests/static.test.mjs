@@ -368,31 +368,214 @@ test('config.js only references option-page ids that exist', () => {
     assert.deepEqual(missing, [], 'config.js references an element options.html does not define');
 });
 
-test('user-controlled values are escaped before being interpolated into HTML attributes',
-    { skip: 'TODO.md P0 — history-core.js / config.js 把 URL、域名直接拼进 href/value/title' },
-    () => {
-        // A double quote in a page title or URL closes a double-quoted attribute
-        // and injects markup. The pages hold history/bookmarks/tabs/sessions
-        // permissions, so this is not a cosmetic issue.
-        const ATTRIBUTES = ['href', 'value', 'title', 'src'];
-        // Expressions that carry data originating from the browser or the user,
-        // as opposed to generated ids (`selectid`, `toggleid`, …).
-        const USER_DATA = /\.url\b|\.title\b|\.host\b|mvbl\[|fbl\[|fliv\b|textContent|localStorage\[/;
+/**
+ * Locals already escaped by `escaper`, e.g. `var titleText = escapeHtmlText(t)`.
+ * A render site may escape either inline or through such a variable, and the
+ * guards below have to accept both.
+ */
+function escapedLocals(src, escaper) {
+    const re = new RegExp(`(?:var|let|const)\\s+(\\w+)\\s*=\\s*${escaper}\\s*\\(`, 'g');
+    return new Set([...src.matchAll(re)].map((m) => m[1]));
+}
 
-        const offenders = [];
-        for (const file of ['modules/history-core.js', 'modules/popup-core.js', 'modules/config.js']) {
-            const src = fs.readFileSync(path.join(CHROME_DIR, 'scripts', file), 'utf8');
-            for (const attr of ATTRIBUTES) {
-                const pattern = new RegExp(`${attr}="'\\s*\\+\\s*([^'"]+?)\\s*\\+\\s*'"`, 'g');
-                for (const m of src.matchAll(pattern)) {
-                    if (USER_DATA.test(m[1]) && !m[1].includes('escapeHtmlAttr')) {
-                        offenders.push(`${file}: ${attr}="${m[1].trim()}"`);
-                    }
-                }
+test('user-controlled values are escaped before being interpolated into HTML attributes', () => {
+    // A double quote in a page title or URL closes a double-quoted attribute
+    // and injects markup. The pages hold history/bookmarks/tabs/sessions
+    // permissions, so this is not a cosmetic issue.
+    //
+    // Judgment is by WHITELIST, not by "does this look like user data". The
+    // render sites name their escaped locals `*Attr`, and the previous
+    // blacklist went blind the moment they did: it happily passed a raw
+    // `rha[thisc.counter].url` interpolation, because `urlAttr` matches
+    // neither `\.url\b` nor any of its other patterns. A guard that owes its
+    // green to a rename is worse than a skip — the skip at least said so.
+    const ATTRIBUTES = ['href', 'value', 'title', 'src'];
+    const FILES = ['modules/history-core.js', 'modules/popup-core.js', 'modules/config.js', 'bookmark.js'];
+    // Built here rather than read out of the browser: i18n strings and literals.
+    const GENERATED = /^returnLang\(|^\d+$/;
+
+    const offenders = [];
+    for (const file of FILES) {
+        const src = fs.readFileSync(path.join(CHROME_DIR, 'scripts', file), 'utf8');
+        const escaped = escapedLocals(src, 'escapeHtmlAttr');
+        for (const attr of ATTRIBUTES) {
+            // `(?<!\[)` skips CSS attribute selectors — `[title="' + CSS.escape(host) + '"]`
+            // is a lookup, not markup, and is covered by the selector guard
+            // instead. Both spell `title="`, so without this the two are
+            // indistinguishable to a regex.
+            const pattern = new RegExp(`(?<!\\[)${attr}="'\\s*\\+\\s*([^'"]+?)\\s*\\+\\s*'"`, 'g');
+            for (const m of src.matchAll(pattern)) {
+                const expr = m[1].trim();
+                if (expr.includes('escapeHtmlAttr') || escaped.has(expr)) continue;
+                if (GENERATED.test(expr)) continue;
+                offenders.push(`${file}: ${attr}="${expr}"`);
             }
         }
-        assert.deepEqual(offenders, []);
+    }
+    assert.deepEqual(offenders, []);
+});
+
+// ---------------------------------------------------------------------------
+// Escaping — text positions
+// ---------------------------------------------------------------------------
+
+// A `/` that opens a regex literal rather than a comment can only follow an
+// operator, a bracket, a `;`, a newline, or `return`. Without this, `.replace(/'/g, …)`
+// leaves the quote state open for the rest of the file and the comment
+// stripping silently stops working — which is how a doc comment mentioning
+// title_fix() came to look like a call to it.
+const BEFORE_REGEX = /[(,=:[!&|?{};\s]$|\breturn\s*$/;
+
+/**
+ * Index just past the closing `/` of the regex literal beginning at `start`
+ * (the index after its opening slash), or -1 if there is no such literal.
+ *
+ * `/` is ambiguous — division and the start of a regex literal look alike — and
+ * guessing wrong used to be silent: the scan ran to the end of the file, every
+ * remaining character was copied through unexamined, and comment stripping
+ * quietly stopped working from that point on, so the guard stopped guarding
+ * without ever going red. Requiring a closing slash on the same line (a regex
+ * literal cannot span lines) means a division is copied through as ordinary
+ * text instead of swallowing the rest of the file.
+ *
+ * A division followed by a later regex on the same line is still misread, but
+ * the characters in between are copied verbatim — the only thing lost is a
+ * comment sitting inside that span, which the old behaviour lost too, along
+ * with everything after it.
+ */
+function endOfRegex(src, start) {
+    let inClass = false;
+    for (let i = start; i < src.length; i++) {
+        const c = src[i];
+        if (c === '\\') { i++; continue; }
+        if (c === '\n') return -1;
+        if (c === '[') inClass = true;
+        else if (c === ']') inClass = false;
+        else if (c === '/' && !inClass) return i + 1;
+    }
+    return -1;
+}
+
+/**
+ * Remove `//` and block comments from a JavaScript source.
+ *
+ * (Distinct from the `stripComments` above, which drops `<!-- -->` from HTML.)
+ *
+ * Prose that mentions a symbol — "the old title_fix() deleted…" — must not be
+ * mistaken for a call to it. String and regex literals are tracked so that a
+ * `//` or `/*` inside one survives.
+ */
+function stripJsComments(src) {
+    let out = '';
+    let quote = null;
+    for (let i = 0; i < src.length; i++) {
+        const ch = src[i];
+        if (quote) {
+            out += ch;
+            if (ch === '\\') { out += src[i + 1] ?? ''; i++; }
+            else if (ch === quote) quote = null;
+        } else if (ch === '"' || ch === "'" || ch === '`') {
+            quote = ch;
+            out += ch;
+        } else if (ch === '/' && src[i + 1] === '/') {
+            while (i < src.length && src[i] !== '\n') i++;
+        } else if (ch === '/' && src[i + 1] === '*') {
+            i += 2;
+            while (i < src.length && !(src[i] === '*' && src[i + 1] === '/')) i++;
+            i++;
+        } else if (ch === '/' && BEFORE_REGEX.test(out)) {
+            // Regex literal, but only if one actually closes on this line;
+            // otherwise it is a division and has to be copied through as
+            // ordinary text.
+            const end = endOfRegex(src, i + 1);
+            if (end < 0) {
+                out += ch;
+            } else {
+                out += src.slice(i, end);
+                i = end - 1; // the loop's i++ lands on the first character after it
+            }
+        } else {
+            out += ch;
+        }
+    }
+    return out;
+}
+
+test('stripJsComments drops prose that merely mentions a symbol', () => {
+    // The reason this function exists: a doc comment reading "the old
+    // title_fix() deleted…" used to look like a call.
+    assert.doesNotMatch(stripJsComments('// title_fix()\nfoo();'), /title_fix/);
+    assert.doesNotMatch(stripJsComments('/* title_fix() */\nfoo();'), /title_fix/);
+    assert.doesNotMatch(stripJsComments('var x = 1; /* see title_fix() */ var y = 2;'), /title_fix/);
+});
+
+test('stripJsComments survives a regex literal that contains a quote', () => {
+    // `.replace(/'/g, '')` is what broke the first version of this guard: with
+    // the quote state left open, comment stripping silently stopped.
+    assert.doesNotMatch(stripJsComments("var s = t.replace(/'/g, ''); // title_fix()\n"), /title_fix/);
+    // A character class may hold an unescaped '/'.
+    assert.doesNotMatch(stripJsComments('if (/[/]/.test(u)) { } // title_fix()\n'), /title_fix/);
+});
+
+test('stripJsComments does not read a division as a regex literal', () => {
+    // A '/' that is really an operator has no closing slash on its line. The
+    // old scan ran to end of file from here, copying everything through
+    // unexamined — so every later comment survived and the guard quietly
+    // stopped guarding. Both complaints below depend on it still working.
+    const src = 'const ratio = total / count;\n// title_fix()\nvar n = 1; /* title_fix() */\n';
+    assert.match(stripJsComments(src), /total \/ count/, 'the division itself must survive');
+    assert.doesNotMatch(stripJsComments(src), /title_fix/, 'comment stripping must still be live');
+});
+
+test('no render site relies on title_fix for safety', () => {
+    // title_fix() deleted '<', '>' and '/' instead of escaping them, which both
+    // mangled titles ("Docs / API" lost its slashes) and produced a value that
+    // could not be escaped again without the entity showing up as literal text.
+    // Escaping now belongs at the interpolation site, where the context —
+    // attribute or text — is actually known.
+    //
+    // Deliberately has no allow-list: the right number of call sites is zero,
+    // so this also stops anyone reintroducing the function later.
+    const offenders = [];
+    walkScripts((file, src) => {
+        for (const _ of stripJsComments(src).matchAll(/\btitle_fix\s*\(/g)) {
+            offenders.push(file.replace(/\\/g, '/'));
+        }
     });
+    assert.deepEqual(offenders, []);
+});
+
+test('page titles are escaped at the point they become text content', () => {
+    // The counterpart of the attribute check above. A page title is
+    // attacker-controlled and is interpolated as TEXT CONTENT (`>' + x + '<`),
+    // where escapeHtmlAttr() is the wrong escaper — it rewrites quotes that in
+    // a text position need no escaping at all.
+    //
+    // No allow-list: every site that carries a page title has to escape it.
+    // Generated values (timestamps, ids, i18n strings) simply do not match the
+    // TITLE_FIELDS filter below, so there is nothing to exempt — and an
+    // exemption list is exactly what lets the next unescaped title slip
+    // through. The "looks like user data" heuristic the attribute check once
+    // used was defeated by renaming a variable; matching on the field names
+    // instead is not.
+    const TITLE_FIELDS = /(?:rha\[thisc\.counter\]|data)\.title\b|\bdisplayTitleText\b|\btitle\b(?=\s*\|\||\s*\))/;
+
+    const offenders = [];
+    walkScripts((file, src) => {
+        const code = stripJsComments(src);
+        const escaped = escapedLocals(code, 'escapeHtmlText');
+        // `">' + expr + '</span>'` — a text position. Anchored on the closing
+        // `'<` so that `title="' + … + '"` (an attribute) does not match, and
+        // on the opening `>` so a merely adjacent quote is not enough.
+        for (const m of code.matchAll(/>\s*'\s*\+\s*([^']+?)\s*\+\s*'\s*</g)) {
+            const expr = m[1].trim();
+            if (!TITLE_FIELDS.test(expr)) continue;
+            if (expr.includes('escapeHtmlText') || escaped.has(expr)) continue;
+            offenders.push(`${file.replace(/\\/g, '/')}: >${expr}<`);
+        }
+    });
+    assert.deepEqual(offenders, []);
+});
 
 // ---------------------------------------------------------------------------
 // Permissions

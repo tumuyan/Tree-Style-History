@@ -320,9 +320,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
                     // if (hi[i].dateAdded >= obj['startTime'] && hi[i].dateAdded <= obj['endTime'])
                     {
-                        //   rha.push({epoch: hi[i].dateAdded, url: url, host: (new URI(url).get('host')), time: timeNow(hi[i].dateAdded), date: formatDate(hi[i].dateAdded), favicon: furl, title: truncate(title_fix(title), 0, 100), visits: visits});
-                        var safeTitle = title_fix(title);
-                        var displayTitle = truncate(safeTitle, 0, 100);
+                        // Stored raw: the render loops below escape it for the
+                        // text position themselves. Escaping here as well (the
+                        // old title_fix() did) turned '"' into '&#34;' and then
+                        // into '&amp;#34;' — the entity itself showed up as
+                        // text in the bookmark title.
+                        var displayTitle = truncate(title, 0, 100);
                         rha.push({ epoch: hi[i].dateAdded, url: url, host: host, time: TimeToStr(hi[i].dateAdded, true, true, true), date: formatDate(hi[i].dateAdded), favicon: furl, title: displayTitle, visits: visits, bookmarkId: bookmarkId, originalTitle: originalTitle });
 
                     }
@@ -408,19 +411,22 @@ document.addEventListener('DOMContentLoaded', function () {
                         
                         var host = rha[thisc.counter].host;
                         if (host !== undefined) {
-                            if (!$(into).querySelector('div[rel="' + host + '"]')) {
+                            if (!$(into).querySelector('div[rel="' + CSS.escape(host) + '"]')) {
                                 var toggleid = 'toggle-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                                 var moreid = 'more-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                                 var errorid = 'error-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                                 var groupid = 'group-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                                 var faviconUrl = rha[thisc.counter].favicon || '';
                                 var escapedHost = escapeHtmlAttr(host);
-                                var escapedHostDisplay = escapeHtmlAttr(host.replace('www.', ''));
+                                // Text position, so the text escaper: it leaves
+                                // quotes alone instead of rewriting them to
+                                // &quot; in the visible host name.
+                                var escapedHostText = escapeHtmlText(host.replace('www.', ''));
                                 var groupEl = createElement('div', {
                                     title: host,
                                     rel: ibcv,
                                     'class': 'item-holder group-title ',
-                                    html: '<a href="#" class="group-title-toggle group-title-toggle-bookmark" id="' + toggleid + '" data-host="' + escapedHost + '" rel="' + escapedHost + '"></a><label class="group-title-toggle-count" rel="' + escapedHost + '"></label><input type="hidden"  style="width: 0; display:none;   padding: 0 0 0 0;  margin: 0 0 0 0;    visibility: hidden;  left: 0;"  class="group-title-checkbox" id="' + moreid + '" value="' + escapedHost + '"><img id="' + errorid + '" class="group-title-favicon" alt="Favicon"><span id="' + groupid + '" data-host="' + escapedHost + '" class="group-title-host">' + escapedHostDisplay + '</span>'
+                                    html: '<a href="#" class="group-title-toggle group-title-toggle-bookmark" id="' + toggleid + '" data-host="' + escapedHost + '" rel="' + escapedHost + '"></a><label class="group-title-toggle-count" rel="' + escapedHost + '"></label><input type="hidden"  style="width: 0; display:none;   padding: 0 0 0 0;  margin: 0 0 0 0;    visibility: hidden;  left: 0;"  class="group-title-checkbox" id="' + moreid + '" value="' + escapedHost + '"><img id="' + errorid + '" class="group-title-favicon" alt="Favicon"><span id="' + groupid + '" data-host="' + escapedHost + '" class="group-title-host">' + escapedHostText + '</span>'
                                 });
                                 $(into).appendChild(groupEl);
                                 $(toggleid).addEventListener('click', function () {
@@ -450,8 +456,16 @@ document.addEventListener('DOMContentLoaded', function () {
                             var rawTime = rha[thisc.counter].time || '';
                             var displayTitleText = rha[thisc.counter].title || '';
                             var escapedUrlAttr = escapeHtmlAttr(rawUrl);
+                            // The time is interpolated twice, once per context:
+                            // in a rel attribute and as the visible text. One
+                            // escaper per context, so the name records which.
                             var escapedTimeAttr = escapeHtmlAttr(rawTime);
-                            var escapedDisplayTitle = escapeHtmlAttr(displayTitleText);
+                            var escapedTimeText = escapeHtmlText(rawTime);
+                            // Text content, so escapeHtmlText: it leaves quotes
+                            // alone, which escapeHtmlAttr would rewrite to
+                            // &quot;. Both render alike, but only one of them
+                            // records what the value was escaped for.
+                            var escapedDisplayTitle = escapeHtmlText(displayTitleText);
 
                             var tooltipParts = [];
                             if (displayTitleText) {
@@ -472,12 +486,12 @@ document.addEventListener('DOMContentLoaded', function () {
                             var item;
                             item = '<div class="item">';
                             item += '<span class="checkbox"><label><input class="chkbx bookmark-checkbox" type="checkbox" id="' + selectid + '" value="' + escapedUrlAttr + '" name="check"></label>&nbsp;</span>';
-                            item += '<span class="time">' + escapedTimeAttr + '</span>';
+                            item += '<span class="time">' + escapedTimeText + '</span>';
                             item += '<a style="padding-left:0;" target="_blank" class="link" href="' + escapedUrlAttr + '">';
                             item += '<span class="title" title="' + escapedTooltip + '" rel="' +  escapedTimeAttr +  '">' + escapedDisplayTitle + '</span>';
                             item += '</a>';
                             item += '</div>';
-                            var existingHolder = $(into).querySelector('div.item-holder[title="' + host + '"]');
+                            var existingHolder = $(into).querySelector('div.item-holder[title="' + CSS.escape(host) + '"]');
                             var itemHolder = createElement('div', {
                                 'rel': existingHolder.getAttribute('rel'),
                                 'class': 'item-holder',
@@ -489,7 +503,7 @@ document.addEventListener('DOMContentLoaded', function () {
                                 }
                             });
                             itemHolder.innerHTML = item + '<div class="clearitem" style="clear:both;"></div>';
-                            var groupDiv = $(into).querySelector('div[rel="' + host + '"]');
+                            var groupDiv = $(into).querySelector('div[rel="' + CSS.escape(host) + '"]');
                             groupDiv.appendChild(itemHolder);
                             var linkElement = itemHolder.querySelector('a.link');
                             if (linkElement) {
@@ -512,8 +526,8 @@ document.addEventListener('DOMContentLoaded', function () {
                                 selectBookmarkItem(this, 'single');
                             });
 
-                            var size = $(into).querySelector('div[rel="' + host + '"]').childNodes.length;
-                            var label = $(into).querySelector('label[rel="' + host + '"]');
+                            var size = $(into).querySelector('div[rel="' + CSS.escape(host) + '"]').childNodes.length;
+                            var label = $(into).querySelector('label[rel="' + CSS.escape(host) + '"]');
                             if (label != undefined)
                                 label.textContent = size;
                         }
@@ -542,8 +556,16 @@ document.addEventListener('DOMContentLoaded', function () {
                             var rawTime = rha[thisc.counter].time || '';
                             var displayTitleText = rha[thisc.counter].title || '';
                             var escapedUrlAttr = escapeHtmlAttr(rawUrl);
+                            // The time is interpolated twice, once per context:
+                            // in a rel attribute and as the visible text. One
+                            // escaper per context, so the name records which.
                             var escapedTimeAttr = escapeHtmlAttr(rawTime);
-                            var escapedDisplayTitle = escapeHtmlAttr(displayTitleText);
+                            var escapedTimeText = escapeHtmlText(rawTime);
+                            // Text content, so escapeHtmlText: it leaves quotes
+                            // alone, which escapeHtmlAttr would rewrite to
+                            // &quot;. Both render alike, but only one of them
+                            // records what the value was escaped for.
+                            var escapedDisplayTitle = escapeHtmlText(displayTitleText);
 
                             var tooltipParts = [];
                             if (displayTitleText) {
@@ -565,7 +587,7 @@ document.addEventListener('DOMContentLoaded', function () {
                             var item;
                             item = '<div class="item">';
                             item += '<span class="checkbox"><label><input class="chkbx bookmark-checkbox" type="checkbox" id="' + selectid + '" value="' + escapedUrlAttr + '" name="check"></label>&nbsp;</span>';
-                            item += '<span class="time">' + escapedTimeAttr + '</span>';
+                            item += '<span class="time">' + escapedTimeText + '</span>';
                             item += '<a target="_blank" class="link" href="' + escapedUrlAttr + '">';
                             item += '<img id="' + errorid + '" class="favicon" alt="Favicon">';
                             item += '<span class="title" title="' + escapedTooltip + '" rel="'  + escapedTimeAttr +  '">' + escapedDisplayTitle + '</span>';

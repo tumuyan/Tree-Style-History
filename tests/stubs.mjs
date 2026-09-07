@@ -17,6 +17,41 @@ const CHROME_DIR = new URL('../chrome/', import.meta.url).pathname;
 export { CHROME_DIR };
 
 /**
+ * `CSS.escape()`, verbatim from CSSOM.
+ *
+ * Node has no `CSS` global, and the grouped render loops interpolate its result
+ * straight into an attribute selector — so the stub has to escape exactly the
+ * way the browser does. An identity stub would make every escaped selector
+ * match and the injection tests would pass for the wrong reason.
+ */
+function cssEscape(value) {
+    const str = String(value);
+    let out = '';
+    for (let i = 0; i < str.length; i++) {
+        const ch = str[i];
+        const code = str.codePointAt(i);
+        if (code === 0) {
+            out += '\uFFFD';
+        } else if ((code >= 0x01 && code <= 0x1f) || code === 0x7f
+            || (i === 0 && code >= 0x30 && code <= 0x39)
+            || (i === 1 && code >= 0x30 && code <= 0x39 && str[0] === '-')) {
+            // Control chars, and a leading digit (or `-` + digit), go out as hex
+            // followed by a terminating space. Both forms have to be understood
+            // again on the way back in — see cssUnescape() in dom.mjs.
+            out += '\\' + code.toString(16) + ' ';
+        } else if (code >= 0x80 || ch === '-' || ch === '_'
+            || (code >= 0x30 && code <= 0x39)
+            || (code >= 0x41 && code <= 0x5a)
+            || (code >= 0x61 && code <= 0x7a)) {
+            out += ch;
+        } else {
+            out += '\\' + ch;
+        }
+    }
+    return out;
+}
+
+/**
  * Install minimal browser-ish globals. Returns a handle so tests can inspect
  * and mutate the fake storage.
  */
@@ -68,7 +103,8 @@ export function installStubs() {
             return Promise.resolve(out);
         },
         set: (obj, cb) => { for (const [k, v] of Object.entries(obj)) map.set(k, v); if (cb) cb(); return Promise.resolve(); },
-        remove: (k, cb) => { map.delete(k); if (cb) cb(); return Promise.resolve(); },
+        // Mirrors the real API: remove() takes a string OR an array of strings.
+        remove: (k, cb) => { (Array.isArray(k) ? k : [k]).forEach((key) => map.delete(key)); if (cb) cb(); return Promise.resolve(); },
         clear: (cb) => { map.clear(); if (cb) cb(); return Promise.resolve(); },
     });
 
@@ -105,6 +141,7 @@ export function installStubs() {
     globalThis.localStorage = localStorageProxy;
     globalThis.chrome = chromeStub;
     globalThis.document = documentStub;
+    globalThis.CSS = { escape: cssEscape };
     if (!globalThis.window) globalThis.window = globalThis;
     globalThis.onStorageReady = (cb) => { readyCallbacks.push(cb); };
 

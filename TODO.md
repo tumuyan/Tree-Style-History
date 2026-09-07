@@ -5,8 +5,8 @@
 状态图例：`[ ]` 未开始 · `[x]` 已完成 · `[-]` 暂缓
 
 > **护栏已就位**：`npm run check`（ESLint + `node:test` + 4 个校验脚本）是唯一准入闸门，约 5 秒跑完，CI 强制执行。
-> 当前基线：**lint 0 error / 146 warning · 97 测试 · 91 通过 · 6 skip · 0 失败**（另：e2e 8 测试 · 8 通过）。
-> 其中 6 个 skip 是已知缺陷的"待修规范"（函数体内写的是期望行为），对应下面标注 `（有 skip 测试）` 的条目（个别条目共用一个测试）——**修完后请去掉对应 skip**。
+> 当前基线：**lint 0 error / 142 warning · 115 测试 · 113 通过 · 2 skip · 0 失败**（另：e2e 9 测试 · 9 通过）。
+> 其中 2 个 skip 是已知缺陷的"待修规范"（函数体内写的是期望行为），对应下面标注 `（有 skip 测试）` 的条目（个别条目共用一个测试）——**修完后请去掉对应 skip**。
 
 ---
 
@@ -49,14 +49,14 @@
 
 ### 安全
 
-- [ ] **修复历史记录 URL 未转义导致的 XSS**（`chrome/scripts/modules/history-core.js:237-243`、`288-295`）**（有 skip 测试，原 11 处；第 1.6 批已修 1 处，现剩 10 处：history-core 8 + config 2）**
-  - 现状：`url` 未转义即拼进 `innerHTML`，出现在 `href` / `value` / `title` 三个属性中，可被 `"` 提前闭合属性注入事件处理器。扩展页面持有 `history`/`bookmarks`/`tabs`/`sessions` 权限，危害等级高。
-  - 做法：全部改走 `escapeHtmlAttr`（`modules/helpers.js:128`），或统一迁移到 `createElement` + `textContent` 建 DOM。
-  - 关联位置：`modules/config.js:556`、`578`、`616`（用户输入的域名直接进 `title="..."` 属性）。
+- [x] **修复历史记录 URL 未转义导致的 XSS**（`chrome/scripts/modules/history-core.js`）— **已修复**（见「第 2.2 批」）
+  - ~~现状：`url` 未转义即拼进 `innerHTML`，出现在 `href` / `value` / `title` 三个属性中，可被 `"` 提前闭合属性注入事件处理器。~~
+  - 已做：`history-core.js` 两个渲染分支的 `url` 走 `escapeHtmlAttr`；`config.js` 三个列表的域名此前**全裸**，改为按属性/文本位置分别转义。
+  - 关联位置：`modules/config.js` 的 `mostVisitedBlocklist()` / `filteredDomainsList()` / `addList()`。
 
-- [ ] **修复选择器注入**（`chrome/scripts/modules/history-core.js:244`、`255`）
-  - 现状：`rha[].host` 直接拼进 `querySelector('div[rel="' + host + '"]')`，含引号时抛异常导致渲染中断。
-  - 做法：改用 `CSS.escape()` 或遍历比对 `getAttribute('rel')`。
+- [x] **修复选择器注入**（`chrome/scripts/modules/history-core.js`、`bookmark.js`）— **已修复**（见「第 2.2 批」）
+  - ~~现状：`rha[].host` 直接拼进 `querySelector('div[rel="' + host + '"]')`，含引号时抛异常导致渲染中断。~~
+  - 已做：13 处按 host 拼 `[rel="…"]` / `[title="…"]` 的位置全部改走 `CSS.escape()`。**此前全仓零处 `CSS.escape`** —— 原记录的"13 处"并没落到 `history-core.js` / `bookmark.js` 这两条路径上，是本次补的运行时测试才暴露的。
 
 - [x] **修复用户输入直接编译为正则**（`chrome/scripts/modules/config.js:674`）— **已修复**（见「第 1 批」）
   - ~~现状：`new RegExp('[^?=#]*(' + flist + ').*', 'i')`。`flil` 以 `|` 结尾产生空分支匹配一切；`.` 未转义。~~
@@ -92,9 +92,9 @@
   - 做法：删掉 `site_r` 与降段分支，改为「主机未命中集合且以 `www.` 开头时，剥掉 `www.` 再查一次」。**只剥 `www`**：逐级剥所有标签会让配置的 `b.com` 误伤 `xb.com`（`filter entries match whole host labels, not substrings` 已锁定此行为）。
   - 连带：`site_r` 已从 `config.js` 导出、`func.js` 导入，以及两处测试白名单（`modules.test.mjs` 的 `VALUE_EXPORTS`、`static.test.mjs` 的 `MODULE_PRIVATE`）中一并移除。
 
-- [ ] **`title_fix()` 会吞掉斜杠**（`chrome/scripts/modules/helpers.js:125`）**（有 skip 测试）**
-  - 现状：`.replace(/\//g, '')` 把标题里的 `/` 全部删除，`FAQ / Help` 显示为 `FAQ  Help`。
-  - 这是历史遗留的防御写法（早年为防路径注入），如今已有 `escapeHtmlAttr`，可考虑只在拼接属性时用转义、显示时用原文。
+- [x] **`title_fix()` 会吞掉斜杠**（`chrome/scripts/modules/helpers.js`）—— **已从根上消除**（见「第 2.2 批」）
+  - ~~现状：`.replace(/\//g, '')` 把标题里的 `/` 全部删除，`FAQ / Help` 显示为 `FAQ  Help`。~~
+  - `title_fix()` 已删除，代之以按上下文分工的两个纯转义函数（`escapeHtmlAttr` / `escapeHtmlText`），都不再删除任何字符。
 
 - [ ] **清理 `options.html:37` 的失效 i18n 属性** **（有 skip 测试）**
   - 现状：`<div class="tab-content" data-lang-string="treeOptionsDetail">` 没有 `.lang` 类，而 `func.js` 只处理 `.lang` 元素 → 该键永不渲染，且 messages.json 里也没有它。
@@ -102,15 +102,15 @@
 
 ### 配置同步（三处错误，同一函数）
 
-- [ ] **修复 `filterlist0..N` 写入了错误的值**（`chrome/scripts/modules/config.js:482-489`）**（有 skip 测试）**
-  - 现状：`o['filterlist' + j] = so[i]`，`i` 是上一个 `for (var i in so)` 循环的残留值（最后一个键），所有分片写的都是同一个无关值，**过滤域名根本没有上传**。
+- [x] **修复 `filterlist0..N` 写入了错误的值**（`chrome/scripts/modules/config.js`）— **已修复**（见「第 2.1 批」）
+  - ~~现状：`o['filterlist' + j] = so[i]`，`i` 是上一个 `for (var i in so)` 循环的残留值（最后一个键），所有分片写的都是同一个无关值，**过滤域名根本没有上传**。~~
 
-- [ ] **修复域名分组逻辑**（`chrome/scripts/modules/config.js:414-421`）**（有 skip 测试）**
-  - 现状：`item` 从未自增，所有域名拼进同一个 `cache`，单个 key 必然超出 `chrome.storage.sync` 8KB 配额，且 `chrome.runtime.lastError` 未检查 → 静默失败。
+- [x] **修复域名分组逻辑**（`chrome/scripts/modules/config.js`）— **已修复**（见「第 2.1 批」）
+  - ~~现状：`item` 从未自增，所有域名拼进同一个 `cache`，单个 key 必然超出 `chrome.storage.sync` 8KB 配额，且 `chrome.runtime.lastError` 未检查 → 静默失败。~~
 
-- [ ] **修复上传成功判定**（`chrome/scripts/modules/config.js:491-497`）**（有 skip 测试）**
-  - 现状：硬编码 `c - mls.length == 26`，而 `defaultValues` 实际有 **38 个键**（同步时跳过 `rh-filtered`，写 37 次），再叠加 `filterlist` 分片写入 → 判定式恒为假，上传成功也永远显示「保存失败」。
-  - 做法：用 `Promise.all` 替代 1500ms `setTimeout` 猜测，并检查每次 `set` 的 `chrome.runtime.lastError`。
+- [x] **修复上传成功判定**（`chrome/scripts/modules/config.js`）— **已修复**（见「第 2.1 批」）
+  - ~~现状：硬编码 `c - mls.length == 26`，而 `defaultValues` 实际有 **38 个键**……判定式恒为假，上传成功也永远显示「保存失败」。~~
+  - 已做：`Promise.all` 替代 1500ms `setTimeout` 猜测，并逐个检查 `chrome.runtime.lastError`。
 
 ### 其它
 
@@ -135,6 +135,22 @@
 - [x] 新增 6 个测试 + 解除 2 个 skip：导入无副作用、冷启动不写入、ready 后刷新、元字符不抛（含逐个字符遍历）、坏条目不牵连兄弟、空列表不全匹配、`.` 不当通配符。
   - `tests/stubs.mjs` 新增 `onStorageReady` 队列与 `fireStorageReady()`；`tests/dom.mjs` 的假 `window` 转发 `onStorageReady`（此前整体替换 `window` 导致钩子静默不注册）。
 
+### 第 2.1 批（已完成）：修 `filterlist` 分片的写入侧与残留分片
+
+- [x] **写入侧三处错误**（详见 P0 条目）：分片内容写了泄漏变量 `so[i]`；分组 `item` 从不自增；成功判定硬编码 `== 26`。
+- [x] **`filterlist_slices` 计数键**：随上传写入，「上次上传写了几个分片」成为可查信息，读取侧不再靠猜。
+- [x] **`dropStaleSlices()`**：删掉上一次更长的列表留下的高编号分片。此前同步区只增不减，列表缩短后旧分片永久滞留。
+- [x] **`chrome.storage` 三个 promise 包装**（`syncSet`/`syncRemove`/`syncGet`）：逐个检查 `chrome.runtime.lastError`。原回调写法从不读它，超配额静默失败、UI 照报成功。
+- [x] **新增 5 条测试**，均先红后绿：
+  - `saveOptions(true) uploads the domain list sliced into groups`（解除 skip：150 域名 → 2 个分片）
+  - `saveOptions(true) reports success after a successful upload`（解除 skip）
+  - `saveOptions(true) reports failure when a write is rejected`（注入 `chrome.runtime.lastError`）
+  - `saveOptions(true) still rebuilds the in-memory filter`（防回归：上传分支改成异步后极易 `return` 早退，把 `updateFilter()` 甩在后面）
+  - `re-uploading a shorter filter list does not resurrect removed domains`（端到端：上传 150 → 缩到 1 → 清空表格 → `mergeList()`，断言只剩 1 条）
+  - `mergeList ignores slices from an upload that predates the slice count`（旧数据无计数键时按 0 处理，不把垃圾当域名）
+- [x] **`tests/stubs.mjs` 的 `remove` 支持数组**：真实 API 接受 string | string[]，桩只处理了单键。
+- [x] 旧的「`mergeList` 读满 12 个分片」测试**改写**：它直接往 `env.syncStore` 塞合成分片、绕过 `saveOptions()`，所以写入侧是坏的它也照样绿——正是它放过了这个 bug。现在全部改走真实往返（`uploadDomains()` 辅助函数）。
+
 ### 第 1.6 批（已完成）：最常访问黑名单整条链路失效
 
 - [x] **补回选项页缺失的 `#mvlist` / `#mvlist-table`**
@@ -153,6 +169,37 @@
   - 后果：配置 `example.com` 覆盖不到 `www.example.com`。
   - 做法：改为只剥 `www.` 前缀。只剥 `www` 而非逐级上溯，以免配置的 `b.com` 误伤 `xb.com`。
   - 注：此条在提交 `005b7e3` 中已完成，当时漏建本节，导致第 1.5 批的「见『第 1.7 批』」长期悬空。
+
+### 第 2.2 批（已完成）：删除 `title_fix`，转义改为按上下文分工
+
+- [x] **新增 `escapeHtmlText()`**（`modules/helpers.js`）：用于文本位置（`>' + x + '<`），与 `escapeHtmlAttr()`（属性位置）配对。两个函数而非一个带模式参数的函数——函数名能被 grep 到，模式字符串不能。
+  - 文本位置**不**转义引号：那里无需转义，转义了反而改写用户写的标题。
+  - `&` 必须最先转义，否则会把上一轮刚生成的实体的 `&` 再转成 `&amp;`（bookmark.js 那个 `&#34;` 事故的根因）。
+  - **不**删 `<script>` 块：`<` 已转义就不可能执行，删它只会丢文本——正是 `title_fix()` 的老毛病。`escapeHtmlAttr()` 同样不删，两者必须对称。
+- [x] **删除 `title_fix()`**：它同时是「半个转义器」和「字符删除器」，调用方无法判断返回值是"安全的 HTML 片段"还是"纯文本"，这正是问题反复出现的根源。连带清掉 `calendar.js` 的无用 import 与 `func.js` 的 `window.title_fix` 导出（已确认无 HTML 页面调用）。
+- [x] **渲染点改为存原文 + 插值点转义一次**，必须成对改（只改一半要么 XSS、要么双重转义）：
+  - `history-core.js`：存储 `:119` + 渲染两个分支 + 分组标题（此前**四处全裸**，含 `href` / `value` / `title`）
+  - `popup-core.js`：存储 `:81` + 渲染 `:192`
+  - `bookmark.js`：第 2 批已改存储，本批把渲染点的 `escapeHtmlAttr` 换成 `escapeHtmlText`，并删掉 `:324` 残留的 `title_fix()` 调用（`no-undef` error，bookmark 页渲染循环直接崩）
+  - `config.js` 三个列表（`mvlist` / `flist` / `addList`）：此前全裸
+  - `truncate` 在转义**之前**：反过来会把实体从中间切断，且截断长度随转义漂移。
+- [x] **选择器注入补 `CSS.escape`**：`history-core.js` 与 `bookmark.js` 共 13 处按 host 拼 `[rel="…"]` / `[title="…"]`。host 带引号时 `querySelector` 抛 `SyntaxError`，从 5ms 分片渲染循环冒出去，页面画一半。
+- [x] **`downloadOptions()` 改为全局替换下划线**（回归，本批新发现）：写入侧已把每个 `-` 换成 `_`，读取侧只换第一个 → `favicon-service-fallback` 下载回来变成 `favicon-service_fallback`，没人再读。两边必须严格互逆，新增 `no config key contains an underscore` 断言锁住前提。
+- [x] **`mergeList()` 按 `filterlist_slices` 计数读取**：「硬编码 11」→「探测到第一个缺失分片」→「按计数读」。前两种都会把历史上更长的列表留下的高分片读回来，等于复活用户已删除的域名。
+- [x] **`saveOptions()` 补 JSDoc**：返回值只表示"上传已结束"，不表示"上传成功"（失败已呈现在按钮上并记日志，在此吞掉以免 reject 冒到点击处理函数）。
+- [x] **三层测试，全部经变异验证（先看到红，再改到绿）**：
+  - 单测 5 条：`escapeHtmlText` 保住斜杠与引号、中和标签而不删除、`&` 优先转义（并断言双重转义**可见地**错，不把它归一化掉）、容忍 `undefined`/`null` 标题、`formatItem` 原样显示标题。
+  - `CSS.escape` 运行时测试 4 条：钉住桩本身、真实 host 往返、不转义时抛 `SyntaxError`、5 种 host 形状。此前只有静态守卫，只能证明"写了这个调用"，证明不了"转义后还选得中"。
+  - 静态守卫 2 条：①全仓不得出现 `title_fix()` 调用（**无白名单**，顺带阻止日后重新引入）；②携带标题的文本位置插值必须是 `escapeHtmlText(...)`（**无白名单**——生成值根本不匹配字段过滤器，无需豁免）。
+  - e2e 双向断言：同一个标题 `Docs / API "v2" <b>x</b>` 同时覆盖两个方向的错误——不转义则 `<b>` 变成真元素（`querySelectorAll('.title b')` 命中），双重转义则文本里出现字面实体。**用 `textContent` 而非 `innerText`**：分组是否默认展开是实现细节，断言不能依赖它。
+- [x] **测试基础设施四处修正**：
+  - 新增 `stripJsComments()`：注释里提到 `title_fix()` 的散文被误判成调用。它**必须识别正则字面量**——`/'/g` 会把引号状态撑到文件末尾，导致剥注释静默失效（这就是第一版守卫误报的原因）。同理不能把除号当正则开头：旧写法从 `total / count` 一路扫到文件末尾，之后所有注释都不再剥离——守卫静默失效却不报红。改为先找同一行的闭合 `/`（正则字面量不能跨行），找不到就按普通字符抄过去。补 3 条自测；**变异验证**：让换行不再终止扫描，用例立刻红。
+  - `tests/stubs.mjs` 新增 `CSS.escape`（CSSOM 原样实现）：Node 没有 `CSS` 全局；用恒等桩会让每个转义选择器都命中，测试会为错误的原因变绿。
+  - `tests/dom.mjs` 的 `matches()` 还原引号内的 CSS 转义，并对值里带未转义引号的属性选择器抛 `SyntaxError`——两者都是浏览器行为。
+  - `eslint.config.mjs` 全局声明同步（`title_fix` → `escapeHtmlText`）；e2e 的 `page.evaluate()` 体内需要 `chrome` 全局。
+- [x] **`user-controlled values are escaped …` 解除 skip**：守卫此前无法区分 HTML 属性 `title="` 与 CSS 属性选择器 `[title="`，加 `(?<!\[)` 后解除。
+  - 解除后随即发现它**已经失明**：判定靠 `\.url\b` / `fbl\[` 这类变量名模式识别用户数据，而插值点刚被改名成 `*Attr`，于是连裸的 `rha[thisc.counter].url` 都不再命中——它变绿是因为看不见，不是因为代码对。改为白名单判定：内联 `escapeHtmlAttr(…)`，或由它赋值的局部变量（复用文本守卫的 `escapedLocals()`），二者必居其一。
+  - 顺带把 `bookmark.js` 纳入检查范围（8 处属性插值，此前无人看守）。**变异验证**：把 `href` 改回裸 URL，`history-core.js` 与 `bookmark.js` 各自报红并指出具体属性。
 
 ### 第 1.8 批（已完成）：`background-utils.js` 改为生成 + 修跨午夜日期滚动
 
@@ -274,8 +321,10 @@
 |---|---|---|
 | ✅ 第 0 批 | 自动化护栏 + 修 4 处未声明变量/死代码 + 补 i18n | **已完成**。此后每批改动都有 `npm run check` 兜底 |
 | ✅ 第 1 批 | 修 `updateFilter` 竞态与正则元字符崩溃 | **已完成**（92 测试 · 7 skip）。数据丢失 + 白屏级崩溃两项均已消除 |
-| 第 2 批 | 修 XSS（剩 10 处：URL 未转义拼 `innerHTML`）与选择器注入 | 安全，需逐处替换并回归各页面渲染；建议先补渲染层测试 |
-| 第 3 批 | 修配置同步三处错误 | 功能失效，同属配置子系统，一起回归 |
+| ✅ 第 2 批 | 修 XSS 与选择器注入 | **已完成**。URL / 域名 / 标题三类插值点全部按上下文转义 |
+| ✅ 第 2.1 批 | 修 `filterlist` 写入侧三处错误 + 残留分片清理 + 成功判定 | **已完成**。原「第 3 批」主体已并入 |
+| ✅ 第 2.2 批 | 删 `title_fix`、转义按上下文分工、`CSS.escape` 运行时测试、`downloadOptions` 下划线、`mergeList` 计数读取 | **已完成**。第 2 批的审查收尾 |
+| 第 3 批 | `saveOptions` 硬编码 `rhlo[0..4]`、`showOptions` 的 `typeof` 包装 | 功能失效，同属配置子系统，一起回归 |
 | 第 4 批 | SW 状态持久化（`chrome.storage.session`）、启动抓取异步化 | 涉及 MV3 架构调整，需先讨论方案 |
 | 第 5 批 | 清理 lint 警告存量 → `--max-warnings 0`；模块化收尾、技术栈统一 | 长期收益，可渐进推进 |
 

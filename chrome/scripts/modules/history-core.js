@@ -2,7 +2,7 @@
 // History page display functions extracted from func.js
 
 import { $, $$, createElement } from '../dom-helper.js';
-import { returnLang, TimeToStr, formatDate, truncate, title_fix, get_host, getFaviconUrl, getFaviconOnerror, setupFaviconElement, escapeHtmlAttr } from './helpers.js';
+import { returnLang, TimeToStr, formatDate, truncate, get_host, getFaviconUrl, getFaviconOnerror, setupFaviconElement, escapeHtmlAttr, escapeHtmlText } from './helpers.js';
 import { filtUrl } from './config.js';
 import { save_calendar_storage2 } from './calendar.js';
 
@@ -116,7 +116,16 @@ function history(w, q) {
                         }
 
                         if (hi[i].lastVisitTime >= obj['startTime'] && hi[i].lastVisitTime <= obj['endTime']) {
-                            rha.push({ epoch: hi[i].lastVisitTime, url: url, host: get_host(url), time: TimeToStr(hi[i].lastVisitTime, true, true, false), date: formatDate(hi[i].lastVisitTime), favicon: furl, title: truncate(title_fix(title), 0, 100), visits: visits });
+                            // Stored raw: this title is displayed verbatim by
+                            // the render loops below, which escape it for the
+                            // text position themselves. It used to go through
+                            // title_fix() here, which deleted '<', '>' and '/'
+                            // — so "Docs / API" showed up as "Docs  API", and
+                            // its partial escaping of '"' meant escaping it
+                            // again at render time displayed a literal '&#34;'.
+                            // Truncate before escaping: escaping first can cut
+                            // an entity in half.
+                            rha.push({ epoch: hi[i].lastVisitTime, url: url, host: get_host(url), time: TimeToStr(hi[i].lastVisitTime, true, true, false), date: formatDate(hi[i].lastVisitTime), favicon: furl, title: truncate(title, 0, 100), visits: visits });
                         }
 
                     }
@@ -195,17 +204,22 @@ function history(w, q) {
                             $('master-check-all').removeAttribute('disabled');
                         } else {
                             if (rha[thisc.counter] !== undefined) {
-                                if (!$(into).querySelector('div[rel="' + rha[thisc.counter].host + '"]')) {
+                                if (!$(into).querySelector('div[rel="' + CSS.escape(rha[thisc.counter].host) + '"]')) {
                                     var toggleid = 'toggle-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                                     var moreid = 'more-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                                     var errorid = 'error-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                                     var groupid = 'group-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                                     var faviconUrl = rha[thisc.counter].favicon || '';
+                                    // The host reaches attributes three times and
+                                    // the visible label once — one escaper per
+                                    // context. All four used to be raw.
+                                    var hostAttr = escapeHtmlAttr(rha[thisc.counter].host);
+                                    var hostText = escapeHtmlText(rha[thisc.counter].host.replace('www.', ''));
                                     var groupDiv = createElement('div', {
                                         title: rha[thisc.counter].host,
                                         rel: ibcv,
                                         'class': 'item-holder group-title ',
-                                        html: '<a href="#" class="group-title-toggle" id="' + toggleid + '" data-host="' + rha[thisc.counter].host + '" rel="' + rha[thisc.counter].host + '"></a><input type="checkbox" class="group-title-checkbox" id="' + moreid + '" value="' + rha[thisc.counter].host + '"><img id="' + errorid + '" class="group-title-favicon" alt="Favicon"><span id="' + groupid + '" data-host="' + rha[thisc.counter].host + '" class="group-title-host">' + rha[thisc.counter].host.replace('www.', '') + '</span>'
+                                        html: '<a href="#" class="group-title-toggle" id="' + toggleid + '" data-host="' + hostAttr + '" rel="' + hostAttr + '"></a><input type="checkbox" class="group-title-checkbox" id="' + moreid + '" value="' + hostAttr + '"><img id="' + errorid + '" class="group-title-favicon" alt="Favicon"><span id="' + groupid + '" data-host="' + hostAttr + '" class="group-title-host">' + hostText + '</span>'
                                     });
                                     $(into).appendChild(groupDiv);
                                     $(toggleid).addEventListener('click', function () {
@@ -233,15 +247,28 @@ function history(w, q) {
                                     // rha[thisc.counter].time = '- - : - -';
                                 }
                                 var selectid = 'select-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
+                                // The URL is attacker-controllable (it is whatever
+                                // the page asked for), so it is escaped before it
+                                // reaches href/value/title. Those are attributes,
+                                // hence escapeHtmlAttr. The visible title is text
+                                // content, so it takes escapeHtmlText: a page
+                                // title is attacker-controllable too, and it was
+                                // interpolated raw here — the only thing that
+                                // made it safe was title_fix() deleting the angle
+                                // brackets upstream, which the storage side no
+                                // longer does.
+                                var urlAttr = escapeHtmlAttr(rha[thisc.counter].url);
+                                var tipAttr = escapeHtmlAttr(returnLang('visits') + ': ' + rha[thisc.counter].visits + ' | ' + rha[thisc.counter].time + ' ' + rha[thisc.counter].date);
+                                var titleText = escapeHtmlText(rha[thisc.counter].title);
                                 var item;
                                 item = '<div class="item">';
-                                item += '<span class="checkbox"><label><input class="chkbx" type="checkbox" id="' + selectid + '" value="' + rha[thisc.counter].url + '" name="check"></label>&nbsp;</span>';
+                                item += '<span class="checkbox"><label><input class="chkbx" type="checkbox" id="' + selectid + '" value="' + urlAttr + '" name="check"></label>&nbsp;</span>';
                                 item += '<span class="time">' + rha[thisc.counter].time + '</span>';
-                                item += '<a style="padding-left:0;" target="_blank" class="link" href="' + rha[thisc.counter].url + '">';
-                                item += '<span class="title" title="' + rha[thisc.counter].url + '" rel="' + returnLang('visits') + ': ' + rha[thisc.counter].visits + ' | ' + rha[thisc.counter].time + ' ' + rha[thisc.counter].date + '">' + rha[thisc.counter].title + '</span>';
+                                item += '<a style="padding-left:0;" target="_blank" class="link" href="' + urlAttr + '">';
+                                item += '<span class="title" title="' + urlAttr + '" rel="' + tipAttr + '">' + titleText + '</span>';
                                 item += '</a>';
                                 item += '</div>';
-                                var parentHolder = $(into).querySelector('div.item-holder[title="' + rha[thisc.counter].host + '"]');
+                                var parentHolder = $(into).querySelector('div.item-holder[title="' + CSS.escape(rha[thisc.counter].host) + '"]');
                                 var relVal = parentHolder ? parentHolder.getAttribute('rel') : ibcv;
                                 var bgColor = parentHolder ? parentHolder.style.backgroundColor : '';
                                 var itemHolder = createElement('div', {
@@ -252,7 +279,7 @@ function history(w, q) {
                                     }
                                 });
                                 itemHolder.innerHTML = item + '<div class="clearitem" style="clear:both;"></div>';
-                                var groupHolder = $(into).querySelector('div[rel="' + rha[thisc.counter].host + '"]');
+                                var groupHolder = $(into).querySelector('div[rel="' + CSS.escape(rha[thisc.counter].host) + '"]');
                                 if (groupHolder) {
                                     groupHolder.appendChild(itemHolder);
                                 } else {
@@ -284,13 +311,19 @@ function history(w, q) {
                                 var selectid = 'select-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                                 var errorid = 'error-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                                 var faviconUrl = rha[thisc.counter].favicon || '';
+                                // See the grouped branch: the URL is escaped for
+                                // the attributes (escapeHtmlAttr), the visible
+                                // title for a text position (escapeHtmlText).
+                                var urlAttr = escapeHtmlAttr(rha[thisc.counter].url);
+                                var tipAttr = escapeHtmlAttr(returnLang('visits') + ': ' + rha[thisc.counter].visits + ' | ' + rha[thisc.counter].time + ' ' + rha[thisc.counter].date);
+                                var titleText = escapeHtmlText(rha[thisc.counter].title);
                                 var item;
                                 item = '<div class="item">';
-                                item += '<span class="checkbox"><label><input class="chkbx" type="checkbox" id="' + selectid + '" value="' + rha[thisc.counter].url + '" name="check"></label>&nbsp;</span>';
+                                item += '<span class="checkbox"><label><input class="chkbx" type="checkbox" id="' + selectid + '" value="' + urlAttr + '" name="check"></label>&nbsp;</span>';
                                 item += '<span class="time">' + rha[thisc.counter].time + '</span>';
-                                item += '<a target="_blank" class="link" href="' + rha[thisc.counter].url + '">';
+                                item += '<a target="_blank" class="link" href="' + urlAttr + '">';
                                 item += '<img id="' + errorid + '" class="favicon" alt="Favicon">';
-                                item += '<span class="title" title="' + rha[thisc.counter].url + '" rel="' + returnLang('visits') + ': ' + rha[thisc.counter].visits + ' | ' + rha[thisc.counter].time + ' ' + rha[thisc.counter].date + '">' + rha[thisc.counter].title + '</span>';
+                                item += '<span class="title" title="' + urlAttr + '" rel="' + tipAttr + '">' + titleText + '</span>';
                                 item += '</a>';
                                 item += '</div>';
                                 var itemHolder = createElement('div', { 'rel': ibcv, 'class': 'item-holder ' });
@@ -336,8 +369,12 @@ function toggleGroup(host) {
     } else if (getActiveHistory() == 'search') {
         var into = 'rh-views-search-insert';
     }
-    var tgda = $(into).querySelector('a[rel="' + host + '"]');
-    var tgde = $(into).querySelector('div[rel="' + host + '"]');
+    // The host comes from a visited URL, and a quote in it would close the
+    // attribute selector early — querySelector() throws rather than returning
+    // null, which propagates out of the chunked render loop and leaves the page
+    // half drawn.
+    var tgda = $(into).querySelector('a[rel="' + CSS.escape(host) + '"]');
+    var tgde = $(into).querySelector('div[rel="' + CSS.escape(host) + '"]');
 
     if (tgda != undefined && tgde != undefined) {
         var tgdv = tgde.style.display;
@@ -495,14 +532,14 @@ function selectHistoryItem(el, w) {
                 var chkbxCount = elem.querySelectorAll('.chkbx').length;
                 var chkbxChecked = elem.querySelectorAll('.chkbx:checked').length;
                 if (chkbxCount == chkbxChecked) {
-                    var titleDivs = $$(into + ' div[title="' + elem.getAttribute('rel') + '"]');
+                    var titleDivs = $$(into + ' div[title="' + CSS.escape(elem.getAttribute('rel')) + '"]');
                     if (titleDivs.length > 0) {
                         titleDivs[0].style.backgroundColor = window.itemSelectedColor;
                         var chkBox = titleDivs[0].querySelector('.group-title-checkbox');
                         if (chkBox) chkBox.checked = true;
                     }
                 } else {
-                    var titleDivs = $$(into + ' div[title="' + elem.getAttribute('rel') + '"]');
+                    var titleDivs = $$(into + ' div[title="' + CSS.escape(elem.getAttribute('rel')) + '"]');
                     if (titleDivs.length > 0) {
                         if (titleDivs[0].getAttribute('rel') == 'grey') {
                             titleDivs[0].style.backgroundColor = '#f1f1f1';
@@ -578,7 +615,7 @@ function deleteHistoryItem(w) {
                 if (grp == 'yes') {
                     Array.from($$(into + ' .group-holder')).forEach(function (gel) {
                         if (gel.querySelectorAll(':scope > div.item-holder').length == 0) {
-                            var groupTitle = document.querySelector(into + ' .group-title[title="' + gel.getAttribute('rel') + '"]');
+                            var groupTitle = document.querySelector(into + ' .group-title[title="' + CSS.escape(gel.getAttribute('rel')) + '"]');
                             if (groupTitle) groupTitle.remove();
                             gel.remove();
                         }

@@ -7,7 +7,7 @@
 // Re-exported here so the public API stays unchanged.
 
 import { $, $$, createElement } from '../dom-helper.js';
-import { returnLang, formatDate, DAY, isBookmarkletUrl, getFaviconUrl, get_host, TimeToStr, truncate, title_fix, escapeHtmlAttr, chromeURL } from './helpers.js';
+import { returnLang, formatDate, DAY, isBookmarkletUrl, getFaviconUrl, get_host, TimeToStr, truncate, escapeHtmlAttr, chromeURL } from './helpers.js';
 import { updateFilter, filtUrl, flist } from './config.js';
 import { history } from './history-core.js';
 import { calendar_storage2, save_calendar_storage2 } from './shared/calendar-storage.js';

@@ -13,6 +13,10 @@
 //     `id="..."` it contains so `$()` can find generated nodes, and (b) extracts
 //     `<td>` contents for `<tr>` elements, which is the only nesting config.js
 //     queries into. Anything else must use the real browser.
+//   * Quoted attribute selectors (`[rel="…"]`) undo CSS escapes before
+//     comparing, and an attribute selector whose value contains an unescaped
+//     quote throws a SyntaxError — both as the browser does. Selectors beyond
+//     the shapes listed in `matches()` return [] rather than half-working.
 //   * `getElementById` returns null for unknown ids and records them in
 //     `missing`, so tests can assert the code never touches an element that
 //     options.html does not define.
@@ -146,12 +150,39 @@ export function createDom(options = {}) {
         return el;
     }
 
+    // `\c` is a literal character, `\1f ` a code point in hex followed by a
+    // terminator: both are what CSS.escape() emits, and the browser applies them
+    // when it reads a quoted attribute value. Without this the shim would
+    // compare the escaped text against the raw attribute and every escaped
+    // lookup would miss — which is the opposite of how the browser behaves, and
+    // would make the CSS.escape() tests below assert nothing.
+    function cssUnescape(value) {
+        return value.replace(/\\(?:([0-9a-fA-F]{1,6})[ \n\t]?|([\s\S]))/g,
+            (_m, hex, ch) => (hex ? String.fromCodePoint(parseInt(hex, 16)) : ch));
+    }
+
     function matches(el, sel) {
         const s = String(sel).trim();
         if (s.startsWith('#')) return el.id === s.slice(1);
         if (s.startsWith('.')) return el.classes.has(s.slice(1));
-        const attr = /^([a-zA-Z]*)\[([\w-]+)="([^"]*)"\]$/.exec(s);
-        if (attr) return (!attr[1] || el.tagName === attr[1].toUpperCase()) && el.getAttribute(attr[2]) === attr[3];
+        const attr = /^([a-zA-Z]*)\[([\w-]+)="((?:[^"\\]|\\.)*)"\]$/.exec(s);
+        if (attr) {
+            return (!attr[1] || el.tagName === attr[1].toUpperCase())
+                && el.getAttribute(attr[2]) === cssUnescape(attr[3]);
+        }
+        // A selector the browser would reject. `[rel="a"b"]` is not a valid
+        // attribute selector — the quote closes the string early — and
+        // querySelector() throws a SyntaxError rather than returning null. That
+        // throw is the damage an unescaped host actually does: it propagates out
+        // of the chunked render loop and leaves the page half drawn. The shim
+        // reproduces it so "escaped" and "not escaped" are distinguishable.
+        // Single attribute selectors only: a compound `a[rel="x"][data-y="1"]`
+        // is legal but falls through to here and would be rejected. Nothing in
+        // the extension builds one; a selector past the shapes above is simply
+        // not supported by this shim.
+        if (/^([a-zA-Z]*)\[([\w-]+)="[\s\S]*"[^[\]]*\][^[\]]*$/.test(s)) {
+            throw new SyntaxError(`Failed to execute 'querySelector': '${s}' is not a valid selector.`);
+        }
         return el.tagName === s.toUpperCase();
     }
 
