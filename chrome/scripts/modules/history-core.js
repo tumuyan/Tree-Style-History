@@ -405,6 +405,20 @@ function getActiveHistory() {
 
 // --- Bulk select/cancel ---
 
+/**
+ * Repaint the nearest ancestor matching `selector`.
+ *
+ * The ancestor can be missing: deleteHistoryItem('selected') detaches
+ * `div.item-holder` rows, and a sweep over every `.chkbx` then meets checkboxes
+ * whose row is already gone. closest() returns null there, so the write has to
+ * be skipped — one `null.style` throws and aborts the whole repaint, leaving
+ * the list half updated.
+ */
+function paintClosest(el, selector, color) {
+    var node = el.closest(selector);
+    if (node) node.style.backgroundColor = color;
+}
+
 function getMoreItems(el) {
     if (getActiveHistory() == 'history') {
         var into = '#rh-views-insert';
@@ -420,10 +434,10 @@ function getMoreItems(el) {
                 var parentHolder = ele.closest('div.item-holder');
                 if (parentHolder && parentHolder.getAttribute('rel') == 'white') {
                     parentHolder.style.backgroundColor = '#fff';
-                    el.closest('div.group-title').style.backgroundColor = '#fff';
+                    paintClosest(el, 'div.group-title', '#fff');
                 } else {
                     if (parentHolder) parentHolder.style.backgroundColor = '#f1f1f1';
-                    el.closest('div.group-title').style.backgroundColor = '#f1f1f1';
+                    paintClosest(el, 'div.group-title', '#f1f1f1');
                 }
             }
         });
@@ -432,7 +446,7 @@ function getMoreItems(el) {
             var eleh = get_host(ele.value);
             if (ihost == eleh) {
                 ele.checked = true;
-                el.closest('div.group-title').style.backgroundColor = window.itemSelectedColor;
+                paintClosest(el, 'div.group-title', window.itemSelectedColor);
                 selectHistoryItem(ele, 'single');
             }
         });
@@ -500,13 +514,13 @@ function selectHistoryItem(el, w) {
                             }
                         } else if (chkbxs[i].checked == false) {
                             chkbxs[i].checked = true;
-                            chkbxs[i].closest('div.item-holder').style.backgroundColor = window.itemSelectedColor;
+                            paintClosest(chkbxs[i], 'div.item-holder', window.itemSelectedColor);
                         }
                     }
                 }
             }
             selectedItem = el;
-            el.closest('div.item-holder').style.backgroundColor = window.itemSelectedColor;
+            paintClosest(el, 'div.item-holder', window.itemSelectedColor);
         } else if (el.checked == false) {
             selectedItem = undefined;
             var iurl = el.value;
@@ -560,7 +574,7 @@ function selectHistoryItem(el, w) {
         if (el.value == 'false') {
             Array.from($$(into + ' .chkbx')).forEach(function (ele) {
                 ele.checked = true;
-                ele.closest('div.item-holder').style.backgroundColor = window.itemSelectedColor;
+                paintClosest(ele, 'div.item-holder', window.itemSelectedColor);
             });
             if (grp == 'yes') {
                 Array.from($$(into + ' .group-title')).forEach(function (gel) {
@@ -628,18 +642,40 @@ function deleteHistoryItem(w) {
             });
         }
     } else if (w == 'range') {
+        var df = localStorage['rh-date'];
+        var dfrom = $('delete-range-one');
+        var dto = $('delete-range-two');
+        // rh-date is undefined until the storage cache is filled, and the two
+        // inputs are empty until a date is picked. Both used to reach .split()
+        // and throw; an unresolvable range should simply do nothing.
+        if (!df || !dfrom || !dto || !dfrom.value || !dto.value) {
+            console.warn('deleteHistoryItem(range): incomplete range, nothing deleted');
+            return;
+        }
+
         var dober = {};
         var dobsr = {};
-        var df = localStorage['rh-date'];
         var dfs = df.split('/');
-        var sr = $('delete-range-one').value.split('/');
-        var er = $('delete-range-two').value.split('/');
+        var sr = dfrom.value.split('/');
+        var er = dto.value.split('/');
         for (var d = 0; d < dfs.length; d++) {
             dobsr[dfs[d]] = sr[d];
             dober[dfs[d]] = er[d];
         }
         var startRange = new Date(dobsr['yyyy'], (dobsr['mm'] - 1), dobsr['dd'], 23, 59, 59, 999).getTime() - 86400000;
         var endRange = new Date(dober['yyyy'], (dober['mm'] - 1), dober['dd'], 23, 59, 59, 999).getTime();
+        // Fields are mapped by position, so the values are only meaningful if
+        // they were written in the format rh-date names. A mismatch (inputs
+        // filled as mm/dd/yyyy while rh-date says yyyy/mm/dd) puts the day in
+        // the year slot: `new Date(9, ...)` resolves to 1909, and a range
+        // starting there deletes the entire history. A missing field lands in
+        // the same place via NaN, so one check covers both.
+        if (!Number.isFinite(startRange) || !Number.isFinite(endRange)
+            || startRange < 0 || endRange < 0) {
+            console.warn('deleteHistoryItem(range): unparsable range, nothing deleted',
+                df, dfrom.value, dto.value);
+            return;
+        }
         if (startRange < endRange) {
             document.title = 'Deleting...';
             alertUserHistory(true);

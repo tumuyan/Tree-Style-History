@@ -216,8 +216,11 @@ document.addEventListener('DOMContentLoaded', function () {
         if (time >= date && wait_space)
             return '';
 
+        // `date + DAY` is string concatenation: `+` turns the Date into
+        // "Wed Sep 10 2026 ...86400000", which then breaks `time >= date`
+        // (it silently becomes a string compare) and any later getTime().
         if (new Date() - date > DAY)
-            date = date + DAY;
+            date = new Date(date.getTime() + DAY);
 
         var currentTime = new Date(time);
         var hours = currentTime.getHours();

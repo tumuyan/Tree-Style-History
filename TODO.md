@@ -5,7 +5,7 @@
 状态图例：`[ ]` 未开始 · `[x]` 已完成 · `[-]` 暂缓
 
 > **护栏已就位**：`npm run check`（ESLint + `node:test` + 4 个校验脚本）是唯一准入闸门，约 5 秒跑完，CI 强制执行。
-> 当前基线：**lint 0 error / 140 warning · 117 测试 · 117 通过 · 0 skip · 0 失败**（另：e2e 9 测试 · 9 通过）。
+> 当前基线：**lint 0 error / 140 warning · 133 测试 · 133 通过 · 0 skip · 0 失败**（另：e2e 9 测试 · 9 通过）。
 > 2 个 skip 已在「第 3 批」消除（`rh-list-order` 硬编码与失效的 `treeOptionsDetail`）。**当前无 skip**；后续若需标注已知缺陷，沿用 `test(name, { skip: '原因' }, fn)` 写法（函数体内写期望行为，修完去掉 skip）。
 
 ---
@@ -343,7 +343,7 @@
   - 现状：`Object.defineProperty` 把 `localStorage` 换成 Proxy，对所有第三方脚本生效，且 `storageAdapter.ready()` 之前读取全是 `undefined`（P0 中 `updateFilter` 的 bug 正是这个语义陷阱的产物）。至少应让未就绪时读取打出告警。
 
 - [x] **补充最小测试 + CI**（第二轮已覆盖前两类；第三类仍未做）
-  - 已覆盖：`filtUrl` 匹配、配置读写往返（`saveOptions`/`loadOptions`/`downloadOptions`/`addList`）、favicon 子系统、小书签执行、时间格式化、模块图与 `func.js` 挂载一致性、manifest 权限覆盖、SW 副本同步。
+  - 已覆盖：`filtUrl` 匹配、配置读写往返（`saveOptions`/`loadOptions`/`downloadOptions`/`addList`）、favicon 子系统、小书签执行、时间格式化、模块图与 `func.js` 挂载一致性、manifest 权限覆盖、SW 副本同步、**`dbManager` 的连接生命周期**（`tests/db-manager.test.mjs`，见「第 5 批」）。
   - 仍未覆盖：`feach_History` 的树构建与翻页边界、`history()`/`popup-core.js` 的渲染层、Service Worker 采集链路。
   - **阻塞原因**：这几处都深度依赖真实 DOM（zTree / `querySelector('div[rel="' + host + '"]')` / `setInterval` 分片渲染），`tests/dom.mjs` 的替身**故意不做 HTML 树解析**，硬撑会写出一堆似是而非的断言。
   - 建议：要么引入 jsdom/happy-dom 并接受一个开发依赖，要么按 TODO.md 第 2 批先把渲染层重构成可测的纯函数。
@@ -358,6 +358,43 @@
 
 ---
 
+### 第 5 批（已完成）：四项 P1 修复
+
+- [x] **`dbManager.deleteDB()` / `close()` 未作废缓存的连接**（`chrome/scripts/db-manager.js`）
+  - 原状：两者都清了 `db` 与 `isReady`，却留下 `_readyPromise`。`init()` 开头 `if (this._readyPromise) return this._readyPromise;` 于是把**已 close 的连接**再发一遍，之后 `transaction()` 抛 `InvalidStateError`。选项页「清除数据」点一次，当前 SW 生命周期内采集链路就永久失效。
+  - 已做：两个方法都补 `this._readyPromise = null;`。
+  - 测试：`tests/db-manager.test.mjs`（新增）。`db-manager.js` 是 classic script，只能用 `node:vm` + 最小 fake IndexedDB 加载；fake db 在 `close()` 后让 `transaction()` 抛 `InvalidStateError`，这才让「缓存 promise」的后果可观测——否则 `getDB()` 返回什么都一样绿。3 条：正常复用同一连接（防回归）、`deleteDB()` 后重开、`close()` 后重开。
+- [x] **`date = date + DAY` 把 Date 变成字符串**（`background-sw.js:797`、`history2.js:201`、`closed.js:220`）
+  - 原状：`+` 对 Date 走 ToPrimitive(default)，优先字符串 → `date` 变成 `"Wed Sep 10 2026 …86400000"`。此后 `date.getTime()` 抛（SW 侧 `loadDate()` 的异常被 `.catch` 吞掉，抓取静默失败），`time >= date` 退化成字符串字典序比较。是「第 1.8 批」修掉的 `_DATE + DAY` 的同型漏网之鱼。
+  - 已做：三处统一改为 `new Date(date.getTime() + DAY)`。
+  - 静态守卫：`no Date object is advanced by adding a day count`（匹配 `X = X + DAY`，**无白名单**）+ 一条变异自测钉住正则本身：既不放过坏写法，也不误伤 `new Date(x.getTime() + DAY)` 与 `loadDate()` 里那个**数字**版本的 `date + DAY`（那里是普通算术，不是 bug）。
+- [x] **`minimum_chrome_version` 与代码实际要求对齐**（`chrome/manifest.json`）
+  - 原状：声明 `88`，但 `background-sw.js` 用了 `Object.hasOwn`（93+）、`helpers.js` 用了 `executeScript({ world: 'MAIN' })`（95+）。88–92 能装但一跑就崩；95 以下 `world` 被静默丢弃，小书签在 isolated world 里失效。
+  - 已做：提升到 `"96"`。
+  - **坑（e2e 暴露，静态检查全绿）**：该字段必须写成**字符串**。写成数字 `96` 时 Chrome 直接拒绝整个 manifest —— 扩展静默加载失败、SW 从不注册，而 lint、`node --check`、JSON 校验、`gen-sw-utils --check` 全部照常通过。新增守卫 `minimum_chrome_version is a string, as Chrome parses it` 钉住，注释里写明症状是「只有 e2e 会红，且看起来像 SW 没启动」。
+  - 守卫 `minimum_chrome_version covers the newest API the code uses`：维护一张「API → 首次支持版本」表，声明值低于代码所需即报红并列出证据。已变异验证（改回 88 → 红，列出 `Object.hasOwn` 与 `world:'MAIN'` 两处）。表只收**能靠源码形状可靠识别**的 API，避免过度匹配变成噪音。
+  - 待办：发布下个版本时需在 README 的 Changelog 记录「最低 Chrome 版本提升到 96」。
+- [x] **渲染层 `closest()` 未防空 + 按范围删除的输入未校验**（`chrome/scripts/modules/history-core.js`）
+  - `closest()`：`el.closest('div.item-holder').style.*` 共 6 处未判空。`deleteHistoryItem('selected')` 会摘掉 `div.item-holder`，之后任何遍历 `.chkbx` 的重绘都会撞上 `null.style`，一抛就中断整次重绘、列表停在半更新状态。
+    - 已做：新增模块私有 `paintClosest(el, selector, color)`，6 处改走它。刻意**不**统一各分支配色（`#f1f1f1` 与 `#fafafa` 本就不一致），只做防空，零行为变化。
+  - `deleteHistoryItem('range')`：`localStorage['rh-date']` 在 storage 就绪前是 `undefined`，`.split('/')` 直接抛；两个输入框为空时同理。已做：缺任一输入即警告返回。
+    - 顺带堵住一条**数据丢失**路径：字段按位置映射，若 `rh-date` 是 `yyyy/mm/dd` 而输入框写成 `mm/dd/yyyy`，日被塞进年槽 → `new Date(9, …)` → 1909 → `startRange < endRange` 成立 → **删掉全部历史**。现改为解析后校验 `Number.isFinite` 且非负（早于 1970 一律拒绝）；字段缺失走 NaN 分支，一并覆盖。
+  - 测试：`tests/modules.test.mjs` 新增 6 条 —— 3 条 `closest`（单条、全选、`getMoreItems`）+ 3 条 range（正常路径仍删对且范围精确、未就绪不删也不抛、字段错位不删）。
+
+### 第 5 批评审收尾（已完成）
+
+提交前评审发现的遗留项，均已在同批内处理：
+
+- [x] **`bookmark.js` 还有 3 处同类 `closest()` 未判空**（`:678`、`:711`、`:759`）
+  - 第 5 批只清了 `history-core.js` 的 6 处，漏了这三个——它们形状相同（`var x = …closest(…)` 后直接 `x.getAttribute(...)`）。`:759` 尤其真实：`holder.remove()` 在 `chrome.bookmarks.remove()` 的**异步回调**里执行，二次 sweep 必然可能撞上已摘除的行。
+  - 已做：三处加 `if (!x) return;`（都在 IIFE 内，可直接返回），与文件内既有写法一致。
+  - **测试策略**：`bookmark.js` 的所有函数都在 `document.addEventListener('DOMContentLoaded', …)` 闭包里（`:1`），没有可调用的句柄，无法单测。改用静态守卫 `every closest() result is null-checked before it is dereferenced`：检查 `var x = …closest(…)` 之后两行内若解引用了 `x`，则必须出现 `if (x)` / `if (!x)` / `x &&` / `x ?` 之一——正好是代码库已在用的四种形状。无白名单。
+  - 两个实现细节：①检测跑在 `stripJsComments()` 之后（避免散文被当代码），但**报错用原始行号**——剥注释会偏移几十行，错行号比没行号更糟；②同一段声明文本在文件里出现两次，所以按**出现次序**映射行号，否则两处都报成第一行。
+- [x] **守卫措辞自相矛盾**：`minimum_chrome_version must be a number` 与相邻那条「必须是字符串」冲突。改为 `must parse as a number`（语义是 `Number()` 之后可解析）。
+- [x] **测试重复调用被测函数**：`deleteHistoryItem("range") does nothing before storage has loaded` 里调了两次。合并为一次调用 + 两个断言。
+- [x] **测试 fixture 污染共享状态**：`seedOrphanCheckbox()` 写 `rh-group`、`seedRangeInputs()` 写 `rh-date`，都不还原，而这个文件的 `localStorage` / `dom` 是全测试共享的。新增 `restoreStorage(t, keys)`，用 `t.after()` 还原；已用探针确认 6 次清理全部执行（3×`rh-group` + 3×`rh-date`）。
+- [x] **`DATE_ADVANCE` 守卫的边界写进注释**：只覆盖 `x = x + DAY`，**不**覆盖 `x += DAY`——后者在数字上是普通算术且常见，纳入即噪音。写清楚，避免后人误以为守卫是全覆盖。
+
 ## 建议执行顺序
 
 | 批次 | 内容 | 理由 |
@@ -369,7 +406,8 @@
 | ✅ 第 2.2 批 | 删 `title_fix`、转义按上下文分工、`CSS.escape` 运行时测试、`downloadOptions` 下划线、`mergeList` 计数读取 | **已完成**。第 2 批的审查收尾 |
 | ✅ 第 3 批 | `rh-list-order` 硬编码、失效的 `treeOptionsDetail`、`popup.js` 空值保护、SW `callFunction` 收紧，外加 5 项小缺陷（TDZ / 变量遮蔽 / MV2 死代码 / 重复游标 / 250ms 轮询） | **已完成**。2 个 skip 全部消除，当前 0 skip |
 | 第 4 批 | SW 状态持久化（`chrome.storage.session`）、启动抓取并发分片与断点续传 | 涉及 MV3 架构调整，需先讨论方案。**树状结构的可靠性取决于此** |
-| 第 5 批 | `addCloseRedord` 命名与 id 语义、zTree `eval` 风险；清理 lint 警告存量 → `--max-warnings 0`；模块化收尾、技术栈统一 | 长期收益，可渐进推进 |
+| ✅ 第 5 批 | `dbManager` 缓存连接未作废、`date = date + DAY` 三处、`minimum_chrome_version` 对齐、`closest()` 与按范围删除的输入校验 | **已完成**。13 条新测试 + 3 条静态守卫，均先红后绿。插队在第 4 批之前：都是小改动且已有测试兜底 |
+| 第 6 批 | `addCloseRedord` 命名与 id 语义、zTree `eval` 风险；清理 lint 警告存量 → `--max-warnings 0`；模块化收尾、技术栈统一 | 长期收益，可渐进推进 |
 
 > **插队说明**：第 1.5 / 1.6 / 1.7 批是顺手做掉的——它们都由新写的测试或 review 直接暴露，且改动小、有 skip 测试兜底，不值得单独排队。
 > 1.5 = `filtUrl` 子串误伤 + `te` 未初始化 + `addList` 空格；1.6 = 选项页 `#mvlist` 缺失（**会导致选项页打不开**）+ 其附带的属性注入；1.7 = `filtUrl` 降段死分支 + `www` 子域过滤。

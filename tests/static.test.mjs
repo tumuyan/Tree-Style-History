@@ -607,6 +607,189 @@ test('no render site relies on title_fix for safety', () => {
     assert.deepEqual(offenders, []);
 });
 
+// `date = date + DAY` reads like date arithmetic but is string concatenation:
+// `+` converts a Date through ToPrimitive with hint "default", which prefers a
+// string, so the variable silently becomes "Wed Sep 10 2026 ...86400000".
+// Every later `.getTime()` on it throws, and every comparison against it
+// (`time >= date`) degrades into a lexicographic string compare.
+//
+// The correct form is the one shared/format.js has used since the 1.8 batch:
+// `new Date(x.getTime() + DAY)`.
+// Deliberately only the `x = x + DAY` shape. `x += DAY` is NOT covered: on a
+// number it is ordinary arithmetic and is common enough that matching it would
+// be pure noise, so the two forms cannot share one rule.
+const DATE_ADVANCE = /\b(\w+)\s*=\s*\1\s*\+\s*(?:DAY|86400000)\b/;
+// matchAll() requires the global flag; derived from the same source so the two
+// can never drift apart.
+const DATE_ADVANCE_ALL = new RegExp(DATE_ADVANCE.source, 'g');
+
+test('no Date object is advanced by adding a day count', () => {
+    // Three sites had this: background-sw.js:797 (visitTab), history2.js:201 and
+    // closed.js:220 (both in timeStr2). All three hold a real Date.
+    //
+    // No allow-list: `n = n + DAY` on a number is only a verbose `n += DAY`, so
+    // failing the build costs one keystroke and catches the real thing.
+    const offenders = [];
+    walkScripts((file, src) => {
+        for (const m of stripJsComments(src).matchAll(DATE_ADVANCE_ALL)) {
+            offenders.push(`${file.replace(/\\/g, '/')}: ${m[0]}`);
+        }
+    });
+    assert.deepEqual(offenders, []);
+});
+
+// Platform APIs that are newer than the manifest's declared floor, mapped to
+// the first Chrome that ships them. Anything listed here is a hard requirement:
+// the extension installs on older Chrome but breaks the moment it runs, which
+// is worse than refusing to install.
+//
+// Only APIs whose use can be detected reliably by source shape belong here —
+// a heuristic that over-matches would just produce noise.
+const CHROME_API_VERSIONS = [
+    { name: 'Object.hasOwn()', min: 93, pattern: /\bObject\.hasOwn\s*\(/ },
+    // Bookmarklets must run in the page's main world to see page globals.
+    // Chrome silently drops the option on older versions, so the script ends up
+    // in the isolated world and half the bookmarklets on the web stop working.
+    { name: "scripting.executeScript({ world: 'MAIN' })", min: 95, pattern: /world\s*:\s*['"]MAIN['"]/ },
+    { name: 'structuredClone()', min: 98, pattern: /\bstructuredClone\s*\(/ },
+    { name: 'Array.prototype.findLast()', min: 97, pattern: /\.findLast(Index)?\s*\(/ },
+    { name: 'Array.prototype.toSorted()', min: 110, pattern: /\.to(Sorted|Reversed|Spliced)\s*\(/ },
+    { name: 'Promise.withResolvers()', min: 119, pattern: /\bPromise\.withResolvers\s*\(/ },
+    { name: 'Object.groupBy()', min: 117, pattern: /\bObject\.groupBy\s*\(/ },
+];
+
+test('minimum_chrome_version is a string, as Chrome parses it', () => {
+    // Found the hard way: writing it as the NUMBER 96 makes Chrome reject the
+    // manifest outright. Nothing in the extension reports this — the service
+    // worker simply never registers, so only the e2e suite notices, and there
+    // it looks like "the service worker did not start".
+    const raw = readJson('manifest.json').minimum_chrome_version;
+    assert.equal(typeof raw, 'string',
+        'Chrome parses minimum_chrome_version as a version string; a number breaks extension loading');
+});
+
+test('minimum_chrome_version covers the newest API the code uses', () => {
+    const declared = Number(readJson('manifest.json').minimum_chrome_version);
+    // "parse as", not "be": the field is a version STRING — see the guard above.
+    assert.ok(Number.isFinite(declared), 'minimum_chrome_version must parse as a number');
+
+    let required = 0;
+    const evidence = [];
+    walkScripts((file, src) => {
+        const code = stripJsComments(src);
+        for (const { name, min, pattern } of CHROME_API_VERSIONS) {
+            if (!pattern.test(code)) continue;
+            evidence.push(`${name} needs Chrome ${min} (${file.replace(/\\/g, '/')})`);
+            if (min > required) required = min;
+        }
+    });
+
+    assert.ok(
+        declared >= required,
+        `manifest.json declares minimum_chrome_version ${declared} but the code needs ${required}:\n  ${evidence.join('\n  ')}`,
+    );
+});
+
+test('the Date-advance guard matches the shape it claims to catch', () => {
+    // Mutation check. The guard is a regex over source text, so it has to be
+    // pinned to the failing and passing forms — otherwise it stays green by
+    // simply seeing nothing.
+    assert.match('            date = date + DAY;', DATE_ADVANCE);
+    assert.match('date = date + 86400000;', DATE_ADVANCE);
+
+    // The fixed forms must NOT match.
+    assert.doesNotMatch('date = new Date(date.getTime() + DAY);', DATE_ADVANCE);
+    assert.doesNotMatch('_DATE = new Date(_DATE.getTime() + DAY);', DATE_ADVANCE);
+    // loadDate() builds its calendar key from a NUMBER, so `date + DAY` there
+    // is ordinary arithmetic, not the bug.
+    assert.doesNotMatch('let dday = "d" + (date + DAY).toString();', DATE_ADVANCE);
+});
+
+// closest() returns null when no ancestor matches — which happens routinely
+// here, because a delete detaches rows while a repaint is still sweeping the
+// checkboxes they contained. Dereferencing that null throws and aborts the
+// whole sweep, leaving the list half updated.
+//
+// The guard is static because bookmark.js keeps these functions inside a
+// DOMContentLoaded closure, so there is no handle to call them from a test.
+const CLOSEST_ASSIGN = /\b(?:var|let|const)\s+(\w+)\s*=\s*[^;\n]*\.closest\s*\(/;
+
+/**
+ * 1-based line number of the `nth` (0-based) occurrence of `needle`.
+ *
+ * Needed because two offending declarations can be textually identical — the
+ * same `var parent = ele.closest(...)` appears twice in bookmark.js — so the
+ * snippet alone cannot tell them apart.
+ */
+function lineOfNth(lines, needle, nth) {
+    let seen = -1;
+    for (let i = 0; i < lines.length; i++) {
+        if (lines[i].includes(needle) && ++seen === nth) return i + 1;
+    }
+    return 0;
+}
+/** `x.getAttribute(...)` / `x.style.` — a use that throws on null. */
+const DEREFERENCE = (name) => new RegExp('\\b' + name + '\\s*\\.');
+/** Every null-check shape the codebase already uses. */
+const NULL_GUARD = (name) => new RegExp(
+    'if\\s*\\(\\s*!?\\s*' + name + '\\s*\\)' // if (x) / if (!x)
+    + '|\\b' + name + '\\s*&&' // x && …
+    + '|\\b' + name + '\\s*\\?', // x ? … : …
+);
+
+test('every closest() result is null-checked before it is dereferenced', () => {
+    // No allow-list: a missing row is always a legitimate state, so there is
+    // no call site where an unguarded dereference would be correct.
+    const offenders = [];
+    walkScripts((file, src) => {
+        // Detection runs on the comment-stripped source so prose is not
+        // mistaken for code; the report uses the ORIGINAL line number, because
+        // stripping block comments shifts line numbers by dozens and a wrong
+        // one is worse than none.
+        const rawLines = src.split('\n');
+        const lines = stripJsComments(src).split('\n');
+        const seen = new Map();
+        for (let i = 0; i < lines.length; i++) {
+            const m = CLOSEST_ASSIGN.exec(lines[i]);
+            if (!m) continue;
+            const nth = seen.get(m[0]) ?? 0;
+            seen.set(m[0], nth + 1);
+            const name = m[1];
+            // The declaration plus the two lines after it: if a null check
+            // exists at all, it is within reach.
+            const view = lines.slice(i, i + 3).join('\n').slice(m.index);
+            if (!DEREFERENCE(name).test(view)) continue; // assigned, never used here
+            if (NULL_GUARD(name).test(view)) continue;
+            const at = lineOfNth(rawLines, m[0], nth);
+            offenders.push(`${file.replace(/\\/g, '/')}:${at || i + 1}: ${m[0].trim()}`);
+        }
+    });
+    assert.deepEqual(offenders, []);
+});
+
+test('the closest guard accepts each guarded shape and rejects the unguarded ones', () => {
+    // Mutation check: the guard is regex over source text, so it has to be
+    // pinned from both sides — otherwise it goes green by matching nothing.
+    const guarded = (lines) => {
+        const m = CLOSEST_ASSIGN.exec(lines[0]);
+        const name = m[1];
+        const view = lines.slice(0, 3).join('\n').slice(m.index);
+        return !DEREFERENCE(name).test(view) || NULL_GUARD(name).test(view);
+    };
+
+    // Accepted: every shape already used in the codebase.
+    assert.ok(guarded(["var h = el.closest('div');", 'if (h) h.style.color = "x";']));
+    assert.ok(guarded(["var h = el.closest('div');", 'if (!h) return;', 'var id = h.getAttribute("id");']));
+    assert.ok(guarded(["var p = el.closest('div');", 'if (p && p.getAttribute("rel") == "w") {}']));
+    assert.ok(guarded(["var h = el.closest('div');", 'var url = h ? h.getAttribute("x") : null;']));
+    // Assigned but not dereferenced in reach: nothing to guard.
+    assert.ok(guarded(["var p = el.closest('div');", 'handItOff(p);']));
+
+    // Rejected: the two shapes that were actually broken.
+    assert.ok(!guarded(["var p = el.closest('div');", 'if (p.getAttribute("rel") == "w") {}']));
+    assert.ok(!guarded(["var h = el.closest('div');", 'var id = h.getAttribute("data-id");']));
+});
+
 test('page titles are escaped at the point they become text content', () => {
     // The counterpart of the attribute check above. A page title is
     // attacker-controlled and is interpolated as TEXT CONTENT (`>' + x + '<`),

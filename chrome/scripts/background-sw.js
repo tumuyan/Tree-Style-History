@@ -793,8 +793,11 @@ async function visitTab(tab) {
         (/^(ftp|ftps|file|chrome|chrome-extension)\:\/\/(.*)/).test(tab.url) == false) {
         
         let now = new Date();
+        // `date + DAY` would stringify the Date (ToPrimitive prefers a string
+        // for `+`), after which `date.getTime()` — and therefore loadDate() —
+        // throws. Add to the epoch value and build a new Date from it.
         if (new Date() - date > DAY)
-            date = date + DAY;
+            date = new Date(date.getTime() + DAY);
 
         let details = { url: tab.url };
         

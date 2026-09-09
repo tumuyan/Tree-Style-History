@@ -1171,3 +1171,151 @@ test('every shape of host stays selectable once escaped', async () => {
         assert.equal(holder.style.display, 'block', `toggleGroup could not find ${JSON.stringify(host)}`);
     }
 });
+
+// ---------------------------------------------------------------------------
+// Rows that vanish underneath the selection handlers
+//
+// A checkbox can outlive the row that contains it: deleteHistoryItem('selected')
+// removes `div.item-holder` elements, and any repaint that then sweeps every
+// `.chkbx` meets a row whose ancestor is already gone. closest() returns null
+// there, so each `closest(...).style` write has to tolerate it — one throw
+// aborts the whole selection update and leaves the list half repainted.
+// ---------------------------------------------------------------------------
+
+/**
+ * Restore the given localStorage keys when the test finishes.
+ *
+ * `dom` and `localStorage` are shared by every test in this file, and the
+ * fixtures below steer the code under test through storage keys. Without this,
+ * any test appended after them silently inherits their settings.
+ */
+function restoreStorage(t, keys) {
+    const saved = keys.map((key) => [key, localStorage[key]]);
+    t.after(() => {
+        for (const [key, value] of saved) {
+            if (value === undefined) delete localStorage[key];
+            else localStorage[key] = value;
+        }
+    });
+}
+
+/** A `.chkbx` in the history view with NO `div.item-holder` ancestor. */
+function seedOrphanCheckbox(t, into = 'rh-views-insert') {
+    const root = dom.el(into);
+    root.style.display = 'block'; // so getActiveHistory() resolves to 'history'
+
+    const input = dom.makeEl('input');
+    input.className = 'chkbx';
+    input.value = 'https://example.com/page';
+    input.checked = true;
+    // Attached to the view itself, so nothing above it matches
+    // `div.item-holder` or `div.group-title` — the shape a delete leaves behind.
+    root.appendChild(input);
+
+    dom.register(`#${into} .chkbx`, [input]);
+    dom.register(`#${into} .chkbx:checked`, [input]);
+    dom.el('master-check-all');
+    restoreStorage(t, ['rh-group']);
+    localStorage['rh-group'] = 'no'; // keep to the ungrouped branch
+    return input;
+}
+
+test('selectHistoryItem survives a checkbox whose item-holder is already gone', async (t) => {
+    const historyCore = await importModule('modules/history-core.js');
+    const input = seedOrphanCheckbox(t);
+
+    assert.equal(input.closest('div.item-holder'), null, 'the fixture must really be orphaned');
+    assert.doesNotThrow(() => historyCore.selectHistoryItem(input, 'single'));
+});
+
+test('selectHistoryItem("all") survives rows that have already been removed', async (t) => {
+    const historyCore = await importModule('modules/history-core.js');
+    const input = seedOrphanCheckbox(t);
+    const master = dom.el('master-check-all');
+    master.value = 'false'; // -> the "select everything" branch
+
+    assert.equal(input.closest('div.item-holder'), null);
+    assert.doesNotThrow(() => historyCore.selectHistoryItem(master, 'all'));
+    assert.equal(input.checked, true, 'the sweep still ran; it just had nothing to repaint');
+});
+
+// ---------------------------------------------------------------------------
+// deleteHistoryItem('range')
+//
+// The range is parsed by position: `rh-date` names the fields ("yyyy/mm/dd")
+// and the two inputs supply the values. That mapping is only sound while the
+// inputs were actually written in that format.
+// ---------------------------------------------------------------------------
+
+/** Wire up the two date inputs `deleteHistoryItem('range')` reads. */
+function seedRangeInputs(t, format, from, to) {
+    restoreStorage(t, ['rh-date']);
+    localStorage['rh-date'] = format;
+    dom.el('alert-holder').style.display = 'none';
+    dom.el('alert-holder-loading');
+    const one = dom.el('delete-range-one');
+    const two = dom.el('delete-range-two');
+    one.value = from;
+    two.value = to;
+    return { one, two };
+}
+
+/** Run `fn` with a chrome.history that records any deleteRange() it is asked for. */
+function captureDeleteRange(fn) {
+    let captured = null;
+    withChromeApi({ history: { deleteRange: (range) => { captured = range; } } }, () => fn());
+    return captured;
+}
+
+test('deleteHistoryItem("range") deletes exactly the range the inputs describe', async (t) => {
+    const historyCore = await importModule('modules/history-core.js');
+    seedRangeInputs(t, 'yyyy/mm/dd', '2026/09/01', '2026/09/10');
+
+    const deleted = captureDeleteRange(() => historyCore.deleteHistoryItem('range'));
+
+    assert.ok(deleted, 'deleteRange() was never called');
+    // Both ends are pinned to 23:59:59.999 of their day, and the start is
+    // pulled back one more day so the first day is included in full.
+    assert.equal(deleted.startTime, new Date(2026, 8, 1, 23, 59, 59, 999).getTime() - 86400000);
+    assert.equal(deleted.endTime, new Date(2026, 8, 10, 23, 59, 59, 999).getTime());
+});
+
+test('deleteHistoryItem("range") does nothing before storage has loaded', async (t) => {
+    const historyCore = await importModule('modules/history-core.js');
+    // rh-date is undefined until the storage cache is filled: the old code went
+    // straight to `df.split('/')` and threw.
+    restoreStorage(t, ['rh-date']);
+    delete localStorage['rh-date'];
+    dom.el('alert-holder').style.display = 'none';
+
+    // One call, two assertions: throwing is not acceptable, and neither is a
+    // deleteRange() that quietly reaches the API.
+    let deleted;
+    assert.doesNotThrow(() => {
+        deleted = captureDeleteRange(() => historyCore.deleteHistoryItem('range'));
+    });
+    assert.equal(deleted, null);
+});
+
+test('deleteHistoryItem("range") refuses a range parsed from the wrong field order', async (t) => {
+    const historyCore = await importModule('modules/history-core.js');
+    // rh-date says yyyy/mm/dd but the inputs were filled in as mm/dd/yyyy.
+    // Mapping by position puts the day in the year slot, which lands in 1909 —
+    // a range that starts there deletes the entire history.
+    seedRangeInputs(t, 'yyyy/mm/dd', '09/01/2026', '09/10/2026');
+
+    assert.equal(captureDeleteRange(() => historyCore.deleteHistoryItem('range')), null,
+        'a malformed range must never reach deleteRange()');
+});
+
+test('getMoreItems survives a group checkbox that is not inside a group title', async (t) => {
+    const historyCore = await importModule('modules/history-core.js');
+    const input = seedOrphanCheckbox(t);
+    // A group-title checkbox carries the HOST, not a URL: getMoreItems()
+    // compares el.value against get_host() of every .chkbx value.
+    input.value = 'example.com';
+    input.checked = false; // -> the "deselect this host" branch
+
+    assert.equal(input.closest('div.group-title'), null);
+    assert.doesNotThrow(() => historyCore.getMoreItems(input));
+});

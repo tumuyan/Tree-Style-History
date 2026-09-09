@@ -676,6 +676,10 @@ document.addEventListener('DOMContentLoaded', function () {
                     (function(ele) {
                         if (ele.value == iurl) {
                             var parent = ele.closest('div.item-holder');
+                            // The row can be gone: a delete detaches
+                            // `div.item-holder` elements while this sweep is
+                            // still walking their checkboxes.
+                            if (!parent) return;
                             if (parent.getAttribute('rel') == 'white') {
                                 parent.style.backgroundColor = '#fff';
                             } else {
@@ -709,6 +713,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     (function(ele) {
                         ele.checked = false;
                         var parent = ele.closest('div.item-holder');
+                        if (!parent) return; // row already detached — see above
                         if (parent.getAttribute('rel') == 'white') {
                             parent.style.backgroundColor = '#fff';
                         } else {
@@ -757,6 +762,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 for (var i = 0; i < checkedItems.length; i++) {
                     (function(el) {
                         var holder = el.closest('div.item-holder');
+                        // holder.remove() runs in the chrome.bookmarks.remove()
+                        // callback below, so a second sweep can meet a checkbox
+                        // whose row has already been detached.
+                        if (!holder) return;
                         var bookmarkId = holder.getAttribute('data-bookmark-id');
                         
                         if (bookmarkId) {

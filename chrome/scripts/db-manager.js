@@ -132,6 +132,11 @@
                 this.db = null;
                 this.isReady = false;
             }
+            // Drop the cached open() promise too. init() short-circuits on it,
+            // so keeping it would make every later getDB() resolve to the
+            // connection closed above — and transaction() on a closed
+            // IDBDatabase throws InvalidStateError.
+            this._readyPromise = null;
         }
 
         // Delete entire database
@@ -142,6 +147,10 @@
                     this.db = null;
                     this.isReady = false;
                 }
+                // Same reason as close(): the cached promise resolves to the
+                // connection being destroyed here, so the next getDB() has to
+                // reopen rather than replay it.
+                this._readyPromise = null;
 
                 const indexedDBInstance = (typeof indexedDB !== 'undefined') ? indexedDB : (typeof window !== 'undefined' ? window.indexedDB : null);
                 if (!indexedDBInstance) {
