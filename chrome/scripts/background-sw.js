@@ -334,8 +334,15 @@ function initializeStorageState() {
     // Initialize Most Visited (once per session)
     mostVisitedInit();
     
-    // Set up alarm for periodic updates (instead of setInterval)
-    chrome.alarms.create('mostVisited', { periodInMinutes: 3 });
+    // Periodic refresh of the most-visited cache.
+    //
+    // The period costs far more than it looks. Every alarm wakes the service
+    // worker, and a worker that wakes runs this entire initialisation again —
+    // including the history crawl in loadDate() — because `_storageInitialized`
+    // is a module-level variable and starts false in every new worker. At three
+    // minutes that meant dozens of full re-initialisations an hour. "Most
+    // visited" changes slowly, so half an hour is plenty.
+    chrome.alarms.create('mostVisited', { periodInMinutes: 30 });
     
     // Initialize DB
     if (typeof dbManager !== 'undefined') {
@@ -660,6 +667,7 @@ async function add_urls(urls, date_ms, dateId) {
     let h_len = urls.length;
 
     if (h_len > 0) {
+        const batch = [];
         for (let i = 0; i < h_len; i++) {
             if (urls[i] != undefined && 
                 (/^(http|https|ftp|ftps|file|chrome|chrome-extension|chrome-devtools)\:\/\/(.*)/).test(urls[i].title) == false && 
@@ -672,18 +680,19 @@ async function add_urls(urls, date_ms, dateId) {
                     title = url;
                 }
 
-                try {
-                    await dbManager.putURL({
-                        id: urls[i].id,
-                        url: url,
-                        lastVisitTime: urls[i].lastVisitTime,
-                        visitCount: urls[i].visitCount,
-                        title: title
-                    });
-                } catch (error) {
-                    console.error("add_url Error :( " + url, error);
-                }
+                batch.push({
+                    id: urls[i].id,
+                    url: url,
+                    lastVisitTime: urls[i].lastVisitTime,
+                    visitCount: urls[i].visitCount,
+                    title: title
+                });
             }
+        }
+        if (batch.length > 0) {
+            await writeBatch(batch,
+                dbManager.putURLs.bind(dbManager),
+                dbManager.putURL.bind(dbManager), 'urls');
         }
         console.debug("dateId=" + dateId + " loadDate(" + (new Date(date_ms)).toString() + ") done");
     } else {
@@ -691,6 +700,72 @@ async function add_urls(urls, date_ms, dateId) {
     }
 
     await loadDate(date_ms - DAY, dateId + 1);
+}
+
+// --- Crawl batching -------------------------------------------------------
+//
+// The startup crawl writes tens of thousands of rows. One transaction per row
+// made it slow enough that the service worker was usually recycled before it
+// finished — and a restart begins the crawl again from scratch, so it could
+// never get through a large history at all. Rows now accumulate and go in a
+// single transaction per ~1000.
+const VISIT_FLUSH_SIZE = 1000;
+var visitBatch = [];
+var urlBatch = [];
+
+/**
+ * Write `batch` with `writeAll`, falling back to `writeOne` per record.
+ *
+ * A single bad record aborts the whole transaction, so a plain batch would let
+ * it take its siblings down with it — the per-row loop never did that.
+ */
+async function writeBatch(batch, writeAll, writeOne, label) {
+    try {
+        await writeAll(batch);
+    } catch (error) {
+        console.warn(label + ': batch write failed, retrying one by one', error);
+        for (const record of batch) {
+            try {
+                await writeOne(record);
+            } catch (e) {
+                console.error(label + ': giving up on a record', e);
+            }
+        }
+    }
+}
+
+/** Commit everything accumulated so far. Safe to call when both are empty. */
+async function flushCrawlBatch() {
+    const visits = visitBatch;
+    const urls = urlBatch;
+    visitBatch = [];
+    urlBatch = [];
+
+    if (visits.length > 0) {
+        await writeBatch(visits,
+            dbManager.putVisitItems.bind(dbManager),
+            dbManager.putVisitItem.bind(dbManager), 'visitItems');
+    }
+    if (urls.length > 0) {
+        await writeBatch(urls,
+            dbManager.putURLs.bind(dbManager),
+            dbManager.putURL.bind(dbManager), 'urls');
+    }
+}
+
+// The badge was being updated once per URL — thousands of times per crawl.
+// Throttle it, but let the caller force the final write through so the badge
+// always ends up cleared.
+const BADGE_INTERVAL_MS = 500;
+var _badgeAt = 0;
+var _badgeText = null;
+
+function setBadge(text, force) {
+    const now = Date.now();
+    if (!force && text === _badgeText && now - _badgeAt < BADGE_INTERVAL_MS) return;
+    _badgeAt = now;
+    _badgeText = text;
+    chrome.action.setBadgeText({ text: text });
 }
 
 // Load history function
@@ -712,7 +787,7 @@ function loadHistory() {
 // Process visits - async/await refactored from getVisits/add_history/update_urls
 async function processVisits() {
     for (let urls_p = 0; urls_p < urls_wait_load.length && urls_p < MAX; urls_p++) {
-        chrome.action.setBadgeText({ text: (urls_wait_load.length - urls_p).toString() });
+        setBadge((urls_wait_load.length - urls_p).toString());
 
         const url_item = urls_wait_load[urls_p];
 
@@ -751,33 +826,26 @@ async function processVisits() {
 
             if (refer == undefined) refer = 0;
 
-            try {
-                await dbManager.putVisitItem({
-                    visitId: v.visitId,
-                    referringVisitId: refer,
-                    url: url_item.url,
-                    visitTime: v.visitTime,
-                    title: url_item.title,
-                    transition: transition,
-                });
-                // console.debug("Success :) " + refer + " -> " + v.visitId + " [" + url_item.visitCount + "] " + url_item.url);
-            } catch (error) {
-                console.error("Error :( [" + v.visitId + "] " + url_item.url, error);
-            }
+            visitBatch.push({
+                visitId: v.visitId,
+                referringVisitId: refer,
+                url: url_item.url,
+                visitTime: v.visitTime,
+                title: url_item.title,
+                transition: transition,
+            });
+            if (visitBatch.length >= VISIT_FLUSH_SIZE) await flushCrawlBatch();
         }
 
         // Update URL record (always with first visit time, matching original behavior)
         url_item.loadfrom = loadfrom;
         url_item.loadto = h[0].visitTime;
-
-        try {
-            await dbManager.putURL(url_item);
-        } catch (error) {
-            console.error("update_urls Error :(", error);
-        }
+        urlBatch.push(url_item);
+        if (urlBatch.length >= VISIT_FLUSH_SIZE) await flushCrawlBatch();
     }
 
-    chrome.action.setBadgeText({ text: "" });
+    await flushCrawlBatch();
+    setBadge('', true); // forced: the badge must end up cleared
     console.debug("getVisits() done.");
 }
 

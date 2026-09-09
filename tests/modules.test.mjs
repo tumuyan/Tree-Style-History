@@ -1308,6 +1308,74 @@ test('deleteHistoryItem("range") refuses a range parsed from the wrong field ord
         'a malformed range must never reach deleteRange()');
 });
 
+// ---------------------------------------------------------------------------
+// The chunked render loop
+//
+// history() draws through a setInterval that runs until every item is placed.
+// It used to draw exactly one item per tick, and to look each item's group up
+// with three querySelector() calls. Both were replaced (a time budget per tick,
+// and a host -> group Map), and neither change is visible from the outside if
+// it merely renders the same result — so the result has to be asserted.
+// ---------------------------------------------------------------------------
+
+test('history() renders every item into its own host group', async (t) => {
+    const historyCore = await importModule('modules/history-core.js');
+
+    restoreStorage(t, ['rh-group', 'rh-orderby', 'rh-order', 'rh-date', 'rh-timeformat']);
+    localStorage['rh-group'] = 'yes';
+    localStorage['rh-orderby'] = 'time';
+    localStorage['rh-order'] = 'desc';
+    localStorage['rh-date'] = 'yyyy/mm/dd';
+    localStorage['rh-timeformat'] = '24';
+
+    // Unusual hosts: earlier tests configure filtered domains, and a leftover
+    // entry would silently drop items here.
+    const into = dom.el('rh-views-insert');
+    into.textContent = ''; // clears children, as assignining textContent does
+    into.style.display = 'block';
+    dom.el('rh-views-search-insert').style.display = 'none';
+    dom.el('rh-search');
+    dom.el('delete-range-one');
+    dom.el('delete-range-two');
+    dom.el('master-check-all');
+    dom.el('calendar-total-value');
+    dom.el('alert-holder').style.display = 'block';
+    dom.el('alert-holder-loading');
+    dom.setOptions('rh-what', ['current', 'all'], 'current');
+
+    const now = new Date();
+    const items = [
+        { id: '1', url: 'https://alpha.test/1', title: 'A1', visitCount: 1, lastVisitTime: now.getTime() - 3600000 },
+        { id: '2', url: 'https://alpha.test/2', title: 'A2', visitCount: 1, lastVisitTime: now.getTime() - 3500000 },
+        { id: '3', url: 'https://beta.test/1', title: 'B1', visitCount: 1, lastVisitTime: now.getTime() - 3400000 },
+    ];
+    withChromeApi({ history: { search: (_q, cb) => cb(items) } }, () => {
+        historyCore.history('current', '');
+    });
+
+    // The loop is a setInterval: give it a few ticks to finish.
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    assert.equal(dom.el('calendar-total-value').textContent, '3', 'every item counted');
+
+    const kids = into.children;
+    const titles = kids.filter((c) => c.className.includes('group-title'));
+    const holders = kids.filter((c) => c.className.includes('group-holder'));
+    assert.equal(titles.length, 2, 'one group title per host');
+    assert.equal(holders.length, 2, 'one group holder per host');
+
+    // The point of the change: items go into their host's holder rather than
+    // being appended at the top level, and none of them are dropped.
+    const placed = holders.reduce((n, h) => n + h.children.length, 0);
+    assert.equal(placed, 3, 'every item landed inside a group holder');
+
+    // Keyed by host, not by position: the list is drawn newest first, so which
+    // group comes first depends on the data.
+    const byHost = new Map(holders.map((h) => [h.getAttribute('rel'), h.children.length]));
+    assert.equal(byHost.get('alpha.test'), 2, 'alpha.test holds its two items');
+    assert.equal(byHost.get('beta.test'), 1, 'beta.test holds its one item');
+});
+
 test('getMoreItems survives a group checkbox that is not inside a group title', async (t) => {
     const historyCore = await importModule('modules/history-core.js');
     const input = seedOrphanCheckbox(t);

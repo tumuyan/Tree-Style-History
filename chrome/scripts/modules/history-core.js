@@ -8,6 +8,14 @@ import { filtUrl } from './config.js';
 // `history` from here, and going through it closed an import cycle.
 import { save_calendar_storage2 } from './shared/calendar-storage.js';
 
+// How long one tick of the chunked render loop may run before yielding.
+//
+// The loop drew exactly one item per tick, which for a 1000-item list took
+// about five seconds — the browser clamps setInterval() to ~4ms, so the tick
+// rate was the limit, not the work. A budget lets one tick draw as many items
+// as fit while staying short enough not to freeze the page.
+const RENDER_BUDGET_MS = 8;
+
 // Module-level variables
 var selectedItem;
 var prh;
@@ -192,21 +200,21 @@ function history(w, q) {
 
                 var ibcv = 'grey';
                 var Counter = { counter: 0 };
+                // host -> { title, holder }, filled as groups are created. The
+                // render loop used to look the group up with three
+                // querySelector() calls per item — each one a full scan of the
+                // container — which made rendering O(items x hosts). The
+                // container was cleared just above, so this starts empty.
+                var groups = new Map();
 
                 if (grp == 'yes') {
                     prh = setInterval(function () {
                         var thisc = Counter;
-                        if (thisc.counter == rha.length) {
-                            clearInterval(prh);
-                            alertLoadingHistory(true);
-                            var input = document.body.querySelector('#rh-bar-uione input');
-                            if (input) input.checked = false;
-                            selectedItem = undefined;
-                            if ($$('#' + into + ' div.group-title').length > 0) { toggleGroup($$('#' + into + ' div.group-title')[0].getAttribute('title')); }
-                            $('master-check-all').removeAttribute('disabled');
-                        } else {
+                        var deadline = Date.now() + RENDER_BUDGET_MS;
+                        while (thisc.counter < rha.length && Date.now() < deadline) {
                             if (rha[thisc.counter] !== undefined) {
-                                if (!$(into).querySelector('div[rel="' + CSS.escape(rha[thisc.counter].host) + '"]')) {
+                                var hostKey = rha[thisc.counter].host;
+                                if (!groups.has(hostKey)) {
                                     var toggleid = 'toggle-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                                     var moreid = 'more-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                                     var errorid = 'error-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
@@ -239,6 +247,7 @@ function history(w, q) {
                                     });
                                     var holderDiv = createElement('div', { 'class': 'group-holder', rel: rha[thisc.counter].host, styles: { 'display': 'none' } });
                                     $(into).appendChild(holderDiv);
+                                    groups.set(hostKey, { title: groupDiv, holder: holderDiv });
                                     if (ibcv == 'white') {
                                         ibcv = 'grey';
                                     } else {
@@ -270,7 +279,12 @@ function history(w, q) {
                                 item += '<span class="title" title="' + urlAttr + '" rel="' + tipAttr + '">' + titleText + '</span>';
                                 item += '</a>';
                                 item += '</div>';
-                                var parentHolder = $(into).querySelector('div.item-holder[title="' + CSS.escape(rha[thisc.counter].host) + '"]');
+                                // The group title carries class `item-holder`
+                                // and title=host; the holder carries rel=host.
+                                // Both were built above, so the Map answers
+                                // what used to be two container scans.
+                                var group = groups.get(hostKey);
+                                var parentHolder = group ? group.title : null;
                                 var relVal = parentHolder ? parentHolder.getAttribute('rel') : ibcv;
                                 var bgColor = parentHolder ? parentHolder.style.backgroundColor : '';
                                 var itemHolder = createElement('div', {
@@ -281,7 +295,7 @@ function history(w, q) {
                                     }
                                 });
                                 itemHolder.innerHTML = item + '<div class="clearitem" style="clear:both;"></div>';
-                                var groupHolder = $(into).querySelector('div[rel="' + CSS.escape(rha[thisc.counter].host) + '"]');
+                                var groupHolder = group ? group.holder : null;
                                 if (groupHolder) {
                                     groupHolder.appendChild(itemHolder);
                                 } else {
@@ -291,13 +305,9 @@ function history(w, q) {
                                     selectHistoryItem(this, 'single');
                                 });
                             }
+                            thisc.counter++;
                         }
-                        thisc.counter++;
-                    }.bind(Counter), 5);
-                } else if (grp == 'no') {
-                    prh = setInterval(function () {
-                        var thisc = Counter;
-                        if (thisc.counter == rha.length) {
+                        if (thisc.counter >= rha.length) {
                             clearInterval(prh);
                             alertLoadingHistory(true);
                             var input = document.body.querySelector('#rh-bar-uione input');
@@ -305,7 +315,13 @@ function history(w, q) {
                             selectedItem = undefined;
                             if ($$('#' + into + ' div.group-title').length > 0) { toggleGroup($$('#' + into + ' div.group-title')[0].getAttribute('title')); }
                             $('master-check-all').removeAttribute('disabled');
-                        } else {
+                        }
+                    }.bind(Counter), 5);
+                } else if (grp == 'no') {
+                    prh = setInterval(function () {
+                        var thisc = Counter;
+                        var deadline = Date.now() + RENDER_BUDGET_MS;
+                        while (thisc.counter < rha.length && Date.now() < deadline) {
                             if (rha[thisc.counter] !== undefined) {
                                 if (w == 'search' && (sw == 'all' || sw == 'recent')) {
                                     // rha[thisc.counter].time = '- - : - -';
@@ -343,8 +359,17 @@ function history(w, q) {
                                 var _faviconFallbackUrl = getFaviconOnerror(rha[thisc.counter].url);
                                 setupFaviconElement($(errorid), faviconUrl, _faviconFallbackUrl);
                             }
+                            thisc.counter++;
                         }
-                        thisc.counter++;
+                        if (thisc.counter >= rha.length) {
+                            clearInterval(prh);
+                            alertLoadingHistory(true);
+                            var input = document.body.querySelector('#rh-bar-uione input');
+                            if (input) input.checked = false;
+                            selectedItem = undefined;
+                            if ($$('#' + into + ' div.group-title').length > 0) { toggleGroup($$('#' + into + ' div.group-title')[0].getAttribute('title')); }
+                            $('master-check-all').removeAttribute('disabled');
+                        }
                     }.bind(Counter), 5);
                 }
                 alertLoadingHistory(true);

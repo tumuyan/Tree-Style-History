@@ -5,7 +5,7 @@
 状态图例：`[ ]` 未开始 · `[x]` 已完成 · `[-]` 暂缓
 
 > **护栏已就位**：`npm run check`（ESLint + `node:test` + 4 个校验脚本）是唯一准入闸门，约 5 秒跑完，CI 强制执行。
-> 当前基线：**lint 0 error / 140 warning · 133 测试 · 133 通过 · 0 skip · 0 失败**（另：e2e 9 测试 · 9 通过）。
+> 当前基线：**lint 0 error / 140 warning · 137 测试 · 137 通过 · 0 skip · 0 失败**（另：e2e 9 测试 · 9 通过）。
 > 2 个 skip 已在「第 3 批」消除（`rh-list-order` 硬编码与失效的 `treeOptionsDetail`）。**当前无 skip**；后续若需标注已知缺陷，沿用 `test(name, { skip: '原因' }, fn)` 写法（函数体内写期望行为，修完去掉 skip）。
 
 ---
@@ -395,6 +395,28 @@
 - [x] **测试 fixture 污染共享状态**：`seedOrphanCheckbox()` 写 `rh-group`、`seedRangeInputs()` 写 `rh-date`，都不还原，而这个文件的 `localStorage` / `dom` 是全测试共享的。新增 `restoreStorage(t, keys)`，用 `t.after()` 还原；已用探针确认 6 次清理全部执行（3×`rh-group` + 3×`rh-date`）。
 - [x] **`DATE_ADVANCE` 守卫的边界写进注释**：只覆盖 `x = x + DAY`，**不**覆盖 `x += DAY`——后者在数字上是普通算术且常见，纳入即噪音。写清楚，避免后人误以为守卫是全覆盖。
 
+### 第 6 批（已完成）：抓取与渲染的三处性能问题
+
+- [x] **启动抓取改为批量事务**（`chrome/scripts/db-manager.js`、`background-sw.js`）
+  - 原状：`add_urls()` 与 `processVisits()` 对每条记录 `await` 一次 `putURL` / `putVisitItem`，每次开一个 `readwrite` 事务。几万条 = 几万次事务提交，抓取慢到 SW 常在跑完前就被回收——而重启又要从头再来，大历史量根本抓不完。
+  - 已做：`dbManager` 新增 `putVisitItems()` / `putURLs()`，共用 `putAll()` 一个事务写整批；SW 侧累积到 `VISIT_FLUSH_SIZE`（1000）或结束时 flush。
+  - **失败降级**：整批一个事务意味着一条坏记录会中止整批。`writeBatch()` 捕获后退化为逐条写入，保住原循环「一条坏记录不牵连兄弟」的语义。
+  - 测试：`tests/db-manager.test.mjs` 新增 3 条（整批一个事务、空批不开事务、`urls` 同样）。fake IndexedDB 补上 `objectStore()` / `put()` 与 `oncomplete`，事务计数是断言的依据。
+- [x] **徽章节流**（`chrome/scripts/background-sw.js`）
+  - 原状：`processVisits()` 每处理一个 URL 调一次 `chrome.action.setBadgeText`，一次抓取调用上万次。
+  - 已做：`setBadge()` 按 500ms 节流，末尾那次用 `force` 强制落地，保证徽章最终被清空。
+- [x] **分片渲染：按时间预算批量 + 分组查表**（`chrome/scripts/modules/history-core.js`、`bookmark.js`）
+  - 原状一：每 tick 只画一条。浏览器把 `setInterval` 下限钳到 ~4ms，于是 1000 条要 5 秒——瓶颈是 tick 频率而不是工作量。
+  - 已做：改为 `while (counter < len && Date.now() < deadline)`，`RENDER_BUDGET_MS = 8`。原 `if/else` 改成 `while` + 收尾 `if`，**缩进层级不变**，diff 只落在首尾几行。
+  - 原状二：每条 item 用 `querySelector` 找组 3 次（history-core）/ 5 次（bookmark），每次都是全容器扫描 → 渲染是 O(条数 × 主机数)。
+  - 已做：`groups` Map（host → `{ title, holder, label }`）在建组时填充，渲染前容器已被 `textContent = ''` 清空所以 Map 从空开始是安全的。渲染循环内的 `querySelector` 归零。
+  - **测试**（此前渲染层无覆盖，本次补上）：`tests/modules.test.mjs` 的 `history() renders every item into its own host group` 真跑一遍渲染循环（喂 3 条两个 host，等几个 tick），断言组的数量、每条都落进对应 holder、以及按 host 分条数（不依赖顺序——列表是倒序画的）。**变异验证**：把 `groups.set(...)` 换成空操作，测试立刻红。
+  - `bookmark.js` 无单测（函数在 `DOMContentLoaded` 闭包内），靠 e2e 的 `bookmark.html renders a bookmark title verbatim in grouped mode` 兜底——它确实会渲染分组。
+- [x] **`mostVisited` alarm 降频 3 → 30 分钟**（`chrome/scripts/background-sw.js`）
+  - 原状：这个周期比看上去贵得多。每次 alarm 唤醒 SW，而醒来的 SW 会**重跑整个 `initializeStorageState()`**——包括 `loadDate()` 的历史抓取——因为 `_storageInitialized` 是模块级变量，每个新 worker 都是 false。3 分钟一次相当于每小时几十次完整重新初始化。
+  - 已做：改为 30 分钟。「最常访问」变化很慢，半小时足够。这也顺带缓解了第 4 批要解决的状态丢失问题。
+  - 未做（留给后续）：更彻底的方案是去掉 alarm、popup 打开时按需刷新；以及 `mostVisitedInit()` 目前仍对 28 天全量 `sort()` 只取前 45——每 30 分钟一次尚可接受，暂不改（改成 top-K 会漏掉「很久没访问但总次数高」的站点）。
+
 ## 建议执行顺序
 
 | 批次 | 内容 | 理由 |
@@ -407,7 +429,8 @@
 | ✅ 第 3 批 | `rh-list-order` 硬编码、失效的 `treeOptionsDetail`、`popup.js` 空值保护、SW `callFunction` 收紧，外加 5 项小缺陷（TDZ / 变量遮蔽 / MV2 死代码 / 重复游标 / 250ms 轮询） | **已完成**。2 个 skip 全部消除，当前 0 skip |
 | 第 4 批 | SW 状态持久化（`chrome.storage.session`）、启动抓取并发分片与断点续传 | 涉及 MV3 架构调整，需先讨论方案。**树状结构的可靠性取决于此** |
 | ✅ 第 5 批 | `dbManager` 缓存连接未作废、`date = date + DAY` 三处、`minimum_chrome_version` 对齐、`closest()` 与按范围删除的输入校验 | **已完成**。13 条新测试 + 3 条静态守卫，均先红后绿。插队在第 4 批之前：都是小改动且已有测试兜底 |
-| 第 6 批 | `addCloseRedord` 命名与 id 语义、zTree `eval` 风险；清理 lint 警告存量 → `--max-warnings 0`；模块化收尾、技术栈统一 | 长期收益，可渐进推进 |
+| ✅ 第 6 批 | 抓取改批量事务、徽章节流、分片渲染按预算批量 + 分组查表、`mostVisited` alarm 降频 | **已完成**。4 条新测试（含首个真正跑渲染循环的用例），均先红后绿 |
+| 第 7 批 | `addCloseRedord` 命名与 id 语义、zTree `eval` 风险；清理 lint 警告存量 → `--max-warnings 0`；模块化收尾、技术栈统一 | 长期收益，可渐进推进 |
 
 > **插队说明**：第 1.5 / 1.6 / 1.7 批是顺手做掉的——它们都由新写的测试或 review 直接暴露，且改动小、有 skip 测试兜底，不值得单独排队。
 > 1.5 = `filtUrl` 子串误伤 + `te` 未初始化 + `addList` 空格；1.6 = 选项页 `#mvlist` 缺失（**会导致选项页打不开**）+ 其附带的属性注入；1.7 = `filtUrl` 降段死分支 + `www` 子域过滤。

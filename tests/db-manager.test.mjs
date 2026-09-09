@@ -25,10 +25,17 @@ class FakeDatabase {
         const stores = ['VisitItem', 'urls', 'closed'];
         this.objectStoreNames = { contains: (n) => stores.includes(n) };
         this.transactions = 0;
+        this.written = new Map(); // store name -> records put
     }
 
     close() {
         this.closed = true;
+    }
+
+    /** Records written to `name`, in order. */
+    stored(name) {
+        if (!this.written.has(name)) this.written.set(name, []);
+        return this.written.get(name);
     }
 
     transaction() {
@@ -38,7 +45,14 @@ class FakeDatabase {
             throw err;
         }
         this.transactions++;
-        return {};
+        const db = this;
+        const tx = { oncomplete: null, onerror: null, onabort: null };
+        tx.objectStore = (name) => ({
+            put(record) { db.stored(name).push(record); return {}; },
+        });
+        // Completes asynchronously, like a real transaction.
+        setTimeout(() => { if (tx.oncomplete) tx.oncomplete(); }, 0);
+        return tx;
     }
 }
 
@@ -109,6 +123,55 @@ test('deleteDB() invalidates the cached connection', async () => {
     // The whole point: writes after "clear data" have to land on a live connection.
     assert.doesNotThrow(() => second.transaction(['VisitItem'], 'readwrite'));
     assert.throws(() => first.transaction(['VisitItem'], 'readwrite'), { name: 'InvalidStateError' });
+});
+
+// ---------------------------------------------------------------------------
+// Batch writes
+//
+// The startup crawl writes tens of thousands of visit items. One transaction
+// per record is the difference between seconds and minutes, so the batch API
+// is not a convenience — it is the only way the crawl finishes before the
+// service worker is recycled.
+// ---------------------------------------------------------------------------
+
+test('putVisitItems writes a whole batch in one transaction', async () => {
+    const { dbManager, state } = loadDbManager();
+    await dbManager.init();
+    const before = state.db.transactions;
+
+    const items = [
+        { visitId: 1, url: 'https://a/' },
+        { visitId: 2, url: 'https://b/' },
+        { visitId: 3, url: 'https://c/' },
+    ];
+    await dbManager.putVisitItems(items);
+
+    assert.equal(state.db.transactions - before, 1,
+        'a batch must not cost one transaction per record');
+    assert.deepEqual(state.db.stored('VisitItem'), items);
+});
+
+test('putURLs writes a whole batch in one transaction', async () => {
+    const { dbManager, state } = loadDbManager();
+    await dbManager.init();
+    const before = state.db.transactions;
+
+    const records = [{ id: 'a', url: 'https://a/' }, { id: 'b', url: 'https://b/' }];
+    await dbManager.putURLs(records);
+
+    assert.equal(state.db.transactions - before, 1);
+    assert.deepEqual(state.db.stored('urls'), records);
+});
+
+test('an empty batch resolves without opening a transaction', async () => {
+    const { dbManager, state } = loadDbManager();
+    await dbManager.init();
+    const before = state.db.transactions;
+
+    await dbManager.putVisitItems([]);
+    await dbManager.putURLs([]);
+
+    assert.equal(state.db.transactions, before, 'no work means no transaction');
 });
 
 test('close() invalidates the cached connection too', async () => {

@@ -1,3 +1,9 @@
+// How long one tick of the chunked render loop may run before yielding. One
+// item per tick rendered a long bookmark list at the browser's ~4ms timer
+// floor, not at the speed the work actually takes. Keep in sync with the same
+// constant in modules/history-core.js.
+const RENDER_BUDGET_MS = 8;
+
 document.addEventListener('DOMContentLoaded', function () {
     onStorageReady(function () {
 
@@ -393,25 +399,20 @@ document.addEventListener('DOMContentLoaded', function () {
 
             var ibcv = 'grey';
             var Counter = { counter: 0 };
+            // host -> { title, holder, label }, filled as groups are created.
+            // Every item used to cost five querySelector() calls, each one a
+            // full scan of the container. The container was cleared just above,
+            // so this starts empty.
+            var groups = new Map();
 
             if (grp == 'yes') {  // 注意此处回调耗时操作
                 prh = setInterval((function () {
                     var thisc = this;
-                    if (thisc.counter == rha.length) {
-                        clearInterval(prh);
-                        //isBookmarked('#rh-views .item .link');
-                        alertLoadingHistory(true);
-                        var uioneInput = document.body.querySelector('#rh-bar-uione input');
-                        if (uioneInput) uioneInput.checked = false;
-                        // Tips removed - native title provides tooltip
-                        var gts = $$('#' + into + ' div.group-title');
-                        if (gts.length > 0) { toggleGroup(gts[0].getAttribute('title')); }
-                        $('master-check-all').removeAttribute('disabled');
-                    } else {
-                        
+                    var deadline = Date.now() + RENDER_BUDGET_MS;
+                    while (thisc.counter < rha.length && Date.now() < deadline) {
                         var host = rha[thisc.counter].host;
                         if (host !== undefined) {
-                            if (!$(into).querySelector('div[rel="' + CSS.escape(host) + '"]')) {
+                            if (!groups.has(host)) {
                                 var toggleid = 'toggle-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                                 var moreid = 'more-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
                                 var errorid = 'error-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
@@ -444,6 +445,11 @@ document.addEventListener('DOMContentLoaded', function () {
                                 })
                                 var groupHolder = createElement('div', { 'class': 'group-holder', rel: host, styles: { 'display': 'none' } });
                                 $(into).appendChild(groupHolder);
+                                groups.set(host, {
+                                    title: groupEl,
+                                    holder: groupHolder,
+                                    label: groupEl.querySelector('label.group-title-toggle-count')
+                                });
                                 if (ibcv == 'white') {
                                     ibcv = 'grey';
                                 } else {
@@ -491,20 +497,24 @@ document.addEventListener('DOMContentLoaded', function () {
                             item += '<span class="title" title="' + escapedTooltip + '" rel="' +  escapedTimeAttr +  '">' + escapedDisplayTitle + '</span>';
                             item += '</a>';
                             item += '</div>';
-                            var existingHolder = $(into).querySelector('div.item-holder[title="' + CSS.escape(host) + '"]');
+                            // Built above, so the Map answers what used to be
+                            // four container scans per item.
+                            var group = groups.get(host);
+                            var existingHolder = group ? group.title : null;
                             var itemHolder = createElement('div', {
-                                'rel': existingHolder.getAttribute('rel'),
+                                'rel': existingHolder ? existingHolder.getAttribute('rel') : ibcv,
                                 'class': 'item-holder',
                                 'data-bookmark-id': rha[thisc.counter].bookmarkId,
                                 'data-bookmark-title': rha[thisc.counter].originalTitle,
                                 'data-bookmark-url': rha[thisc.counter].url,
                                 styles: {
-                                    'background-color': getStyle(existingHolder, 'background-color')
+                                    'background-color': existingHolder ? getStyle(existingHolder, 'background-color') : ''
                                 }
                             });
                             itemHolder.innerHTML = item + '<div class="clearitem" style="clear:both;"></div>';
-                            var groupDiv = $(into).querySelector('div[rel="' + CSS.escape(host) + '"]');
-                            groupDiv.appendChild(itemHolder);
+                            var groupDiv = group ? group.holder : null;
+                            if (groupDiv) groupDiv.appendChild(itemHolder);
+                            else $(into).appendChild(itemHolder);
                             var linkElement = itemHolder.querySelector('a.link');
                             if (linkElement) {
                                 linkElement.addEventListener('click', function (e) {
@@ -526,18 +536,14 @@ document.addEventListener('DOMContentLoaded', function () {
                                 selectBookmarkItem(this, 'single');
                             });
 
-                            var size = $(into).querySelector('div[rel="' + CSS.escape(host) + '"]').childNodes.length;
-                            var label = $(into).querySelector('label[rel="' + CSS.escape(host) + '"]');
-                            if (label != undefined)
+                            var size = groupDiv ? groupDiv.childNodes.length : 0;
+                            var label = group ? group.label : null;
+                            if (label != undefined && label != null)
                                 label.textContent = size;
                         }
+                        thisc.counter++;
                     }
-                    thisc.counter++;
-                }).bind(Counter), 5);
-            } else if (grp == 'no') {
-                prh = setInterval((function () {
-                    var thisc = this;
-                    if (thisc.counter == rha.length) {
+                    if (thisc.counter >= rha.length) {
                         clearInterval(prh);
                         //isBookmarked('#rh-views .item .link');
                         alertLoadingHistory(true);
@@ -547,7 +553,13 @@ document.addEventListener('DOMContentLoaded', function () {
                         var gts = $$('#' + into + ' div.group-title');
                         if (gts.length > 0) { toggleGroup(gts[0].getAttribute('title')); }
                         $('master-check-all').removeAttribute('disabled');
-                    } else {
+                    }
+                }).bind(Counter), 5);
+            } else if (grp == 'no') {
+                prh = setInterval((function () {
+                    var thisc = this;
+                    var deadline = Date.now() + RENDER_BUDGET_MS;
+                    while (thisc.counter < rha.length && Date.now() < deadline) {
                         if (rha[thisc.counter] !== undefined) {
 
                             var selectid = 'select-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
@@ -632,8 +644,19 @@ document.addEventListener('DOMContentLoaded', function () {
                             var _faviconFallbackUrl = getFaviconOnerror(rha[thisc.counter].url);
                             setupFaviconElement($(errorid), faviconUrl, _faviconFallbackUrl);
                         }
+                        thisc.counter++;
                     }
-                    thisc.counter++;
+                    if (thisc.counter >= rha.length) {
+                        clearInterval(prh);
+                        //isBookmarked('#rh-views .item .link');
+                        alertLoadingHistory(true);
+                        var uioneInput = document.body.querySelector('#rh-bar-uione input');
+                        if (uioneInput) uioneInput.checked = false;
+                        // Tips removed - native title provides tooltip
+                        var gts = $$('#' + into + ' div.group-title');
+                        if (gts.length > 0) { toggleGroup(gts[0].getAttribute('title')); }
+                        $('master-check-all').removeAttribute('disabled');
+                    }
                 }).bind(Counter), 5);
             }
             alertLoadingHistory(true);

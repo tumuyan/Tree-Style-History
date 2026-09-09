@@ -202,6 +202,42 @@
             });
         }
 
+        // Batch write: every record goes into ONE transaction. The startup
+        // crawl writes tens of thousands of visit items, and a transaction per
+        // record is the difference between seconds and minutes — each commit is
+        // a durable write to the profile. It also keeps the service worker from
+        // being recycled mid-crawl.
+        putVisitItems(visitItems) {
+            return this.putAll('VisitItem', visitItems);
+        }
+
+        putURLs(urlRecords) {
+            return this.putAll('urls', urlRecords);
+        }
+
+        putAll(storeName, records) {
+            if (!records || records.length === 0) {
+                return Promise.resolve([]);
+            }
+            return this.getDB().then(db => {
+                return new Promise((resolve, reject) => {
+                    const transaction = db.transaction([storeName], 'readwrite');
+                    const store = transaction.objectStore(storeName);
+
+                    for (const record of records) {
+                        store.put(record);
+                    }
+
+                    // Resolved from oncomplete, not from the last put(): a put
+                    // request succeeding says nothing about the transaction
+                    // having committed.
+                    transaction.oncomplete = () => resolve(records);
+                    transaction.onerror = (event) => reject(event);
+                    transaction.onabort = (event) => reject(event);
+                });
+            });
+        }
+
         // Add or update a closed tab record
         putClosedTab(closedRecord) {
             return this.getDB().then(db => {
