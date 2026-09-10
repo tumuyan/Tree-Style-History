@@ -656,6 +656,11 @@ const CHROME_API_VERSIONS = [
     { name: 'Array.prototype.toSorted()', min: 110, pattern: /\.to(Sorted|Reversed|Spliced)\s*\(/ },
     { name: 'Promise.withResolvers()', min: 119, pattern: /\bPromise\.withResolvers\s*\(/ },
     { name: 'Object.groupBy()', min: 117, pattern: /\bObject\.groupBy\s*\(/ },
+    // Session storage is the only area that survives a service worker restart
+    // without touching the disk, and the only one the tab-tracking state can
+    // be persisted to. On older Chrome the property is simply undefined, so
+    // the extension would lose the visit tree rather than fail loudly.
+    { name: 'chrome.storage.session', min: 102, pattern: /chrome\.storage\.session\b/ },
 ];
 
 test('minimum_chrome_version is a string, as Chrome parses it', () => {

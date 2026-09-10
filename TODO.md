@@ -5,7 +5,7 @@
 状态图例：`[ ]` 未开始 · `[x]` 已完成 · `[-]` 暂缓
 
 > **护栏已就位**：`npm run check`（ESLint + `node:test` + 4 个校验脚本）是唯一准入闸门，约 5 秒跑完，CI 强制执行。
-> 当前基线：**lint 0 error / 140 warning · 137 测试 · 137 通过 · 0 skip · 0 失败**（另：e2e 9 测试 · 9 通过）。
+> 当前基线：**lint 0 error / 140 warning · 150 测试 · 150 通过 · 0 skip · 0 失败**（另：e2e 9 测试 · 9 通过）。
 > 2 个 skip 已在「第 3 批」消除（`rh-list-order` 硬编码与失效的 `treeOptionsDetail`）。**当前无 skip**；后续若需标注已知缺陷，沿用 `test(name, { skip: '原因' }, fn)` 写法（函数体内写期望行为，修完去掉 skip）。
 
 ---
@@ -279,13 +279,12 @@
 
 ## P2 — 可靠性与 MV3 适配
 
-- [ ] **修复 Service Worker 重启导致跳转关系链断裂**（`chrome/scripts/background-sw.js:17-38`）
-  - 现状：`openerJson`/`tabUrlJson`/`tabUrl0Json`/`urlIdJson`/`idUrlJson`/`openedTabs`/`recentTabs` 均为内存变量，SW 空闲约 30 秒被回收后丢失，`add_tab_history()` 依赖的 `openerJson` 失效 → **点击链接产生的父子关系记不下来**，而这是本扩展的核心数据结构。
-  - 做法：周期性落盘到 `chrome.storage.session`（MV3 会话级存储，重启浏览器才清空），启动时恢复。
+- [x] **修复 Service Worker 重启导致跳转关系链断裂**（`chrome/scripts/background-sw.js`）— **已修复**（见「第 4 批」）
+  - ~~现状：`openerJson`/`tabUrlJson`/`tabUrl0Json`/`urlIdJson`/`idUrlJson`/`openedTabs`/`recentTabs` 均为内存变量，SW 空闲约 30 秒被回收后丢失，`add_tab_history()` 依赖的 `openerJson` 失效 → **点击链接产生的父子关系记不下来**。~~
+  - 已做：七个状态整体快照进 `chrome.storage.session`（1 秒防抖写，启动时 `restoreSessionState()` 恢复）；顺带补上三处**从不清理**的泄漏（关闭标签页、SW 停机期间关闭的标签页、`urlIdJson`/`idUrlJson` 无上限增长）。
 
-- [ ] **启动期抓取改为并发分片 + 断点续传**（`chrome/scripts/background-sw.js:686-755`）
-  - 现状：`processVisits()` 对 `urls_wait_load` 逐个串行 `await chrome.history.getVisits`（默认 7 天、上限 300 天，可达数万条），无进度持久化；SW 中途被杀则前功尽弃；每条都调一次 `chrome.action.setBadgeText` 未节流。
-  - 做法：`Promise.allSettled` 分片并发、游标写入 storage、徽章节流更新。
+- [x] **启动期抓取改为并发分片 + 断点续传**（`chrome/scripts/background-sw.js`）— **已修复**（见「第 4 批」）
+  - 已做：`Promise.allSettled` 每批 6 个 URL 并发；游标（末条 id + 位置 + 时间戳）写进 `chrome.storage.session`，且**只在对应批次提交之后**才推进；单条失败不再牵连同批；游标 6 小时过期即作废。（徽章节流已于第 6 批完成。）
 
 - [x] **修复 `updateClosedTabsStatus()` 重复打开游标**（`chrome/scripts/db-manager.js`）— **已修复**（见「第 3 批」）
   - ~~现状：对同一 index 调两次 `openCursor`，第二次只为挂 `onerror`。~~
@@ -358,6 +357,35 @@
 
 ---
 
+### 第 4 批（已完成）：SW 状态持久化 + 抓取并发与断点续传
+
+- [x] **七个内存状态快照进 `chrome.storage.session`**（`chrome/scripts/background-sw.js`）
+  - 原状：`openerJson`/`tabUrlJson`/`tabUrl0Json`/`urlIdJson`/`idUrlJson`/`openedTabs`/`recentTabs` 全是模块级变量。SW 每次被唤醒都会**重跑整个文件**，所以哪怕一个 tab 事件都没漏，这些值也回到空对象。后果不是"少记几条"：`urlIdJson` 是「某页面对应哪个 visitId」的唯一记录，`add_tab_history()` 靠它给新页面指认父节点，丢了之后**每次点击链接都存成根节点，树直接塌成一层列表**。
+  - 做法：新增 `snapshotSessionState()` / `saveSessionState()` / `restoreSessionState()`，写操作 1 秒防抖（`scheduleSessionSave()`），启动时在 `initializeExistingTabs()` **之前**恢复——后者只能从当前打开的标签页重建 `openedTabs`/`recentTabs`，补不回 visitId 映射，也补不回激活顺序。
+  - 为什么用 session 而不是 local：内存态、浏览器退出即清、且每次更新不落盘（tab 事件很密）。
+  - 带版本号 `SESSION_STATE_VERSION`：旧版本写下的快照形状可能不同，宁可冷启动也不能半恢复。
+- [x] **三处从不清理的泄漏**（同一批顺带）
+  - `closedTab()`：此前只从 `recentTabs` 摘掉 id，`openedTabs`/`tabUrlJson`/`tabUrl0Json`/`openerJson` 里按 tab id 索引的条目**永不删除**，浏览器开多久就涨多久。
+  - `initializeExistingTabs()`：SW 停机期间关闭的标签页收不到 `onRemoved`，现在启动时按 `chrome.tabs.query({})` 的存活集合统一剪掉（四个映射 + `recentTabs`）。`recentTabs` 改为先查重再 `unshift`，否则恢复出来的 id 会被重复插入。
+  - `urlIdJson`/`idUrlJson`：新增 `trimVisitIdMaps()`，超过 `SESSION_ID_LIMIT`（1000）按插入顺序 FIFO 淘汰，两个映射成对删除。既保住 session 配额（Chrome 102–111 只有 1MB，一条长 URL 就近 1KB），也修掉了原本在**单个 SW 生命周期内**同样无上限增长的问题。
+- [x] **抓取改分片并发 + 断点续传**（`processVisits()`）
+  - 原状：逐个 `await chrome.history.getVisits`，几万条就是几万次串行往返；SW 中途被杀则**从零重来**，大历史量永远抓不完。
+  - 做法：抽出 `crawlUrlVisits()`，外层 `Promise.allSettled(chunk.map(...))`，`VISIT_CONCURRENCY = 6`。用 `allSettled` 而非 `all`：一个 URL 抛错不能带走同批其它 URL，也不该让整个抓取挂掉。
+  - 游标 `crawl-cursor` 存 `{id, pos, at}`：`urls_wait_load` 每次启动都从数据库重算，所以**两个都要存**——`id` 稳定且精确（找不到时说明它已抓完，`pos` 兜底），`pos` 用于 id 已不在表中的情况，漂移量仅为它前面被移除的条目数，最坏是重抓几条。
+  - **游标只在对应批次提交之后推进**：先 `flushCrawlBatch()` 再 `saveCrawlCursor()`，否则游标跑在数据前面会永久跳过这些 URL。抓完 `clearCrawlCursor()`。
+  - 6 小时 TTL：跨时段的新访问已经改变了列表结构，过期游标宁可作废。
+  - 删掉 `var MAX = Number.MAX_VALUE - 1`（唯一用途是那个循环的上界，且恒为真）。
+- [x] **`minimum_chrome_version` 96 → 102**：`chrome.storage.session` 是 Chrome 102+ 才有，且旧版本上该属性**只是 undefined**——不加守卫的话表现是"树慢慢变平"，不会有任何报错。
+  - 已在 `CHROME_API_VERSIONS` 表登记（**变异验证**：改回 96 → `minimum_chrome_version covers the newest API the code uses` 报红）。
+- [x] **新增 `tests/background-sw.test.mjs`（13 条）**
+  - 沿用 `db-manager.test.mjs` 的 `node:vm` 手法：classic script 只产出全局，用假 `chrome` 驱动真实控制流。**不加载** `storage-adapter.js`（换成可手动触发的 `onStorageReady` 队列，测试才能决定何时 boot，而不是和自己的断言赛跑）与 `db-manager.js`（换成记账桩）；`background-utils.js` **真实加载**——它现在是生成文件，而 SW 是它唯一的消费者。
+  - 覆盖：一个 worker 写入 → 下一个 worker 读出（含 `openerJson` 与激活顺序）、空会话冷启动不报错、**快照超配额时降级只写不可重建的部分**、**session 调用同步抛错被 catch 而非冒泡**、关闭标签页清干净、停机期间关闭的标签页被剪掉、映射裁剪（直接函数调用 + 走 `add_tab_history()` 的写入路径两条）、抓取并发（断言 `maxInFlight >= 2`）、单条失败不牵连、游标续传、**长抓取中途落检查点**、过期游标作废。
+  - 两个实现细节：①`const` 不会成为 vm context 的属性，所以 `SESSION_ID_LIMIT`/`CRAWL_CHECKPOINT_URLS` 从源码里正则读回来，避免测试与实现各写一份；②vm 里建的数组原型属于另一个 realm，`deepEqual` 会报"结构相同但引用不等"，用 `Array.from()` 拉回本 realm。
+  - 全部经变异验证（每次至少 1 条变红，还原后全绿）：不恢复、不清理 `tabUrlJson`、不裁剪、并发改回 1、不读游标、不清理游标、去掉 TTL、启动不剪枝、去掉检查点、去掉配额降级、把 5 处 `Promise.resolve().then(() => area.…)` 改回 `Promise.resolve(area.…)`。
+  - **「去掉检查点」这条差点漏掉**：最初的抓取用例只有 3–4 个 URL，远不到 500 的检查点间隔，所以即使把 checkpoint 整段删掉也是全绿。补了一条 600 URL 的用例才暴露出来——按批大小做检查点本就几乎不会触发（`crawlUrlVisits()` 自己会先 flush 清空批次）。
+- [x] **评审收尾**：`saveSessionState()` 超配额时改为丢掉 `openedTabs`/`recentTabs` 重试一次（保住 `urlIdJson`/`idUrlJson`，那是唯一无法重建的部分）；session 的 `get`/`set`/`remove` 全部改走 `Promise.resolve().then(() => …)`，否则不可克隆值触发的**同步**抛错会在 `.catch()` 挂上之前就逃逸；`restoreSessionState().then(…)` 补 `.catch()`（剪枝逻辑抛错否则变成 unhandled rejection）。
+- [x] **行为变更备忘**：`closedTab()` 删除 `openedTabs[id]`（此前保留条目并写 `.time`，无任何消费方读它）。提交信息里需点明。
+
 ### 第 5 批（已完成）：四项 P1 修复
 
 - [x] **`dbManager.deleteDB()` / `close()` 未作废缓存的连接**（`chrome/scripts/db-manager.js`）
@@ -370,10 +398,10 @@
   - 静态守卫：`no Date object is advanced by adding a day count`（匹配 `X = X + DAY`，**无白名单**）+ 一条变异自测钉住正则本身：既不放过坏写法，也不误伤 `new Date(x.getTime() + DAY)` 与 `loadDate()` 里那个**数字**版本的 `date + DAY`（那里是普通算术，不是 bug）。
 - [x] **`minimum_chrome_version` 与代码实际要求对齐**（`chrome/manifest.json`）
   - 原状：声明 `88`，但 `background-sw.js` 用了 `Object.hasOwn`（93+）、`helpers.js` 用了 `executeScript({ world: 'MAIN' })`（95+）。88–92 能装但一跑就崩；95 以下 `world` 被静默丢弃，小书签在 isolated world 里失效。
-  - 已做：提升到 `"96"`。
+  - 已做：提升到 `"96"`（第 4 批因 `chrome.storage.session` 再次上调到 `"102"`）。
   - **坑（e2e 暴露，静态检查全绿）**：该字段必须写成**字符串**。写成数字 `96` 时 Chrome 直接拒绝整个 manifest —— 扩展静默加载失败、SW 从不注册，而 lint、`node --check`、JSON 校验、`gen-sw-utils --check` 全部照常通过。新增守卫 `minimum_chrome_version is a string, as Chrome parses it` 钉住，注释里写明症状是「只有 e2e 会红，且看起来像 SW 没启动」。
   - 守卫 `minimum_chrome_version covers the newest API the code uses`：维护一张「API → 首次支持版本」表，声明值低于代码所需即报红并列出证据。已变异验证（改回 88 → 红，列出 `Object.hasOwn` 与 `world:'MAIN'` 两处）。表只收**能靠源码形状可靠识别**的 API，避免过度匹配变成噪音。
-  - 待办：发布下个版本时需在 README 的 Changelog 记录「最低 Chrome 版本提升到 96」。
+  - 待办：发布下个版本时需在 README 的 Changelog 记录「最低 Chrome 版本提升到 102」（第 4 批因 `chrome.storage.session` 从 96 再次上调）。
 - [x] **渲染层 `closest()` 未防空 + 按范围删除的输入未校验**（`chrome/scripts/modules/history-core.js`）
   - `closest()`：`el.closest('div.item-holder').style.*` 共 6 处未判空。`deleteHistoryItem('selected')` 会摘掉 `div.item-holder`，之后任何遍历 `.chkbx` 的重绘都会撞上 `null.style`，一抛就中断整次重绘、列表停在半更新状态。
     - 已做：新增模块私有 `paintClosest(el, selector, color)`，6 处改走它。刻意**不**统一各分支配色（`#f1f1f1` 与 `#fafafa` 本就不一致），只做防空，零行为变化。
@@ -427,7 +455,7 @@
 | ✅ 第 2.1 批 | 修 `filterlist` 写入侧三处错误 + 残留分片清理 + 成功判定 | **已完成**。原「第 3 批」主体已并入 |
 | ✅ 第 2.2 批 | 删 `title_fix`、转义按上下文分工、`CSS.escape` 运行时测试、`downloadOptions` 下划线、`mergeList` 计数读取 | **已完成**。第 2 批的审查收尾 |
 | ✅ 第 3 批 | `rh-list-order` 硬编码、失效的 `treeOptionsDetail`、`popup.js` 空值保护、SW `callFunction` 收紧，外加 5 项小缺陷（TDZ / 变量遮蔽 / MV2 死代码 / 重复游标 / 250ms 轮询） | **已完成**。2 个 skip 全部消除，当前 0 skip |
-| 第 4 批 | SW 状态持久化（`chrome.storage.session`）、启动抓取并发分片与断点续传 | 涉及 MV3 架构调整，需先讨论方案。**树状结构的可靠性取决于此** |
+| ✅ 第 4 批 | SW 状态持久化（`chrome.storage.session`）、启动抓取并发分片与断点续传 | **已完成**。13 条新测试 + 1 条静态守卫，均先红后绿。**注意：`minimum_chrome_version` 96 → 102，属破坏性变更，发版时须写进 README 的 Changelog** |
 | ✅ 第 5 批 | `dbManager` 缓存连接未作废、`date = date + DAY` 三处、`minimum_chrome_version` 对齐、`closest()` 与按范围删除的输入校验 | **已完成**。13 条新测试 + 3 条静态守卫，均先红后绿。插队在第 4 批之前：都是小改动且已有测试兜底 |
 | ✅ 第 6 批 | 抓取改批量事务、徽章节流、分片渲染按预算批量 + 分组查表、`mostVisited` alarm 降频 | **已完成**。4 条新测试（含首个真正跑渲染循环的用例），均先红后绿 |
 | 第 7 批 | `addCloseRedord` 命名与 id 语义、zTree `eval` 风险；清理 lint 警告存量 → `--max-warnings 0`；模块化收尾、技术栈统一 | 长期收益，可渐进推进 |

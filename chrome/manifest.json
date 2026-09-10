@@ -5,7 +5,7 @@
   "version": "3.3.1",
   "update_url": "https://edge.microsoft.com/extensionwebstorebase/v1/crx",
   "manifest_version": 3,
-  "minimum_chrome_version": "96",
+  "minimum_chrome_version": "102",
   "default_locale": "en",
   "description": "__MSG_aboutText__",
   "options_page": "options.html",

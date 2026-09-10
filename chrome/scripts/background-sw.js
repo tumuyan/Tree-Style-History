@@ -30,7 +30,6 @@ var calendar_str;
 var calendar = {};
 var calendar_r = {};
 
-var MAX = Number.MAX_VALUE - 1;
 var urls_wait_load = new Array();
 
 // Tab tracking data
@@ -39,6 +38,142 @@ var tabUrlJson = {};
 var tabUrl0Json = {};
 var urlIdJson = {};
 var idUrlJson = {};
+
+// --- Session state -------------------------------------------------------
+//
+// Everything just declared lives in module scope, so the browser throws it
+// away every time it recycles the service worker (~30s idle) — and a wake-up
+// re-runs this file, so the maps come back empty even when no tab event was
+// missed.
+//
+// That is not a cosmetic loss: `urlIdJson`/`idUrlJson` are the only record of
+// which visitId belongs to the page a link was opened from, and
+// `add_tab_history()` needs exactly that to name the new page's parent. With
+// them gone every link clicked after a recycle is stored as a root node — the
+// tree this extension exists to build silently flattens.
+//
+// `openedTabs`/`recentTabs` are saved for the same reason:
+// `initializeExistingTabs()` can only rebuild them from the tabs open right
+// now, which loses the activation order the popup's "recently viewed" list is
+// sorted by.
+//
+// Written to chrome.storage.session: in memory, cleared when the browser
+// exits, and — unlike chrome.storage.local — no disk write per update.
+
+const SESSION_STATE_KEY = 'tab-state';
+// Bumped whenever the shape below changes; an old snapshot is then ignored
+// rather than half-restored.
+const SESSION_STATE_VERSION = 1;
+const SESSION_SAVE_DELAY_MS = 1000;
+// urlIdJson/idUrlJson gain an entry per visited URL and nothing prunes them,
+// so the snapshot has to be capped before it is written: session storage
+// allowed 1MB until Chrome 112 (10MB since), and a long URL is ~1KB on its
+// own. 1000 remembered URLs is far more than a link chain needs.
+
+const SESSION_ID_LIMIT = 1000;
+
+/**
+ * Drop the oldest url -> visitId pairs once the cap is passed.
+ *
+ * `Object.keys()` walks non-integer keys in insertion order, so the front of
+ * `urlIdJson` is the oldest entry and this is FIFO.
+ */
+function trimVisitIdMaps() {
+    const urls = Object.keys(urlIdJson);
+    const excess = urls.length - SESSION_ID_LIMIT;
+    if (excess <= 0) return;
+    for (let i = 0; i < excess; i++) {
+        const visitId = urlIdJson[urls[i]];
+        delete urlIdJson[urls[i]];
+        if (visitId !== undefined) delete idUrlJson[visitId.toString()];
+    }
+}
+
+function snapshotSessionState() {
+    return {
+        v: SESSION_STATE_VERSION,
+        openerJson: openerJson,
+        tabUrlJson: tabUrlJson,
+        tabUrl0Json: tabUrl0Json,
+        urlIdJson: urlIdJson,
+        idUrlJson: idUrlJson,
+        openedTabs: openedTabs,
+        recentTabs: recentTabs,
+    };
+}
+
+/** chrome.storage.session, or null on a browser too old to have it. */
+function sessionArea() {
+    return (chrome.storage && chrome.storage.session) ? chrome.storage.session : null;
+}
+
+var _sessionSaveTimer = null;
+
+/**
+ * Coalesce the flood of tab events into one write per second.
+ *
+ * A pending timer dies with the worker, so this is best-effort by nature: the
+ * worst case is losing the last second of tab switching, which is exactly
+ * what an unpersisted restart already cost.
+ */
+function scheduleSessionSave() {
+    if (_sessionSaveTimer !== null) return;
+    _sessionSaveTimer = setTimeout(function () {
+        _sessionSaveTimer = null;
+        saveSessionState();
+    }, SESSION_SAVE_DELAY_MS);
+}
+
+function saveSessionState() {
+    const area = sessionArea();
+    if (!area) return Promise.resolve();
+
+    // `area.set()` is called inside a `then` rather than passed to
+    // Promise.resolve(): a value that cannot be structured-cloned makes
+    // Chrome throw *synchronously*, i.e. before any .catch() is attached.
+    const write = function (snapshot) {
+        return Promise.resolve().then(function () {
+            return area.set({ [SESSION_STATE_KEY]: snapshot });
+        });
+    };
+
+    const full = snapshotSessionState();
+    return write(full).catch(function (error) {
+        // session.set() is atomic: one oversized key fails the whole write,
+        // which would also lose the visit-id maps — the one part nothing can
+        // rebuild. Retry without the tab lists instead; they are the only
+        // part initializeExistingTabs() can reconstruct from live tabs.
+        console.warn('SW: session snapshot rejected, retrying without tab lists', error);
+        const trimmed = Object.assign({}, full, { openedTabs: {}, recentTabs: [] });
+        return write(trimmed).catch(function (again) {
+            console.warn('SW: could not persist session state', again);
+        });
+    });
+}
+
+function restoreSessionState() {
+    const area = sessionArea();
+    if (!area) return Promise.resolve(false);
+    return Promise.resolve().then(function () {
+        return area.get(SESSION_STATE_KEY);
+    }).then(function (result) {
+        const saved = result && result[SESSION_STATE_KEY];
+        if (!saved || saved.v !== SESSION_STATE_VERSION) return false;
+
+        openerJson = saved.openerJson || {};
+        tabUrlJson = saved.tabUrlJson || {};
+        tabUrl0Json = saved.tabUrl0Json || {};
+        urlIdJson = saved.urlIdJson || {};
+        idUrlJson = saved.idUrlJson || {};
+        openedTabs = saved.openedTabs || {};
+        recentTabs = Array.isArray(saved.recentTabs) ? saved.recentTabs : [];
+
+        return true;
+    }).catch(function (error) {
+        console.warn('SW: could not restore session state', error);
+        return false;
+    });
+}
 
 console.log("Service Worker loading... (" + (performance.now() - _tSW).toFixed(1) + "ms)");
 
@@ -363,20 +498,48 @@ function initializeStorageState() {
     // Initialize context menu
     initContextMenu();
     
-    // Initialize existing tabs
-    initializeExistingTabs();
+    // Initialize existing tabs. Restored first, because the visit-id maps
+    // have no other source and the live-tab query can only rebuild the two
+    // tab lists.
+    restoreSessionState().then(function (restored) {
+        console.log('Session state: ' + (restored ? 'restored' : 'cold start'));
+        initializeExistingTabs();
+    }).catch(function (error) {
+        // Only reachable from initializeExistingTabs(): restoreSessionState()
+        // handles its own failures. Without this a throw inside the pruning
+        // loop below would vanish as an unhandled rejection.
+        console.error('SW: failed to initialize existing tabs', error);
+    });
 }
 
 // Initialize tracking for existing tabs when service worker starts
 function initializeExistingTabs() {
     chrome.tabs.query({}, function(tabs) {
         console.log('Initializing ' + tabs.length + ' existing tabs (' + (performance.now() - _tSW).toFixed(1) + 'ms)');
+
+        const live = {};
         for (let tab of tabs) {
+            live[tab.id] = true;
             openedTabs[tab.id] = tab;
-            if (tab.active) {
+            // Restored from session storage, so the id is usually already
+            // there; unshifting twice would show the tab twice.
+            if (tab.active && recentTabs.indexOf(tab.id) < 0) {
                 recentTabs.unshift(tab.id);
             }
         }
+
+        // Everything keyed by tab id is dropped for tabs that are gone: they
+        // were closed while the worker was down, so onRemoved never reached
+        // us and nothing else would ever clean them up.
+        for (const id of Object.keys(openedTabs)) {
+            if (live[id]) continue;
+            delete openedTabs[id];
+            delete tabUrlJson[id];
+            delete tabUrl0Json[id];
+            delete openerJson[id];
+        }
+        recentTabs = recentTabs.filter(function (id) { return live[id]; });
+
         console.log('Opened tabs count:', Object.keys(openedTabs).length);
         var dbMs = (_tSW_db !== undefined) ? (_tSW_db - _tSW).toFixed(1) + 'ms' : '(pending)';
         console.log('[SW Startup] sync=' + (_tSW_load - _tSW).toFixed(1) +
@@ -398,6 +561,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 function openedTab(tab) {
     openedTabs[tab.id] = tab;
     addCloseRedord(tab.id, tab.url, tab.title, 0, -1);
+    scheduleSessionSave();
 }
 
 // Closed tab
@@ -405,13 +569,20 @@ function closedTab(id) {
     if (openedTabs[id] !== undefined) {
         console.debug('close ' + id + ' ' + openedTabs[id].url);
         addCloseRedord(id, openedTabs[id].url, openedTabs[id].title, (new Date()).getTime(), 0);
-        openedTabs[id].time = timeNow(0);
-
-        var i = recentTabs.indexOf(id);
-        if (i >= 0) {
-            recentTabs.splice(i, 1);
-        }
     }
+
+    // The per-tab maps are keyed by tab id and nothing else ever removed
+    // entries, so they grew for as long as the browser stayed open.
+    delete openedTabs[id];
+    delete tabUrlJson[id];
+    delete tabUrl0Json[id];
+    delete openerJson[id];
+
+    var i = recentTabs.indexOf(id);
+    if (i >= 0) {
+        recentTabs.splice(i, 1);
+    }
+    scheduleSessionSave();
 }
 
 // Add close record
@@ -440,6 +611,7 @@ function updatedTab(tab) {
             }
             openedTabs[tab.id].title = tab.title;
             openedTabs[tab.id].url = tab.url;
+            scheduleSessionSave();
         }
     }
 }
@@ -526,6 +698,7 @@ chrome.tabs.onCreated.addListener(function (tab) {
                 openerJson[tab.id.toString()] = tabUrlJson[tab.openerTabId.toString()];
                 console.debug("chrome.tabs.onCreated " + tab.openerTabId + " -> " + tab.id + "; " + 
                     openerJson[tab.id.toString()] + " -> " + tab.url + ";");
+                scheduleSessionSave();
             }
         }
     }
@@ -538,6 +711,7 @@ chrome.tabs.onUpdated.addListener(function (id, info, tab) {
         if (tabUrlJson[id.toString()] != undefined)
             tabUrl0Json[id.toString()] = tabUrlJson[id.toString()];
         tabUrlJson[id.toString()] = tab.url;
+        scheduleSessionSave();
     }
 
     if (info.status == "complete") {
@@ -557,6 +731,7 @@ chrome.tabs.onActivated.addListener(function (activeInfo) {
         recentTabs.splice(i, 1);
     }
     recentTabs.unshift(activeInfo.tabId);
+    scheduleSessionSave();
 });
 
 // Context menu handlers
@@ -784,69 +959,170 @@ function loadHistory() {
     });
 }
 
+// How many URLs to ask chrome.history.getVisits() about at once. Six keeps
+// the crawl moving without tripping the history API's own throttling.
+const VISIT_CONCURRENCY = 6;
+const CRAWL_CURSOR_KEY = 'crawl-cursor';
+// How often the crawl is flushed and its position persisted. ~500 URLs keeps
+// the worst case for a recycled worker at half a chunk of wasted work while
+// still committing one transaction per several hundred rows.
+const CRAWL_CHECKPOINT_URLS = 500;
+// A cursor older than this describes a URL list from a different sitting; new
+// visits have changed it, so start over rather than trust the position.
+const CRAWL_CURSOR_TTL = 6 * 3600 * 1000;
+
 // Process visits - async/await refactored from getVisits/add_history/update_urls
+//
+// The crawl walks every URL in the configured range and asks the history API
+// for its visits. One `await` per URL meant tens of thousands of sequential
+// round trips — slow enough that the worker was usually recycled before it
+// finished, and a restart began again from zero, so a large history could
+// never be crawled at all. It now goes in chunks, and the position is
+// persisted so a restart picks up where it stopped.
 async function processVisits() {
-    for (let urls_p = 0; urls_p < urls_wait_load.length && urls_p < MAX; urls_p++) {
+    const start = await restoreCrawlCursor();
+    console.debug("getVisits() start=" + start + "/" + urls_wait_load.length);
+
+    let sinceCheckpoint = 0;
+    for (let urls_p = start; urls_p < urls_wait_load.length; urls_p += VISIT_CONCURRENCY) {
         setBadge((urls_wait_load.length - urls_p).toString());
 
-        const url_item = urls_wait_load[urls_p];
-
-        let h;
-        try {
-            h = await new Promise(resolve => {
-                chrome.history.getVisits({ url: url_item.url }, resolve);
-            });
-        } catch (e) {
-            console.error("getVisits() error, url=" + url_item.url, e);
-            continue;
+        const chunk = urls_wait_load.slice(urls_p, urls_p + VISIT_CONCURRENCY);
+        // allSettled, not all: a URL that throws must not abandon the URLs
+        // queued next to it.
+        const results = await Promise.allSettled(chunk.map(crawlUrlVisits));
+        for (const r of results) {
+            if (r.status === 'rejected') console.error("crawlUrlVisits() failed", r.reason);
         }
 
-        if (h.length < 1) {
-            console.debug("getVisits() no data, url=" + url_item.url);
-            continue;
+        sinceCheckpoint += chunk.length;
+        // Checkpointed by URL count rather than by batch size: crawlUrlVisits()
+        // flushes on its own once a batch fills, so waiting for a full batch
+        // here would almost never fire and the cursor would never move.
+        //
+        // Flush first, persist second. A cursor ahead of the data it describes
+        // would skip those URLs for good.
+        if (sinceCheckpoint >= CRAWL_CHECKPOINT_URLS) {
+            sinceCheckpoint = 0;
+            await flushCrawlBatch();
+            await saveCrawlCursor(chunk[chunk.length - 1].id, urls_p + chunk.length - 1);
         }
-
-        h.sort((a, b) => b.visitTime - a.visitTime);
-        const loadfrom = (new Date()).getTime() - DAY * localStorage["load-range"];
-
-        for (const v of h) {
-            if (v.visitTime < loadfrom) {
-                console.debug("add_history() time=" + v.visitTime + " < " + loadfrom + ", url=" + url_item.url);
-                break;
-            }
-
-            const transition = v.transition;
-            let refer = v.referringVisitId;
-
-            if (transition == "typed" || transition == "auto_bookmark" || 
-                transition == "keyword" || transition == "keyword_generated") {
-                console.debug("change refer " + v.referringVisitId + "->0 cause transition=" + transition);
-                refer = 0;
-            }
-
-            if (refer == undefined) refer = 0;
-
-            visitBatch.push({
-                visitId: v.visitId,
-                referringVisitId: refer,
-                url: url_item.url,
-                visitTime: v.visitTime,
-                title: url_item.title,
-                transition: transition,
-            });
-            if (visitBatch.length >= VISIT_FLUSH_SIZE) await flushCrawlBatch();
-        }
-
-        // Update URL record (always with first visit time, matching original behavior)
-        url_item.loadfrom = loadfrom;
-        url_item.loadto = h[0].visitTime;
-        urlBatch.push(url_item);
-        if (urlBatch.length >= VISIT_FLUSH_SIZE) await flushCrawlBatch();
     }
 
     await flushCrawlBatch();
+    await clearCrawlCursor();
     setBadge('', true); // forced: the badge must end up cleared
     console.debug("getVisits() done.");
+}
+
+async function crawlUrlVisits(url_item) {
+    let h;
+    try {
+        h = await new Promise(resolve => {
+            chrome.history.getVisits({ url: url_item.url }, resolve);
+        });
+    } catch (e) {
+        console.error("getVisits() error, url=" + url_item.url, e);
+        return;
+    }
+
+    if (h.length < 1) {
+        console.debug("getVisits() no data, url=" + url_item.url);
+        return;
+    }
+
+    h.sort((a, b) => b.visitTime - a.visitTime);
+    const loadfrom = (new Date()).getTime() - DAY * localStorage["load-range"];
+
+    for (const v of h) {
+        if (v.visitTime < loadfrom) {
+            console.debug("add_history() time=" + v.visitTime + " < " + loadfrom + ", url=" + url_item.url);
+            break;
+        }
+
+        const transition = v.transition;
+        let refer = v.referringVisitId;
+
+        if (transition == "typed" || transition == "auto_bookmark" ||
+            transition == "keyword" || transition == "keyword_generated") {
+            console.debug("change refer " + v.referringVisitId + "->0 cause transition=" + transition);
+            refer = 0;
+        }
+
+        if (refer == undefined) refer = 0;
+
+        visitBatch.push({
+            visitId: v.visitId,
+            referringVisitId: refer,
+            url: url_item.url,
+            visitTime: v.visitTime,
+            title: url_item.title,
+            transition: transition,
+        });
+        // Safe to call from several chunks at once: flushCrawlBatch() swaps
+        // both arrays out before it awaits, so concurrent callers each get a
+        // disjoint batch. It is here to bound memory when one URL has a very
+        // long visit list.
+        if (visitBatch.length >= VISIT_FLUSH_SIZE) await flushCrawlBatch();
+    }
+
+    // Update URL record (always with first visit time, matching original behavior)
+    url_item.loadfrom = loadfrom;
+    url_item.loadto = h[0].visitTime;
+    urlBatch.push(url_item);
+    if (urlBatch.length >= VISIT_FLUSH_SIZE) await flushCrawlBatch();
+}
+
+/**
+ * Where the previous worker got to.
+ *
+ * `urls_wait_load` is rebuilt from the database on every start, so the cursor
+ * keeps both the id of the last URL written and its position: the id is
+ * stable and exact, the position is the fallback for when the rebuilt list no
+ * longer contains that id (it finished, or its visits are gone).
+ */
+function restoreCrawlCursor() {
+    const area = sessionArea();
+    if (!area) return Promise.resolve(0);
+    // Same shape as saveSessionState(): get() can throw synchronously.
+    return Promise.resolve().then(function () {
+        return area.get(CRAWL_CURSOR_KEY);
+    }).then(function (result) {
+        const cursor = result && result[CRAWL_CURSOR_KEY];
+        if (!cursor) return 0;
+        if (!Number.isFinite(cursor.at) || Date.now() - cursor.at > CRAWL_CURSOR_TTL) return 0;
+
+        const i = urls_wait_load.findIndex(function (u) {
+            return String(u.id) === String(cursor.id);
+        });
+        if (i >= 0) return i + 1;
+        // Not in the list any more. The position drifts only by the entries
+        // removed ahead of it, so it costs a few re-crawled URLs at worst.
+        return (cursor.pos > 0 && cursor.pos < urls_wait_load.length) ? cursor.pos : 0;
+    }).catch(function (error) {
+        console.warn('SW: could not read crawl cursor', error);
+        return 0;
+    });
+}
+
+function saveCrawlCursor(id, pos) {
+    const area = sessionArea();
+    if (!area) return Promise.resolve();
+    return Promise.resolve().then(function () {
+        return area.set({ [CRAWL_CURSOR_KEY]: { id: String(id), pos: pos, at: Date.now() } });
+    }).catch(function (error) {
+        console.warn('SW: could not persist crawl cursor', error);
+    });
+}
+
+function clearCrawlCursor() {
+    const area = sessionArea();
+    if (!area) return Promise.resolve();
+    return Promise.resolve().then(function () {
+        return area.remove(CRAWL_CURSOR_KEY);
+    }).catch(function (error) {
+        console.warn('SW: could not clear crawl cursor', error);
+    });
 }
 
 // Visit tab function — refactored from callback to async/await
@@ -910,6 +1186,8 @@ function add_tab_history(visitItems, i, loadfrom, url_item) {
             urlIdJson[url_item.url] = visitId;
             idUrlJson[visitId.toString()] = url_item.url;
             console.debug("visitJson " + refer + "->" + visitId + " transition=" + transition + " " + url_item.url);
+            trimVisitIdMaps();
+            scheduleSessionSave();
         }
 
         if (refer == undefined || refer <= 0) {
