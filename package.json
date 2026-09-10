@@ -8,7 +8,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "lint": "eslint .",
+    "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix",
     "test": "node --test --test-reporter=spec \"tests/**/*.test.mjs\"",
     "test:static": "node --test --test-reporter=spec tests/static.test.mjs",

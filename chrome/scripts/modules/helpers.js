@@ -202,9 +202,9 @@ function decodeBookmarkletCode(code) {
     if (!code) return '';
     var decoded = code;
     try { decoded = decodeURIComponent(code); }
-    catch (e1) {
+    catch {
         try { decoded = decodeURI(code); }
-        catch (e2) { decoded = code; }
+        catch { decoded = code; }
     }
     return decoded;
 }
@@ -282,7 +282,7 @@ function popup_scrollbar_fix() {
         var popupEl = document.getElementById('popup');
         if (popupEl) popupEl.style.marginRight = '24px';
     } else {
-        var popupEl = document.getElementById('popup');
+        popupEl = document.getElementById('popup');
         if (popupEl) popupEl.style.marginRight = '5px';
     }
 }

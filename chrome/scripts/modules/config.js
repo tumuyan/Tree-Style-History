@@ -98,7 +98,7 @@ function loadOptions(full) {
 
     $('rhlistorder').innerHTML = '';
 
-    for (var lo in rhilo) {
+    for (lo in rhilo) {
         if (rhilo[lo] == 'rh-order') {
             $('rhlistorder').appendChild(createElement('li', { 'id': rhilo[lo], 'html': returnLang('recentHistory') }));
         } else if (rhilo[lo] == 'rct-order') {
@@ -503,7 +503,7 @@ function saveOptions(sync) {
     let upload;
     if (sync) {
         const config = {};
-        for (var i in so) {
+        for (i in so) {
             // Uploaded as slices instead: one domain list easily exceeds the
             // 8KB per-item quota.
             if (i == 'rh-filtered')

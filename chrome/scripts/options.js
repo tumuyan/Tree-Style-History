@@ -14,7 +14,7 @@ document.addEventListener('DOMContentLoaded', function () {
         };
         optsEl.style.marginRight = oo['margin-right'][1] + 'px';
     } else {
-        var oo = {
+        oo = {
             'margin-left': [150, 180],
             'opacity': [0, 1]
         };

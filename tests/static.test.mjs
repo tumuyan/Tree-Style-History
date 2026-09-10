@@ -600,7 +600,10 @@ test('no render site relies on title_fix for safety', () => {
     // so this also stops anyone reintroducing the function later.
     const offenders = [];
     walkScripts((file, src) => {
-        for (const _ of stripJsComments(src).matchAll(/\btitle_fix\s*\(/g)) {
+        // One offender per occurrence, so the report names the file once per
+        // call site.
+        const found = stripJsComments(src).match(/\btitle_fix\s*\(/g);
+        for (let _i = 0; found && _i < found.length; _i++) {
             offenders.push(file.replace(/\\/g, '/'));
         }
     });

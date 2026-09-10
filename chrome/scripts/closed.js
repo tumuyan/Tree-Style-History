@@ -78,7 +78,7 @@ document.addEventListener('DOMContentLoaded', function () {
             pre_History(today0.getTime(), today.getTime());
         } else if (w == 'current') {
             var ndc = new Date();
-            var today = new Date(ndc.getFullYear(), ndc.getMonth(), ndc.getDate(), 23, 59, 59, 999);
+            today = new Date(ndc.getFullYear(), ndc.getMonth(), ndc.getDate(), 23, 59, 59, 999);
             pre_History(0, 0);
         }
     }
@@ -157,46 +157,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
     var tag = {};
 
-    var loadzNode = false;
 
     $jq.fn.zTree.init($jq("#treeDemo"), setting, nNodes);
     var treeObj = $jq.fn.zTree.getZTreeObj("treeDemo");
     fuzzySearch('treeDemo', '#rh-search', null, false, '#search-tag a');
 
     // var Filter = fuzzySearchNow('treeDemo','#rh-search',null,false);
-
-    var transition_value = {
-        link: "🔗",
-        typed: "⌨",
-        auto_toplevel: "☆",
-        auto_bookmark: "☆",
-        auto_subframe: "🧭",
-        manual_subframe: "🧭",
-        generated: "⌨",
-        start_page: "🏠",
-        form_submit: "⏫",
-        reload: "🔄",
-        keyword: "🔍",
-        keyword_generated: "🔍"
-
-        // “link”    用户通过点击页面中的链接，跳转至本URL。
-        // “typed”    用户通过地址栏输入网址，来访问本URL。这种类型也适用于显式的导航动作。与之相反，你可以参阅generated，它适用于用户没看到（不知道）网址URL的情况。
-        // “auto_bookmark”    用户通过界面的推荐到达本URL。例如，通过点击菜单项打开的页面。
-        // auto_toplevel： 页面在命令行中指定或是浏览器的起始页面。
-        // “auto_subframe”    子框架导航。这种类型是指那些非顶层框架自动加载的内容。例如，如果一个页面由许多包含广告的子框架构成，那些广告链就拥有这种过渡类型。用户可能没有意识到页面中的这些内容是个单独的框架，所以他们也可能根本没有在意这些URL（请查阅 manual_subframe)。
-        // “manual_subframe”    此种类型是为用户显式请求的子框架导航以及在前进/后退列表中的生成导航入口的子框架导航所设置。由于用户更关心所请求框架被加载的效果，因此显式请求的框架可能会比自动载入的框架更为重要。
-        // “generated”    用户通过在地址栏输入，而选择一个不像网址的入口到达的URL页面。例如，匹配结果中可能包含Google搜索结果页的URL, 但是它可能以“用Google搜索……”的形式展现。这类导航和 typed 导航是有差异的，因为用户没有输入或者看到最终的URL。请参阅 keyword。
-        // “start_page”    页面是在命令行中被指定（打开），或者其本身就是起始页。
-        // “form_submit”    
-        // 用户提交的表单。请注意，某些情况，诸如表单运用脚本来提交，不属于此种类型。
-
-        // “reload”    用户通过点击刷新按钮或者在地址栏输入回车键来刷新页面属于此种类型。会话重置，重开标签页都属于此种类型。
-        // “keyword”    URL通过可替代的关键字，而不是默认的搜索引擎产生。请查阅keyword_generated。
-        // “keyword_generated”    相应由关键字生成的访问。请查阅keyword。
-
-    };
-
-
 
     console.log("loading...");
     var DAY = 24 * 3600 * 1000;
@@ -208,7 +174,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // date.setHours(23); date.setMinutes(59); date.setSeconds(59); date.setMilliseconds(999);
 
     date.setHours(0); date.setMinutes(0); date.setSeconds(0); date.setMilliseconds(0);
-    var DAY = 24 * 3600 * 1000;
+    DAY = 24 * 3600 * 1000;
 
     function timeStr2(time, wait_space) {
         var datestr = localStorage['rh-date'].replace('yyyy/', '').replace('/yyyy', '');
@@ -314,7 +280,6 @@ document.addEventListener('DOMContentLoaded', function () {
             var cursor = e.target.result;
             if (cursor != undefined) {
                 let v = cursor.value;
-                let t = transition_value[v.transition];
 
                 if (filtUrl(v.url) == false && v.close >= 0) {
 

@@ -7,7 +7,6 @@
 
     const DB_NAME = 'testDB';
     const DB_VERSION = 6;
-    const DAY = 24 * 3600 * 1000;
 
     class DBManager {
         constructor() {

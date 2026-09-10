@@ -368,6 +368,23 @@ test('closing a tab drops everything keyed by its id', async () => {
     assert.deepEqual(Array.from(w.ctx.recentTabs), [6]);
 });
 
+test('a close record names the same session in its key and its group field', async () => {
+    // The key used to be `<oid>_<tid>` while the grouping field was `oid - 1`,
+    // so the record landed in a different session group than its own id said.
+    // closed.js groups the tree by that field.
+    const w = loadWorker({});
+    w.boot();
+    await w.settle();
+
+    w.ctx.openedTabs[7] = { id: 7, url: 'https://a/', title: 'A' };
+    w.ctx.closedTab(7);
+
+    const record = w.state.closed[w.state.closed.length - 1];
+    assert.equal(record.id, record.oid + '_' + record.tid);
+    assert.equal(record.tid, 7);
+    assert.equal(record.close, 0, 'a close from onRemoved is a normal close');
+});
+
 test('tabs closed while the worker is down are pruned on startup', async () => {
     const session = new Map();
     const stale = loadWorker({ sessionStore: session, tabs: [{ id: 1, active: true, url: 'https://a/', title: 'A' }] });

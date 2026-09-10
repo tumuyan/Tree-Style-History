@@ -44,9 +44,7 @@ import {
     addList,
     mergeList,
     updateFilter,
-    filtUrl,
-    flist,
-    flist_r
+    filtUrl
 } from './modules/config.js';
 
 import {

@@ -110,7 +110,7 @@ document.addEventListener('DOMContentLoaded', function(){
         cal.style.position = 'fixed';
         cal.style.top = '15px';
       }else{
-        var cal = $('calendar');
+        cal = $('calendar');
         cal.style.position = 'absolute';
         cal.style.top = '129px';
       }
@@ -247,7 +247,6 @@ document.addEventListener('DOMContentLoaded', function(){
     
     // Range date
     
-    var rdp = [$('delete-range-one'), $('delete-range-two')];
   
     // Assign events
   

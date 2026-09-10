@@ -14,12 +14,12 @@ export function get_host(url) {
         var parsed = new URL(url);
         var host = parsed.hostname;
         if (host) return host;
-    } catch (e) {
+    } catch {
         try {
-            var parsed = new URL('https://' + url);
-            var host = parsed.hostname;
+            parsed = new URL('https://' + url);
+            host = parsed.hostname;
             if (host && host.indexOf('.') !== -1) return host;
-        } catch (e2) {}
+        } catch {}
     }
     return "#";
 }

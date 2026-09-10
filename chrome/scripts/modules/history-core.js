@@ -50,7 +50,6 @@ function history(w, q) {
     var ord = localStorage['rh-order'];
     var obj = {};
     var rha = [];
-    var test = {};
 
     if (prh) {
         clearInterval(prh);
@@ -64,7 +63,7 @@ function history(w, q) {
             var today = new Date(year, month, day, 23, 59, 59, 999);
         } else if (w == 'current') {
             var ndc = new Date();
-            var today = new Date(ndc.getFullYear(), ndc.getMonth(), ndc.getDate(), 23, 59, 59, 999);
+            today = new Date(ndc.getFullYear(), ndc.getMonth(), ndc.getDate(), 23, 59, 59, 999);
         }
         var eTime = today.getTime();
         obj['startTime'] = (eTime - 86400000);
@@ -79,11 +78,11 @@ function history(w, q) {
         $('delete-range-two').value = formatDate(eTime);
     } else if (w == 'search') {
         if (sw == 'current') {
-            var day = Number($('date-select-day').options[$('date-select-day').selectedIndex].value);
-            var month = Number($('date-select-month').options[$('date-select-month').selectedIndex].value) - 1;
-            var year = Number($('date-select-year').options[$('date-select-year').selectedIndex].value);
+            day = Number($('date-select-day').options[$('date-select-day').selectedIndex].value);
+            month = Number($('date-select-month').options[$('date-select-month').selectedIndex].value) - 1;
+            year = Number($('date-select-year').options[$('date-select-year').selectedIndex].value);
             var ndate = new Date(year, month, day, 23, 59, 59, 999);
-            var eTime = ndate.getTime();
+            eTime = ndate.getTime();
             var sTime = (eTime - 86400000);
             obj['startTime'] = sTime;
             obj['endTime'] = ndate.getTime();
@@ -95,7 +94,7 @@ function history(w, q) {
         }
         obj['text'] = q;
         obj['maxResults'] = 100;
-        var into = 'rh-views-search-insert';
+        into = 'rh-views-search-insert';
         $('rh-views-search-insert').style.display = 'block';
         $('rh-views-insert').style.display = 'none';
     }
@@ -155,13 +154,13 @@ function history(w, q) {
                         var selLink = document.querySelector('#calendar a#selected');
                         if (selLink) selLink.style.backgroundColor = '#daf3cb';
                     } else if (rhat > 49 && rhat < 100) {
-                        var selLink = document.querySelector('#calendar a#selected');
+                        selLink = document.querySelector('#calendar a#selected');
                         if (selLink) selLink.style.backgroundColor = '#aade8a';
                     } else if (rhat > 99 && rhat < 150) {
-                        var selLink = document.querySelector('#calendar a#selected');
+                        selLink = document.querySelector('#calendar a#selected');
                         if (selLink) { selLink.style.backgroundColor = '#6dc738'; selLink.style.color = '#fff'; }
                     } else {
-                        var selLink = document.querySelector('#calendar a#selected');
+                        selLink = document.querySelector('#calendar a#selected');
                         if (selLink) { selLink.style.backgroundColor = '#4e991f'; selLink.style.color = '#fff'; }
                     }
                 }
@@ -174,8 +173,8 @@ function history(w, q) {
                             var nameA = a.host.replace('www.', '');
                             var nameB = b.host.replace('www.', '');
                         } else if (grp == 'no') {
-                            var nameA = a.title;
-                            var nameB = b.title;
+                            nameA = a.title;
+                            nameB = b.title;
                         }
                         if (nameA < nameB) {
                             return -1;
@@ -394,7 +393,7 @@ function toggleGroup(host) {
     if (getActiveHistory() == 'history') {
         var into = 'rh-views-insert';
     } else if (getActiveHistory() == 'search') {
-        var into = 'rh-views-search-insert';
+        into = 'rh-views-search-insert';
     }
     // The host comes from a visited URL, and a quote in it would close the
     // attribute selector early — querySelector() throws rather than returning
@@ -448,7 +447,7 @@ function getMoreItems(el) {
     if (getActiveHistory() == 'history') {
         var into = '#rh-views-insert';
     } else if (getActiveHistory() == 'search') {
-        var into = '#rh-views-search-insert';
+        into = '#rh-views-search-insert';
     }
     var ihost = el.value;
     if (el.checked == false) {
@@ -491,7 +490,7 @@ function resetColor() {
     if (getActiveHistory() == 'history') {
         var into = '#rh-views-insert';
     } else if (getActiveHistory() == 'search') {
-        var into = '#rh-views-search-insert';
+        into = '#rh-views-search-insert';
     }
     Array.from($$(into + ' .item-holder')).forEach(function (el) {
         if (el.getAttribute('rel') == 'grey') {
@@ -513,7 +512,7 @@ function selectHistoryItem(el, w) {
     if (getActiveHistory() == 'history') {
         var into = '#rh-views-insert';
     } else if (getActiveHistory() == 'search') {
-        var into = '#rh-views-search-insert';
+        into = '#rh-views-search-insert';
     }
     if (w == 'single') {
         if (el.checked == true) {
@@ -580,15 +579,15 @@ function selectHistoryItem(el, w) {
                         if (chkBox) chkBox.checked = true;
                     }
                 } else {
-                    var titleDivs = $$(into + ' div[title="' + CSS.escape(elem.getAttribute('rel')) + '"]');
+                    titleDivs = $$(into + ' div[title="' + CSS.escape(elem.getAttribute('rel')) + '"]');
                     if (titleDivs.length > 0) {
                         if (titleDivs[0].getAttribute('rel') == 'grey') {
                             titleDivs[0].style.backgroundColor = '#f1f1f1';
-                            var chkBox = titleDivs[0].querySelector('.group-title-checkbox');
+                            chkBox = titleDivs[0].querySelector('.group-title-checkbox');
                             if (chkBox) chkBox.checked = false;
                         } else if (titleDivs[0].getAttribute('rel') == 'white') {
                             titleDivs[0].style.backgroundColor = '#fff';
-                            var chkBox = titleDivs[0].querySelector('.group-title-checkbox');
+                            chkBox = titleDivs[0].querySelector('.group-title-checkbox');
                             if (chkBox) chkBox.checked = false;
                         }
                     }
@@ -643,7 +642,7 @@ function deleteHistoryItem(w) {
         if (getActiveHistory() == 'history') {
             var into = '#rh-views-insert';
         } else if (getActiveHistory() == 'search') {
-            var into = '#rh-views-search-insert';
+            into = '#rh-views-search-insert';
         }
         if ($$(into + ' .checkbox input:checked').length > 0) {
             document.title = 'Deleting...';

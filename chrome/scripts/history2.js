@@ -76,7 +76,7 @@ document.addEventListener('DOMContentLoaded', function () {
             pre_History(today0.getTime(), today.getTime());
         } else if (w == 'current') {
             var ndc = new Date();
-            var today = new Date(ndc.getFullYear(), ndc.getMonth(), ndc.getDate(), 23, 59, 59, 999);
+            today = new Date(ndc.getFullYear(), ndc.getMonth(), ndc.getDate(), 23, 59, 59, 999);
             pre_History(0, 0);
         }
     }
@@ -140,7 +140,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
     var showLessItem = localStorage['less-item'];
 
-    var loadzNode = false;
 
     $jq.fn.zTree.init($jq("#treeDemo"), setting, nNodes);
     var treeObj = $jq.fn.zTree.getZTreeObj("treeDemo");
@@ -189,7 +188,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // date.setHours(23); date.setMinutes(59); date.setSeconds(59); date.setMilliseconds(999);
 
     date.setHours(0); date.setMinutes(0); date.setSeconds(0); date.setMilliseconds(0);
-    var DAY = 24 * 3600 * 1000;
+    DAY = 24 * 3600 * 1000;
 
     function timeStr2(time, wait_space) {
         var datestr = localStorage['rh-date'].replace('yyyy/', '').replace('/yyyy', '');

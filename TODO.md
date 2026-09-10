@@ -5,7 +5,7 @@
 状态图例：`[ ]` 未开始 · `[x]` 已完成 · `[-]` 暂缓
 
 > **护栏已就位**：`npm run check`（ESLint + `node:test` + 4 个校验脚本）是唯一准入闸门，约 5 秒跑完，CI 强制执行。
-> 当前基线：**lint 0 error / 140 warning · 150 测试 · 150 通过 · 0 skip · 0 失败**（另：e2e 9 测试 · 9 通过）。
+> 当前基线：**lint 0 error / 0 warning（`--max-warnings 0`）· 151 测试 · 151 通过 · 0 skip · 0 失败**（另：e2e 9 测试 · 9 通过）。
 > 2 个 skip 已在「第 3 批」消除（`rh-list-order` 硬编码与失效的 `treeOptionsDetail`）。**当前无 skip**；后续若需标注已知缺陷，沿用 `test(name, { skip: '原因' }, fn)` 写法（函数体内写期望行为，修完去掉 skip）。
 
 ---
@@ -302,11 +302,12 @@
   - 已做：局部变量改名 `transitionIcon`（含 `tag[transitionIcon]` 与节点名拼接），形参 `t` 不再被遮蔽。
 
 - [x] **清理 MV2 死代码**（`chrome/scripts/background-sw.js`）— **已修复**（见「第 3 批」）
-  - 已做：`getVersionType() == 'pageAction'` 分支与 `chrome.pageAction.show()` 删除（函数恒返回 `'browserAction'`）。`getVersionType` 本身保留——`func.js` 与 `popup-core.js` 仍在用。
+  - 已做：`getVersionType() == 'pageAction'` 分支与 `chrome.pageAction.show()` 删除（函数恒返回 `'browserAction'`）。`getVersionType` 本身保留——`func.js` 仍在用。**更正**：当初记的「`popup-core.js` 仍在用」并不成立，第 7 批清死导入时才被发现（ESLint 说了，人没听）。
   - 连带：`tests/sw-sync.test.mjs` 里「background-sw.js 调用了 `getVersionType`」这条回归断言换成 `defaultConfig`（原断言指向的调用点已随本条删除）。
 
-- [ ] **统一 `addCloseRedord` 的命名与 id 语义**（`chrome/scripts/background-sw.js:380-393`）
-  - 现状：函数名拼写错误；`id: oid + '_' + tid` 与 `oid: oid - 1` 语义不一致。
+- [x] **统一 `addCloseRedord` 的命名与 id 语义**（`chrome/scripts/background-sw.js`）— **已修复**（见「第 7 批」）
+  - ~~现状：函数名拼写错误；`id: oid + '_' + tid` 与 `oid: oid - 1` 语义不一致。~~
+  - 已做：改名 `addCloseRecord`（3 处调用点 + 定义）；`oid` 字段改回 `oid`（原为 `oid - 1`）。新增断言 `record.id === record.oid + '_' + record.tid`，并变异验证。
 
 - [ ] **处理 zTree 内含 `eval` 的 CSP 风险**（`chrome/scripts/jquery.ztree.core.js:1105`）
   - 现状：`newNodes = eval("(" + msg + ")")`，MV3 默认 CSP 禁用 `eval`。当前走本地 `zNodes` 未触发，属潜在风险。
@@ -315,9 +316,10 @@
 
 ## P3 — 架构与可维护性
 
-- [ ] **清理 lint 警告存量**：共 140 处 — 88 处 `no-redeclare`（同作用域 `var` 重复声明，其中 16 处是 `background-utils.js` 与 `eslint.config.mjs` 的 `crossFileGlobals` 同名，属生成文件的固有重复）、54 处 `no-unused-vars`（多为 `catch (e)` 未使用绑定）、1 处 `no-empty`、2 处 `require-atomic-updates`。
-  - 现状：这些设为 warning，不阻塞 CI。`no-redeclare` 之所以不设为 error，是因为它合法无害，90 条会淹没真实错误。
-  - 收尾动作：清零后把 `npm run lint` 改为 `eslint . --max-warnings 0`，彻底锁死。
+- [x] **清理 lint 警告存量** — **已清零**（见「第 7 批」）
+  - 原状：140 处 — 85 处 `no-redeclare`、52 处 `no-unused-vars`、2 处 `require-atomic-updates`、1 处 `no-empty`。
+  - 已做：`npm run lint` 改为 `eslint . --max-warnings 0`。规则本身仍是 warning（重复声明 `var` 合法无害，不该单独挡住构建），但**累计不再被允许**——新增一条就红。
+  - 唯一的结构性豁免：`background-utils.js` 关闭 `no-redeclare`。它的顶层声明就是给 `importScripts()` 用的导入面，必然与 `crossFileGlobals` 同名；源文件 `modules/shared/` 照常被检查。
 
 - [x] **消除 `background-utils.js` 的手工同步** — **已根治**（见「第 1.8 批」）
   - ~~现状：`background-utils.js` 用注释列出与 `modules/` 的 SYNC 映射（`getVersion`/`timeNow`/`getFaviconUrl`/`defaultConfig`/`save_calendar_storage2` 等），因 MV3 的 SW 无法 `importScripts` ES module 而必须重复。~~
@@ -385,6 +387,28 @@
   - **「去掉检查点」这条差点漏掉**：最初的抓取用例只有 3–4 个 URL，远不到 500 的检查点间隔，所以即使把 checkpoint 整段删掉也是全绿。补了一条 600 URL 的用例才暴露出来——按批大小做检查点本就几乎不会触发（`crawlUrlVisits()` 自己会先 flush 清空批次）。
 - [x] **评审收尾**：`saveSessionState()` 超配额时改为丢掉 `openedTabs`/`recentTabs` 重试一次（保住 `urlIdJson`/`idUrlJson`，那是唯一无法重建的部分）；session 的 `get`/`set`/`remove` 全部改走 `Promise.resolve().then(() => …)`，否则不可克隆值触发的**同步**抛错会在 `.catch()` 挂上之前就逃逸；`restoreSessionState().then(…)` 补 `.catch()`（剪枝逻辑抛错否则变成 unhandled rejection）。
 - [x] **行为变更备忘**：`closedTab()` 删除 `openedTabs[id]`（此前保留条目并写 `.time`，无任何消费方读它）。提交信息里需点明。
+
+### 第 7 批（已完成）：关闭记录的 id 语义 + lint 清零
+
+- [x] **`addCloseRedord` → `addCloseRecord`，`oid` 字段不再减一**（`chrome/scripts/background-sw.js`）
+  - 原状：记录写 `id: oid + '_' + tid`，分组字段却写 `oid: oid - 1`。`closed.js` 用后者当树的一级父节点 id，于是「键说这是第 5 次会话」和「树把它归到第 4 组」同时成立。
+  - 已做：两处都取当前 `oid`。**不影响旧数据**：`oid` 单调递增，写过的旧值都小于当前值，新记录不会与旧组撞号。
+  - 新增测试 `a close record names the same session in its key and its group field`，断言 `record.id === record.oid + '_' + record.tid`；**变异验证**：改回 `oid - 1` 立刻红。
+- [x] **lint 警告 140 → 0，`npm run lint` 加 `--max-warnings 0`**
+  - `no-unused-vars`（52 → 0）：19 处 `catch (e)` 未用绑定改 `catch {}`（optional catch binding）；其余是死导入与死变量。
+    - 死导入：`calendar.js` 整两行（14 个符号，`func.js` 拆分时的遗留）、`popup-core.js` 的 `get_host` / `getVersion` / `getVersionType` / `updateFilter`、`func.js` 的 `flist` / `flist_r`（`MODULE_PRIVATE` 本就把它们排除在 window 挂载之外，导入纯属多余）。
+    - 死变量：`background-sw.js` 的「最常访问」里算了 `hours/minutes/time` 却从不入队（`mostVisited()` 渲染时不用它）、`tabActive`、`closed.js` 的 `loadzNode` 与整块 `transition_value`（仅剩的引用在一段注释掉的代码里）、`history2.js` 的 `loadzNode`、`db-manager.js` 的 `DAY`、`bookmark.js` 三处、`history.js` 的 `rdp`、`history-core.js` 的 `test`、`popup-core.js` 的 `rh`。
+    - `closed.js` 的 `let t = transition_value[v.transition]` 还顺带**遮蔽了 `feach_History(loadfrom, loadto, t)` 的翻页形参**（与第 3 批 `history2.js` 那个同型）。
+  - `no-empty`（1 → 0）：`calendar.js` 的 `if (rhat == undefined) {}` 空分支删掉——下面的区间判断对 `undefined` 本就全假，走到底就是无样式。
+  - `require-atomic-updates`（2 → 0）：`crawlUrlVisits()` 改为把抓取窗口盖在**副本**上（`Object.assign({}, url_item, {...})`）再入队，而不是 await 之后回写共享记录。副作用是好的：批次写失败时内存里的 `urls_wait_load` 条目不会留着半截状态。
+  - `no-redeclare`（85 → 0）：69 处同作用域重复 `var` 去掉后一次的关键字（`var i` → `i`，`for (var i` → `for (i`）。`var` 是函数作用域，原本也是同一个变量，行为不变。
+  - **结构性豁免**：`background-utils.js` 单独关掉 `no-redeclare`（14 处）。它是生成文件，顶层声明就是 `importScripts()` 的导入面，必然与 `crossFileGlobals` 同名；源文件 `modules/shared/` 照常被查。规则本身保持 warning——重复声明 `var` 不该单独挡住构建——但 `--max-warnings 0` 让它不再能累积。
+
+### 新发现（清死代码时暴露）
+
+- [ ] **`recentHistory()` 算了内部 URL 判定却没用**（`chrome/scripts/modules/popup-core.js`）
+  - 现状：`var test = /^(file|chrome|chrome-extension|chrome-devtools)\:\/\//.test(url)`，算完从不参与判断，于是弹窗的「最近历史」会显示 `file://` 条目——而 SW 里算「最常访问」的同类代码**是**过滤的。
+  - 本批只删了死变量（不改可见行为）。要不要真的过滤是产品决策，得你定：过滤后更符合其它列表的口径，但用户也可能确实想看到本地文件。
 
 ### 第 5 批（已完成）：四项 P1 修复
 
@@ -458,7 +482,8 @@
 | ✅ 第 4 批 | SW 状态持久化（`chrome.storage.session`）、启动抓取并发分片与断点续传 | **已完成**。13 条新测试 + 1 条静态守卫，均先红后绿。**注意：`minimum_chrome_version` 96 → 102，属破坏性变更，发版时须写进 README 的 Changelog** |
 | ✅ 第 5 批 | `dbManager` 缓存连接未作废、`date = date + DAY` 三处、`minimum_chrome_version` 对齐、`closest()` 与按范围删除的输入校验 | **已完成**。13 条新测试 + 3 条静态守卫，均先红后绿。插队在第 4 批之前：都是小改动且已有测试兜底 |
 | ✅ 第 6 批 | 抓取改批量事务、徽章节流、分片渲染按预算批量 + 分组查表、`mostVisited` alarm 降频 | **已完成**。4 条新测试（含首个真正跑渲染循环的用例），均先红后绿 |
-| 第 7 批 | `addCloseRedord` 命名与 id 语义、zTree `eval` 风险；清理 lint 警告存量 → `--max-warnings 0`；模块化收尾、技术栈统一 | 长期收益，可渐进推进 |
+| ✅ 第 7 批 | `addCloseRecord` 命名与 id 语义、**lint 清零并加 `--max-warnings 0`** | **已完成**。1 条新测试（变异验证）+ 140 处警告清零。**顺带发现 `recentHistory()` 的过滤判定算了没用，待你决定是否启用** |
+| 第 8 批 | zTree `eval` 风险；模块化收尾（删 `func.js` 的 window 层）、技术栈统一、重新审视 `localStorage` 全局劫持 | 长期收益，可渐进推进 |
 
 > **插队说明**：第 1.5 / 1.6 / 1.7 批是顺手做掉的——它们都由新写的测试或 review 直接暴露，且改动小、有 skip 测试兜底，不值得单独排队。
 > 1.5 = `filtUrl` 子串误伤 + `te` 未初始化 + `addList` 空格；1.6 = 选项页 `#mvlist` 缺失（**会导致选项页打不开**）+ 其附带的属性注入；1.7 = `filtUrl` 降段死分支 + `www` 子域过滤。

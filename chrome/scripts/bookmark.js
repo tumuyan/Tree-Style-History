@@ -223,7 +223,7 @@ document.addEventListener('DOMContentLoaded', function () {
             $('rh-views-search-insert').style.display = 'block';
             $('rh-views-insert').style.display = 'none';
         } else {
-            var into = 'rh-views-insert';
+            into = 'rh-views-insert';
             $('rh-views-search-insert').style.display = 'none';
             $('rh-views-insert').style.display = 'block';
             $('rh-search').value = '';
@@ -304,7 +304,6 @@ document.addEventListener('DOMContentLoaded', function () {
                     var url = originalUrl;
                     var host = get_host(originalUrl);
                     var visits = hi[i].visitCount;
-                    var isBookmarklet = isBookmarkletUrl(originalUrl);
                     var furl = getFaviconUrl(originalUrl);
                     var bookmarkId = hi[i].bookmarkId || hi[i].id;
                     if (host == "#") {
@@ -346,18 +345,14 @@ document.addEventListener('DOMContentLoaded', function () {
 
             $('master-check-all').disabled = 'disabled';
 
-            if (into == 'rh-views-insert') {
-                var rhat = rha.length;
-            }
-
             if (oby == 'title') {
                 rha.sort(function (a, b) {
                     if (grp == 'yes') {
                         var nameA = a.host.replace('www.', '');
                         var nameB = b.host.replace('www.', '');
                     } else if (grp == 'no') {
-                        var nameA = a.title;
-                        var nameB = b.title;
+                        nameA = a.title;
+                        nameB = b.title;
                     }
                     if (nameA < nameB) {
                         return -1;
@@ -679,11 +674,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
     function selectBookmarkItem(el, w) {
-        var grp = localStorage['rh-group'];
         if (getActiveBookmark() == 'history') {
             var into = '#rh-views-insert';
         } else if (getActiveBookmark() == 'search') {
-            var into = '#rh-views-search-insert';
+            into = '#rh-views-search-insert';
         }
         
         var itemSelectedColor = '#ffcbd3';
@@ -721,8 +715,8 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         } else if (w == 'all') {
             if (el.value == 'false') {
-                var items = $$(into + ' .chkbx');
-                for (var i = 0; i < items.length; i++) {
+                items = $$(into + ' .chkbx');
+                for (i = 0; i < items.length; i++) {
                     (function(ele) {
                         ele.checked = true;
                         var parent = ele.closest('div.item-holder');
@@ -731,8 +725,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
                 el.value = 'true';
             } else {
-                var items = $$(into + ' .chkbx');
-                for (var i = 0; i < items.length; i++) {
+                items = $$(into + ' .chkbx');
+                for (i = 0; i < items.length; i++) {
                     (function(ele) {
                         ele.checked = false;
                         var parent = ele.closest('div.item-holder');

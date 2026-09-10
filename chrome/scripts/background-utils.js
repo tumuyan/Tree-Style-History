@@ -170,12 +170,12 @@ function get_host(url) {
         var parsed = new URL(url);
         var host = parsed.hostname;
         if (host) return host;
-    } catch (e) {
+    } catch {
         try {
-            var parsed = new URL('https://' + url);
-            var host = parsed.hostname;
+            parsed = new URL('https://' + url);
+            host = parsed.hostname;
             if (host && host.indexOf('.') !== -1) return host;
-        } catch (e2) {}
+        } catch {}
     }
     return "#";
 }
@@ -203,7 +203,7 @@ function getFaviconUrl(url, options) {
             if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) {
                 return url.indexOf(chrome.runtime.id) !== -1 ? 'images/tree-38.png' : 'images/Extension-icon-vector-04.svg';
             }
-        } catch (e) {}
+        } catch {}
         return 'images/Extension-icon-vector-04.svg';
     }
     if (url.indexOf('chrome://') === 0 || url.indexOf('about:') === 0 || url.indexOf('edge://') === 0 || url.indexOf('opera://') === 0 || url.indexOf('brave://') === 0) {
@@ -216,15 +216,15 @@ function getFaviconUrl(url, options) {
     var trimmedUrl = url.trim();
     if (!trimmedUrl) return Object.prototype.hasOwnProperty.call(options, 'fallback') ? options.fallback : '';
     var hostValue = '#';
-    try { hostValue = get_host(trimmedUrl); } catch (err) { hostValue = '#'; }
+    try { hostValue = get_host(trimmedUrl); } catch { hostValue = '#'; }
     if (service === 'chrome') {
         return hostValue === '#' ? 'chrome://favicon/' : 'chrome://favicon/' + trimmedUrl;
     }
     var parsedUrl = null;
     try { parsedUrl = new URL(trimmedUrl); }
-    catch (err) {
+    catch {
         try { parsedUrl = new URL('https://' + trimmedUrl); }
-        catch (err2) { parsedUrl = null; }
+        catch { parsedUrl = null; }
     }
     var fallback = Object.prototype.hasOwnProperty.call(options, 'fallback') ? options.fallback : 'images/blank.png';
     if (!parsedUrl || hostValue === '#') return fallback;

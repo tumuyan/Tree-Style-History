@@ -9,8 +9,6 @@
 // one, which depends on history-core.js.
 
 import { $, $$, createElement } from '../dom-helper.js';
-import { returnLang, formatDate, DAY, isBookmarkletUrl, getFaviconUrl, get_host, TimeToStr, truncate, escapeHtmlAttr, chromeURL } from './helpers.js';
-import { updateFilter, filtUrl, flist } from './config.js';
 import { history } from './history-core.js';
 import { calendar_storage2, save_calendar_storage2 } from './shared/calendar-storage.js';
 
@@ -59,7 +57,7 @@ function calendar(w, e, clickCallback) {
     if (isLeapYear()) {
         var dayarray = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
     } else {
-        var dayarray = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+        dayarray = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
     }
 
     if (w == 'current') {
@@ -71,9 +69,9 @@ function calendar(w, e, clickCallback) {
         var mcheck = dayarray[(Number(monthSelect.options[monthSelect.selectedIndex].value) - 1)];
         var dcheck = Number(daySelect.options[daySelect.selectedIndex].value);
         if (mcheck < dcheck) {
-            var cdateo = new Date(Number(yearSelect.options[yearSelect.selectedIndex].value), (Number(monthSelect.options[monthSelect.selectedIndex].value) - 1), mcheck, 23, 59, 59, 999);
+            cdateo = new Date(Number(yearSelect.options[yearSelect.selectedIndex].value), (Number(monthSelect.options[monthSelect.selectedIndex].value) - 1), mcheck, 23, 59, 59, 999);
         } else {
-            var cdateo = new Date(Number(yearSelect.options[yearSelect.selectedIndex].value), (Number(monthSelect.options[monthSelect.selectedIndex].value) - 1), Number(daySelect.options[daySelect.selectedIndex].value), 23, 59, 59, 999);
+            cdateo = new Date(Number(yearSelect.options[yearSelect.selectedIndex].value), (Number(monthSelect.options[monthSelect.selectedIndex].value) - 1), Number(daySelect.options[daySelect.selectedIndex].value), 23, 59, 59, 999);
         }
     }
 
@@ -90,7 +88,7 @@ function calendar(w, e, clickCallback) {
     var yeararray = [ydatec, (ydatec - 1)];
 
     if (w == 'current') {
-        for (var i = 0; i < yeararray.length; i++) {
+        for (i = 0; i < yeararray.length; i++) {
             var opt = createElement('option', { 'value': yeararray[i], 'text': yeararray[i] });
             if (i == 0) {
                 opt.selected = true;
@@ -106,14 +104,14 @@ function calendar(w, e, clickCallback) {
         }
     }
 
-    for (var i = 0; i <= dayarray.length; i++) {
+    for (i = 0; i <= dayarray.length; i++) {
         if (mdatec == i) {
-            for (var ia = 1; ia <= dayarray[i]; ia++) {
+            for (ia = 1; ia <= dayarray[i]; ia++) {
                 var iaStr = ia + '';
                 if (iaStr.length == 1) {
                     iaStr = '0' + iaStr;
                 }
-                var opt = createElement('option', { 'value': iaStr, 'text': iaStr });
+                opt = createElement('option', { 'value': iaStr, 'text': iaStr });
                 if (ia == ddatec) {
                     opt.selected = true;
                 }
@@ -127,9 +125,9 @@ function calendar(w, e, clickCallback) {
 
     $('calendar-days').textContent = '';
 
-    for (var ii = 0; ii < dayarray[mdatec]; ii++) {
+    for (ii = 0; ii < dayarray[mdatec]; ii++) {
         if (ii == 0) {
-            for (var d = 0; d < fday; d++) {
+            for (d = 0; d < fday; d++) {
                 $('calendar-days').appendChild(createElement('span', { html: '&nbsp;', 'class': 'day' }));
             }
         }
@@ -164,9 +162,9 @@ function calendar(w, e, clickCallback) {
             let rhat = calendar_storage2[_time];
             let style = '';
 
-            if (rhat == undefined) {
-
-            } else if (rhat > 0 && rhat < 50) {
+            // An unknown day count simply has no style: every range test below
+            // is false for undefined, so it falls through untouched.
+            if (rhat > 0 && rhat < 50) {
                 style = ('background-color:#daf3cb');
             } else if (rhat > 49 && rhat < 100) {
                 style = ('background-color:#aade8a');
@@ -176,7 +174,7 @@ function calendar(w, e, clickCallback) {
                 style = ('background-color:#4e991f');
             }
 
-            var dayLink = createElement('a', {
+            dayLink = createElement('a', {
                 href: '#',
                 text: (ii + 1),
                 'class': 'day',
@@ -201,7 +199,7 @@ function calendar(w, e, clickCallback) {
             $('calendar-days').appendChild(dayLink);
         }
         if ((ii + 1) == dayarray[mdatec]) {
-            for (var d = 0; d < (6 - lday); d++) {
+            for (d = 0; d < (6 - lday); d++) {
                 $('calendar-days').appendChild(createElement('span', { html: '&nbsp;', 'class': 'day' }));
             }
         }

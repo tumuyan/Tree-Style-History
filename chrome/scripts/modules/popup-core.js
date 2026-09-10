@@ -1,11 +1,11 @@
 import { $, $$, createElement } from '../dom-helper.js';
 import {
     returnLang, escapeHtmlAttr, escapeHtmlText, timeNow, formatDate,
-    getFaviconUrl, isBookmarkletUrl, get_host, executeBookmarklet,
+    getFaviconUrl, isBookmarkletUrl, executeBookmarklet,
     getFaviconOnerror, setupFaviconElement,
-    Clipboard, getVersion, getVersionType
+    Clipboard
 } from './helpers.js';
-import { filtUrl, updateFilter } from './config.js';
+import { filtUrl } from './config.js';
 
 // Left click
 function leftClick(url, event) {
@@ -88,29 +88,29 @@ function formatItem(data) {
     if (data.visits !== undefined) {
         var visits = data.visits;
     } else {
-        var visits = '';
+        visits = '';
     }
 
     if (rhsurl == 'yes' || rhsext == 'yes') {
         var saext = 'style="margin-left: 2px;"';
     } else {
-        var saext = '';
+        saext = '';
     }
 
     if (rhsext == 'no') {
         var sext = 'style="display:none;"';
     } else {
         if (type == 'rh' || type == 'mv') {
-            var sext = '';
+            sext = '';
         } else {
-            var sext = 'style="display:none;"';
+            sext = 'style="display:none;"';
         }
     }
 
     if (rhsurl == 'no') {
         var surl = 'style="display:none;"';
     } else {
-        var surl = '';
+        surl = '';
     }
 
     if (localStorage['rhs-showsep'] == 'yes') {
@@ -120,7 +120,7 @@ function formatItem(data) {
     if (rhsext == 'yes' && rhsurl == 'yes') {
         var extsep = ' | ';
     } else {
-        var extsep = '';
+        extsep = '';
     }
 
     var tipParts = [];
@@ -145,7 +145,7 @@ function formatItem(data) {
     if (type !== 'pi') {
         var ui = '<span class="ui-pin" data-function="' + type + '">&nbsp;</span><span class="ui-delete" data-function="' + type + '">&nbsp;</span>';
     } else {
-        var ui = '<span class="ui-delete" data-function="' + type + '">&nbsp;</span>';
+        ui = '<span class="ui-delete" data-function="' + type + '">&nbsp;</span>';
     }
 
     var faviconSrc = favicon;
@@ -163,7 +163,7 @@ function formatItem(data) {
             }
             // 本扩展的设置页面使用tree-38.png
             faviconSrc = isOwnExtension ? 'images/tree-38.png' : 'images/Extension-icon-vector-04.svg';
-        } catch (e) {
+        } catch {
             // 如果无法确定，使用通用扩展图标
             faviconSrc = 'images/Extension-icon-vector-04.svg';
         }
@@ -515,7 +515,6 @@ function uiDeleteItem(el, type) {
 function recentHistory() {
 
     var ir = 0;
-    var rh = '';
     var rhin = Number(localStorage['rh-itemsno']);
     var rhino = rhin;
     rhin = rhin * 4;
@@ -536,7 +535,6 @@ function recentHistory() {
                         var url = hi[i].url;
                         var visits = hi[i].visitCount;
                         var furl = getFaviconUrl(hi[i].url);
-                        var test = (/^(file|chrome|chrome-extension|chrome-devtools)\:\/\//).test(url);
 
                         if (title == '') {
                             title = url;
@@ -647,8 +645,8 @@ function showRecentTabs(rhhistory, rt) {
             if (el) el.style.display = 'none';
         });
     } else {
-        var rhhistory = chrome.extension.getBackgroundPage().openedTabs;
-        var rt = chrome.extension.getBackgroundPage().recentTabs;
+        rhhistory = chrome.extension.getBackgroundPage().openedTabs;
+        rt = chrome.extension.getBackgroundPage().recentTabs;
         showRecentTabsImpl(rhhistory, rt);
     }
 }

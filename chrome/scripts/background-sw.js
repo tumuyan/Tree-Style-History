@@ -22,12 +22,12 @@ var recentTabs = [];
 
 // Session data (will be persisted to storage due to SW lifecycle)
 var oid;
-var DAY = 24 * 3600 * 1000;
+DAY = 24 * 3600 * 1000;
 var date = new Date();
 date.setHours(23); date.setMinutes(59); date.setSeconds(59); date.setMilliseconds(999);
 
 var calendar_str;
-var calendar = {};
+calendar = {};
 var calendar_r = {};
 
 var urls_wait_load = new Array();
@@ -224,12 +224,12 @@ function extractHostnameFromFaviconUrl(url) {
         }
         // Favicon.im: favicon.im/{hostname}
         if (u.hostname === 'favicon.im') {
-            var m = url.match(/favicon\.im\/([^\/?]+)/);
+            m = url.match(/favicon\.im\/([^\/?]+)/);
             if (m) return m[1];
         }
         // FaviconKit: ico.faviconkit.net/favicon/{hostname}
         if (u.hostname === 'ico.faviconkit.net') {
-            var m = url.match(/\/favicon\/([^\/?]+)/);
+            m = url.match(/\/favicon\/([^\/?]+)/);
             if (m) return m[1];
         }
         // FaviconSnap: faviconsnap.com/api/favicon?url=...
@@ -239,10 +239,10 @@ function extractHostnameFromFaviconUrl(url) {
         }
         // Google: www.google.com/s2/favicons?domain_url=...
         if (u.hostname === 'www.google.com') {
-            var du = u.searchParams.get('domain_url');
+            du = u.searchParams.get('domain_url');
             if (du) return new URL(decodeURIComponent(du)).hostname;
         }
-    } catch (e) {}
+    } catch {}
     return null;
 }
 
@@ -254,7 +254,7 @@ const NEGATIVE_CACHE_TTL = 3600000; // 1 hour
 function getNegativeCache() {
     try {
         return JSON.parse(localStorage['favicon-negative-cache'] || '{}');
-    } catch (e) {
+    } catch {
         return {};
     }
 }
@@ -262,7 +262,7 @@ function getNegativeCache() {
 function setNegativeCache(cache) {
     try {
         localStorage['favicon-negative-cache'] = JSON.stringify(cache);
-    } catch (e) {}
+    } catch {}
 }
 
 function isNegativeCached(url) {
@@ -303,7 +303,7 @@ function cachePutSafe(cache, request, response) {
     try {
         var p = cache.put(request, response);
         if (p && typeof p.catch === 'function') p.catch(function () {});
-    } catch (e) {}
+    } catch {}
 }
 
 // Try the configured fallback service for the same hostname.
@@ -560,7 +560,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 // Opened tab
 function openedTab(tab) {
     openedTabs[tab.id] = tab;
-    addCloseRedord(tab.id, tab.url, tab.title, 0, -1);
+    addCloseRecord(tab.id, tab.url, tab.title, 0, -1);
     scheduleSessionSave();
 }
 
@@ -568,7 +568,7 @@ function openedTab(tab) {
 function closedTab(id) {
     if (openedTabs[id] !== undefined) {
         console.debug('close ' + id + ' ' + openedTabs[id].url);
-        addCloseRedord(id, openedTabs[id].url, openedTabs[id].title, (new Date()).getTime(), 0);
+        addCloseRecord(id, openedTabs[id].url, openedTabs[id].title, (new Date()).getTime(), 0);
     }
 
     // The per-tab maps are keyed by tab id and nothing else ever removed
@@ -586,11 +586,18 @@ function closedTab(id) {
 }
 
 // Add close record
-function addCloseRedord(tid, url, title, time, close) {
+//
+// `oid` is the session ordinal, bumped once per service worker start in
+// initializeStorageState(). Both fields must name the SAME session: the record
+// is filed under `oid` in the closed-tab tree (closed.js groups by it), so a
+// key that says "session 5" while the grouping field says 4 puts the record in
+// a group it does not belong to. `id` is `<oid>_<tid>` and `oid` is the number
+// that prefixes it.
+function addCloseRecord(tid, url, title, time, close) {
     if ((/^(http|https)\:\/\/(.*)/).test(url) && url != title && title != '') {
         dbManager.putClosedTab({
             id: oid + '_' + tid,
-            oid: oid - 1,
+            oid: oid,
             tid: tid,
             url: url,
             title: title,
@@ -607,7 +614,7 @@ function updatedTab(tab) {
     if (tab.status == 'complete') {
         if (openedTabs[tab.id] !== undefined) {
             if (openedTabs[tab.id].url != tab.url || openedTabs[tab.id].title != tab.title) {
-                addCloseRedord(tab.id, tab.url, tab.title, 0, -2);
+                addCloseRecord(tab.id, tab.url, tab.title, 0, -2);
             }
             openedTabs[tab.id].title = tab.title;
             openedTabs[tab.id].url = tab.url;
@@ -637,14 +644,10 @@ var mostVisitedInit = function () {
                 if (hi[i] !== undefined) {
                     if ((/^(http|https|ftp|ftps|file|chrome|chrome-extension|chrome-devtools)\:\/\/(.*)/).test(hi[i].title) == false && 
                         (/^(ftp|ftps|file|chrome|chrome-extension)\:\/\/(.*)/).test(hi[i].url) == false) {
-                        
-                        var currentTime = new Date(hi[i].lastVisitTime);
-                        var hours = currentTime.getHours();
-                        var minutes = currentTime.getMinutes();
-                        if (hours < 10) { hours = '0' + hours; }
-                        if (minutes < 10) { minutes = '0' + minutes; }
-                        var time = hours + ':' + minutes;
 
+                        // The time-of-day a page was last visited was computed
+                        // here and dropped on the floor — mostVisited() in
+                        // popup-core.js builds its items without it.
                         var title = hi[i].title;
                         var url = hi[i].url;
                         var furl = getFaviconUrl(hi[i].url);
@@ -703,8 +706,6 @@ chrome.tabs.onCreated.addListener(function (tab) {
         }
     }
 });
-
-var tabActive = 0;
 
 chrome.tabs.onUpdated.addListener(function (id, info, tab) {
     if (tabUrlJson[id.toString()] != tab.url) {
@@ -1066,10 +1067,14 @@ async function crawlUrlVisits(url_item) {
         if (visitBatch.length >= VISIT_FLUSH_SIZE) await flushCrawlBatch();
     }
 
-    // Update URL record (always with first visit time, matching original behavior)
-    url_item.loadfrom = loadfrom;
-    url_item.loadto = h[0].visitTime;
-    urlBatch.push(url_item);
+    // Stamp the crawl window on a copy rather than on `url_item` itself: six of
+    // these run at a time, and writing back to the shared record after the
+    // await is exactly the shape `require-atomic-updates` flags. Nothing reads
+    // `url_item` afterwards, so the copy is what gets written either way.
+    urlBatch.push(Object.assign({}, url_item, {
+        loadfrom: loadfrom,
+        loadto: h[0].visitTime,   // always the first visit time, as before
+    }));
     if (urlBatch.length >= VISIT_FLUSH_SIZE) await flushCrawlBatch();
 }
 
