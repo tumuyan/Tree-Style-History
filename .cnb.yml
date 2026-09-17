@@ -8,8 +8,9 @@
 # 单容器、对外只暴露 3001，并预装 Chromium（root 下已补 --no-sandbox）与中文字体。
 #
 # 进入环境后：WebIDE 的 PORTS 面板点 3001（或终端 open-here）即得到完整桌面；
-# 在桌面里开 Chromium → chrome://extensions → 开发者模式 → 加载已解压的扩展程序 → 选
-# /workspace/chrome（**不是仓库根目录**）。
+# 桌面里的 Chromium **已经自动带上了本仓库的扩展**（下面的 stages 会跑
+# scripts/dev-browser.sh，它把 chromium 换成一个自动加 --load-extension 的 shim），
+# 桌面上还多一个「Tree Style History」图标，点开就是树状历史页，不用手动加载。
 #
 # ⚠️ 注意：镜像自带的 Chromium 与 Playwright 的 `channel: 'chromium'` 不是同一个浏览器，
 # 互不可替代；所以要跑 `npm run test:e2e`，该装的 `npm run browser:install` 仍然要装。
@@ -36,6 +37,12 @@ $:
         NOVNC_RESIZE: remote        # 分辨率跟着浏览器视口走；改成 scale 可消除多标签互抢
         SCREEN_SIZE: 1920x1080      # 仅初始尺寸，之后随视口变
         # NOVNC_PASSWORD: random    # 只有在开发环境里加载真实浏览历史调试时才需要开
+      stages:
+        # 让桌面里的 Chromium 自动加载 /workspace/chrome（幂等，见脚本头注释）。
+        # 不放在 CNB_WELCOME_CMD 里：那个每开一个终端就跑一次，改 .desktop 太频繁；
+        # 而且它只在终端里跑，重建环境但不开终端时就不会生效。
+        - name: 预装扩展到 Chromium
+          script: bash scripts/dev-browser.sh
 
 # 引用源：以 "." 开头的 key 不会作为流水线执行，仅供锚点复用。
 # 与 .github/workflows/ci.yml 共用同一批 npm 脚本，避免两套 CI 逻辑漂移。
