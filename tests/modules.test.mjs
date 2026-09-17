@@ -1343,11 +1343,20 @@ test('history() renders every item into its own host group', async (t) => {
     dom.el('alert-holder-loading');
     dom.setOptions('rh-what', ['current', 'all'], 'current');
 
-    const now = new Date();
+    // `history('current')` asks for one day: [today 00:00 minus one day, today
+    // 23:59:59.999]. It then re-checks every result against that window itself,
+    // so an item clocked before it is dropped — and "now minus an hour" lands
+    // before midnight whenever the suite runs in the small hours, which made
+    // this test fail between roughly 00:00 and 01:00 local time (a CI runner in
+    // UTC+8 hit it at 00:27). Anchor the items to noon today instead: midday is
+    // inside the window whatever the clock says, so the fixture stops depending
+    // on when the test happens to run.
+    const noon = new Date();
+    noon.setHours(12, 0, 0, 0);
     const items = [
-        { id: '1', url: 'https://alpha.test/1', title: 'A1', visitCount: 1, lastVisitTime: now.getTime() - 3600000 },
-        { id: '2', url: 'https://alpha.test/2', title: 'A2', visitCount: 1, lastVisitTime: now.getTime() - 3500000 },
-        { id: '3', url: 'https://beta.test/1', title: 'B1', visitCount: 1, lastVisitTime: now.getTime() - 3400000 },
+        { id: '1', url: 'https://alpha.test/1', title: 'A1', visitCount: 1, lastVisitTime: noon.getTime() - 3600000 },
+        { id: '2', url: 'https://alpha.test/2', title: 'A2', visitCount: 1, lastVisitTime: noon.getTime() - 3500000 },
+        { id: '3', url: 'https://beta.test/1', title: 'B1', visitCount: 1, lastVisitTime: noon.getTime() - 3400000 },
     ];
     withChromeApi({ history: { search: (_q, cb) => cb(items) } }, () => {
         historyCore.history('current', '');
