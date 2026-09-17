@@ -87,6 +87,17 @@ npm run check   # 本地门禁：lint + test + verify，约 3 秒
 ### 加载 / 运行扩展（唯一的"构建"方式）
 打开 `chrome://extensions`，开启右上角「开发者模式」，点「加载已解压的扩展程序」，选择仓库中的 `/workspace/chrome` 目录（不是仓库根目录）。支持 Edge 与 Chrome。
 
+**云原生开发环境里不需要手动做上面这步**：`.cnb.yml` 的 `vscode` 阶段会跑 `scripts/dev-browser.sh`，
+它把 `chromium` 换成一个自动补 `--load-extension=/workspace/chrome` 的 shim（`/usr/local/bin/chromium`），
+并把 `/usr/share/applications/chromium*.desktop` 的 `Exec` 指过去。于是桌面里点 Chromium 图标、终端敲 `chromium`、
+菜单里点「Tree Style History」（直接打开树状历史页），走的都是已经加载好扩展的浏览器。
+脚本幂等，可反复执行；扩展 id 由 `sha256(扩展目录绝对路径)` 前 16 字节映射成 a-p 算出，路径固定为 `/workspace/chrome` 时恒为 `cnbfbkbclgbkbnnhacdidjglkknddiga`。
+
+> 为什么必须是 `--load-extension` 而不是「把扩展写进 profile」：实测过预置 `Default/Preferences` 的
+> `extensions.settings` 再启动，扩展页一律 `ERR_BLOCKED_BY_CLIENT`；在没有 flag 的进程里，
+> 通过 CDP 打开扩展页也会被拦。命令行 flag 是 Chrome/Edge 目前唯一可靠的侧载途径
+> （`e2e/pages.spec.mjs` 也是这么加载的，只是那里由 Playwright 传参）。
+
 ### 修改代码后重新加载
 普通页面（`*.html`、`css/`、`scripts/modules/`、`popup.js`、`history*.js`、`closed.js`、`bookmark.js`、`options.js`）：回到页面按 F5 即可。
 Service Worker 侧（`background-sw.js`、`background-utils.js`、`db-manager.js`、`manifest.json`）：必须在 `chrome://extensions` 点扩展卡片上的刷新图标；Service Worker 空闲 30 秒会被浏览器回收，全局变量（`openedTabs`、`recentTabs`、`openerJson` 等）会丢失，这是设计上必须容忍的。

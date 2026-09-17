@@ -1,3 +1,23 @@
+# 云原生开发环境：带 noVNC 桌面，用来人工验收浏览器扩展。
+#
+# 为什么需要桌面：本仓库本体是 MV3 扩展，`npm run test:e2e` 只能证明「页面没抛错」，
+# 证明不了「树渲染 / favicon 降级 / 小书签点击」这些要人眼+鼠标的事；之前只能靠本地浏览器。
+#
+# 镜像：docker.cnb.cool/v5.0/novnc-dev-env:latest（上游仓库 v5.0/novnc-dev-env，本仓库不构建、
+# 只拉取）。它基于 cnbcool/default-dev-env（自带 code-server），额外提供 Xvnc + XFCE + noVNC，
+# 单容器、对外只暴露 3001，并预装 Chromium（root 下已补 --no-sandbox）与中文字体。
+#
+# 进入环境后：WebIDE 的 PORTS 面板点 3001（或终端 open-here）即得到完整桌面；
+# 桌面里的 Chromium **已经自动带上了本仓库的扩展**（下面的 stages 会跑
+# scripts/dev-browser.sh，它把 chromium 换成一个自动加 --load-extension 的 shim），
+# 桌面上还多一个「Tree Style History」图标，点开就是树状历史页，不用手动加载。
+#
+# ⚠️ 注意：镜像自带的 Chromium 与 Playwright 的 `channel: 'chromium'` 不是同一个浏览器，
+# 互不可替代；所以要跑 `npm run test:e2e`，该装的 `npm run browser:install` 仍然要装。
+# 另外容器内临时装的软件、浏览器 profile（含已加载的扩展）随环境销毁即失。
+#
+# CI（下方 push / pull_request 的 node:22）刻意**不用**本镜像：流水线要的是无头 Chromium，
+# 换桌面只会让每个 PR 多拉几百 MB 并起一套无人使用的 X/XFCE。
 $:
   vscode:
     - runner:
@@ -5,8 +25,24 @@ $:
       services:
         - docker
         - vscode
+      docker:
+        # 镜像能力不足时先清空本行回退到平台默认开发环境
+        image: docker.cnb.cool/v5.0/novnc-dev-env:latest
       env:
         PYTHONUNBUFFERED: "1"
+        # --- noVNC 桌面（变量含义见镜像 README「可调环境变量」）---
+        CNB_WELCOME_CMD: bash /usr/local/bin/app-web.sh
+        DESKTOP_ENV: xfce4
+        NOVNC_PORT: "3001"
+        NOVNC_RESIZE: remote        # 分辨率跟着浏览器视口走；改成 scale 可消除多标签互抢
+        SCREEN_SIZE: 1920x1080      # 仅初始尺寸，之后随视口变
+        # NOVNC_PASSWORD: random    # 只有在开发环境里加载真实浏览历史调试时才需要开
+      stages:
+        # 让桌面里的 Chromium 自动加载 /workspace/chrome（幂等，见脚本头注释）。
+        # 不放在 CNB_WELCOME_CMD 里：那个每开一个终端就跑一次，改 .desktop 太频繁；
+        # 而且它只在终端里跑，重建环境但不开终端时就不会生效。
+        - name: 预装扩展到 Chromium
+          script: bash scripts/dev-browser.sh
 
 # 引用源：以 "." 开头的 key 不会作为流水线执行，仅供锚点复用。
 # 与 .github/workflows/ci.yml 共用同一批 npm 脚本，避免两套 CI 逻辑漂移。
