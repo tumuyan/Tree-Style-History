@@ -1343,11 +1343,18 @@ test('history() renders every item into its own host group', async (t) => {
     dom.el('alert-holder-loading');
     dom.setOptions('rh-what', ['current', 'all'], 'current');
 
-    const now = new Date();
+    // Noon today, built from its components rather than from `now`:
+    // history('current') asks for the 24 hours ending at 23:59:59.999 TODAY,
+    // so a fixture built as `now - 1h` lands in yesterday and is filtered out
+    // whenever the suite runs in the first hour of the day. That is exactly
+    // what happened in CI (UTC+8, 00:41 local): the render loop then had
+    // nothing to draw and every assertion below counted zero.
+    const today = new Date();
+    const noon = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 12, 0, 0, 0).getTime();
     const items = [
-        { id: '1', url: 'https://alpha.test/1', title: 'A1', visitCount: 1, lastVisitTime: now.getTime() - 3600000 },
-        { id: '2', url: 'https://alpha.test/2', title: 'A2', visitCount: 1, lastVisitTime: now.getTime() - 3500000 },
-        { id: '3', url: 'https://beta.test/1', title: 'B1', visitCount: 1, lastVisitTime: now.getTime() - 3400000 },
+        { id: '1', url: 'https://alpha.test/1', title: 'A1', visitCount: 1, lastVisitTime: noon },
+        { id: '2', url: 'https://alpha.test/2', title: 'A2', visitCount: 1, lastVisitTime: noon + 60000 },
+        { id: '3', url: 'https://beta.test/1', title: 'B1', visitCount: 1, lastVisitTime: noon + 120000 },
     ];
     withChromeApi({ history: { search: (_q, cb) => cb(items) } }, () => {
         historyCore.history('current', '');
