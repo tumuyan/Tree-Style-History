@@ -31,18 +31,26 @@ test('advanceDateToToday rolls _DATE forward as a Date, never as a string', () =
     assert.equal(midnight.getSeconds(), 0);
     assert.equal(midnight.getMilliseconds(), 0);
 
+    // Every "now" below is anchored to `_DATE`, never to the wall clock. This
+    // test used to call `advanceDateToToday()` with no argument, which reads
+    // `new Date()`: if the clock crossed midnight between this file being
+    // imported and here, the very first call rolled over and *every* assertion
+    // after it failed. A once-a-day flake that looks exactly like a regression.
+    const noonToday = new Date(start + 12 * 3600 * 1000);
+    const threeDaysLater = new Date(start + 3 * DAY + 3600 * 1000);
+
     // Still the same day: nothing moves.
-    advanceDateToToday();
+    advanceDateToToday(noonToday);
     assert.equal(_DATE.getTime(), start, 'no roll-over while it is still today');
 
     // Jump three days ahead. This is the branch the old code corrupted.
-    advanceDateToToday(new Date(Date.now() + 3 * DAY));
+    advanceDateToToday(threeDaysLater);
     assert.ok(_DATE instanceof Date, '_DATE must stay a Date after rolling over');
     assert.equal(_DATE.getTime(), start + 3 * DAY, 'expected _DATE to advance by exactly 3 days');
 
     // Idempotent: re-running at the same instant must not keep moving it.
     const settled = _DATE.getTime();
-    advanceDateToToday(new Date(Date.now() + 3 * DAY));
+    advanceDateToToday(threeDaysLater);
     assert.equal(_DATE.getTime(), settled, 'roll-over must be idempotent');
 });
 

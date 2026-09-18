@@ -64,6 +64,10 @@
         _resolveReady: null,
         _initStartTime: 0,
         readyPromise: null,
+        // Keys read before the cache existed. Every one of them was answered
+        // with `undefined`, and the caller cannot tell that apart from
+        // "genuinely unset" — so the window is reported instead of ignored.
+        _unreadyReads: new Set(),
 
         init(callback) {
             if (this._initialized) {
@@ -94,9 +98,19 @@
             return this.init(callback);
         },
 
-        getItem(key) {
+        /**
+         * @param {string}  key
+         * @param {boolean} [record] whether an early miss should count as an
+         *   unready read. The proxy turns *every* property access into a
+         *   getItem() call, and language probes are not storage keys — see
+         *   OBJECT_PROBES.
+         */
+        getItem(key, record = true) {
             const value = this._cache[key];
             if (value === undefined) {
+                if (record && !this._initialized) {
+                    this._unreadyReads.add(String(key));
+                }
                 return undefined;
             }
             return value;
@@ -163,7 +177,12 @@
         console.info(`[StorageAdapter]   Cache keys: ${cacheSize}`);
         console.info(`[StorageAdapter]   Normalize time: ${elapsed}ms`);
         console.info(`[StorageAdapter]   Total init time: ${totalElapsed}ms`);
-        
+
+        // Every read that happened before this line was answered `undefined`.
+        // Say so before the callbacks run, so the warning precedes whatever
+        // the page logs next.
+        reportUnreadyReads();
+
         callbacks.forEach((cb, idx) => {
             try {
                 cb();
@@ -171,6 +190,25 @@
                 console.error('storageAdapter callback error [' + idx + ']', err, (cb.name || 'anonymous'));
             }
         });
+    }
+
+    /**
+     * Report the keys read before the cache existed, once.
+     *
+     * The set is cleared as part of reporting: nothing is left to accumulate,
+     * and a later re-initialisation reports only its own window rather than
+     * this one again on top of it.
+     */
+    function reportUnreadyReads() {
+        const all = Array.from(adapter._unreadyReads);
+        if (all.length === 0) {
+            return;
+        }
+        adapter._unreadyReads.clear();
+
+        const shown = all.slice(0, 5).join(', ');
+        const rest = all.length > 5 ? ` (+${all.length - 5} more)` : '';
+        console.warn(`[StorageAdapter] ${all.length} key(s) read before storage was ready: ${shown}${rest}`);
     }
 
     function fetchFromStorage() {
@@ -238,12 +276,18 @@
         });
     });
 
+    // Properties the language asks of *any* object before treating it as one.
+    // Symbols are excluded by their type; these are the string names that
+    // would otherwise surface in the warning as keys nobody ever wrote:
+    // `await localStorage` probes `then`, JSON.stringify probes `toJSON`.
+    const OBJECT_PROBES = new Set(['then', 'toJSON', 'constructor', 'prototype']);
+
     const storageProxy = new Proxy(adapter, {
         get(target, prop) {
             if (prop in target) {
                 return target[prop];
             }
-            return target.getItem(String(prop));
+            return target.getItem(String(prop), typeof prop === 'string' && !OBJECT_PROBES.has(prop));
         },
         set(target, prop, value) {
             if (prop in target) {

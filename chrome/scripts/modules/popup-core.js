@@ -6,6 +6,9 @@ import {
     Clipboard
 } from './helpers.js';
 import { filtUrl } from './config.js';
+// Straight from the shared layer, like config.js does: only module code uses
+// it, so it stays off `window` (tests/static.test.mjs keeps that surface honest).
+import { INTERNAL_URL } from './shared/url.js';
 
 // Left click
 function leftClick(url, event) {
@@ -533,6 +536,14 @@ function recentHistory() {
 
                         var title = hi[i].title;
                         var url = hi[i].url;
+
+                        // Not "where you were browsing". Skipping must not
+                        // increment `ir`: internal URLs would otherwise burn
+                        // slots the user configured for real pages.
+                        if (INTERNAL_URL.test(url)) {
+                            continue;
+                        }
+
                         var visits = hi[i].visitCount;
                         var furl = getFaviconUrl(hi[i].url);
 

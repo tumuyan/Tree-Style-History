@@ -10,7 +10,7 @@
 // concatenation is what the Service Worker loads via importScripts.
 // ============================================================================
 
-/* exported defaultValues, defaultConfig, DAY, _DATE, advanceDateToToday, getVersion, getVersionType, returnLang, timeNow, isBookmarkletUrl, get_host, getFaviconUrl, getFaviconOnerror, calendar_storage2, save_calendar_storage2 */
+/* exported defaultValues, defaultConfig, DAY, _DATE, advanceDateToToday, getVersion, getVersionType, returnLang, timeNow, isBookmarkletUrl, INTERNAL_URL, get_host, getFaviconUrl, getFaviconOnerror, calendar_storage2, save_calendar_storage2 */
 
 // ---- begin modules/shared/config-defaults.js ----
 // Shared config defaults — single source of truth for background-utils.js.
@@ -164,6 +164,18 @@ function isBookmarkletUrl(url) {
     if (typeof url !== 'string') return false;
     return /^javascript\s*:/i.test(url.trim());
 }
+
+// URL schemes that are not "where you were browsing": local files, the file
+// transfer protocols, and the browser's own pages.
+//
+// One regex because two lists answer the same question twice: the Service
+// Worker uses it to keep these out of the most-visited cache, and the popup
+// uses it to keep them out of recent history. Let them drift and a page shows
+// up in one list but not the other.
+//
+// Declared with `var`, not `const`: gen-sw-utils.mjs emits `/* exported ... */`
+// for the Service Worker's benefit, and that directive only covers `var`.
+var INTERNAL_URL = /^(ftp|ftps|file|chrome|chrome-extension|chrome-devtools|edge)\:\/\//;
 
 function get_host(url) {
     try {

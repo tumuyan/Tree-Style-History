@@ -67,8 +67,8 @@ https://github.com/tumuyan/Tree-Style-History/issues/1
 
 ## Prompt
 这是一个Chrome浏览器扩展，chrome/scripts/目录下的如下js文件可以忽略:  
-moo.js 是MooTools 框架文件，jquery-*.js 是jquery库文件，jquery.ztree.exhide.js jquery.ztree.core.js 和 fuzzysearch.js是树状显示内容的库ztree的文件。
-chrome/scripts/目录下 background-utils.js 文件是被 background-sw.js 引用的文件，内容基本由 func.js 精简而来。
+moo.js 是MooTools 框架文件，jquery-*.js 是jquery库文件，jquery.ztree.exhide.js jquery.ztree.core.js 和 fuzzysearch.js是树状显示内容的库ztree的文件。其中 jquery.ztree.exhide.js 有本地定制（为了支持搜索时隐藏节点），不是上游原版，不要用上游文件整体覆盖。
+chrome/scripts/目录下 background-utils.js 文件是被 background-sw.js 引用的文件，它由 chrome/scripts/modules/shared/ 自动生成（npm run gen），不要手改。
 
 ## Changlog
 3.3.1 (2026/06/19)  

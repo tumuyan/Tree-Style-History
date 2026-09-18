@@ -67,6 +67,10 @@ const crossFileGlobals = {
     getFaviconOnerror: 'writable',
     setupFaviconElement: 'writable',
 
+    // --- modules/shared/ (flattened into background-utils.js, so the Service
+    // Worker sees it as a bare global) ---
+    INTERNAL_URL: 'writable',
+
     // --- modules/config.js ---
     defaultValues: 'writable',
     defaultConfig: 'writable',

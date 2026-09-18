@@ -9,6 +9,18 @@ export function isBookmarkletUrl(url) {
     return /^javascript\s*:/i.test(url.trim());
 }
 
+// URL schemes that are not "where you were browsing": local files, the file
+// transfer protocols, and the browser's own pages.
+//
+// One regex because two lists answer the same question twice: the Service
+// Worker uses it to keep these out of the most-visited cache, and the popup
+// uses it to keep them out of recent history. Let them drift and a page shows
+// up in one list but not the other.
+//
+// Declared with `var`, not `const`: gen-sw-utils.mjs emits `/* exported ... */`
+// for the Service Worker's benefit, and that directive only covers `var`.
+export var INTERNAL_URL = /^(ftp|ftps|file|chrome|chrome-extension|chrome-devtools|edge)\:\/\//;
+
 export function get_host(url) {
     try {
         var parsed = new URL(url);

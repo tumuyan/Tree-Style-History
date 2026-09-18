@@ -1383,6 +1383,41 @@ test('history() renders every item into its own host group', async (t) => {
     assert.equal(byHost.get('beta.test'), 1, 'beta.test holds its one item');
 });
 
+test('recentHistory lists pages, not internal URLs', async (t) => {
+    // The popup used to compute `test = /^(file|chrome|…)/.test(url)` and then
+    // never use it, so opening a local file put it in "recent history" next to
+    // real pages. The service worker already leaves those out of its
+    // most-visited cache — this brings the two lists back to one answer.
+    const popupCore = await importModule('modules/popup-core.js');
+    restoreStorage(t, ['rh-itemsno']);
+
+    const holder = dom.el('rh-inject');
+    holder.innerHTML = '';
+    localStorage['rh-itemsno'] = '3';
+
+    const entries = [
+        { url: 'file:///home/me/notes.txt', title: 'Notes' },
+        { url: 'chrome://extensions', title: 'Extensions' },
+        { url: 'https://alpha.test/1', title: 'A1' },
+        { url: 'chrome-extension://abcdefg/popup.html', title: 'Popup' },
+        { url: 'https://beta.test/1', title: 'B1' },
+    ].map((e) => ({ ...e, visitCount: 1, lastVisitTime: TS }));
+
+    withChromeApi({ history: { search: (_q, cb) => cb(entries) } }, () => {
+        popupCore.recentHistory();
+    });
+
+    const rendered = holder.children.map((el) => el.innerHTML).join('\n');
+
+    // Three slots were configured; the two internal URLs must not eat them.
+    // If they did, this would render 2 instead — silently, with no error.
+    assert.equal(holder.children.length, 2, 'internal URLs must not occupy slots meant for pages');
+    assert.doesNotMatch(rendered, /file:\/\/\/home/, 'a local file must not be listed');
+    assert.doesNotMatch(rendered, /chrome:\/\/extensions/, "the browser's own pages must not be listed");
+    assert.match(rendered, /https:\/\/alpha\.test\/1/);
+    assert.match(rendered, /https:\/\/beta\.test\/1/);
+});
+
 test('getMoreItems survives a group checkbox that is not inside a group title', async (t) => {
     const historyCore = await importModule('modules/history-core.js');
     const input = seedOrphanCheckbox(t);

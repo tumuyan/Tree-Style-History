@@ -643,7 +643,7 @@ var mostVisitedInit = function () {
 
                 if (hi[i] !== undefined) {
                     if ((/^(http|https|ftp|ftps|file|chrome|chrome-extension|chrome-devtools)\:\/\/(.*)/).test(hi[i].title) == false && 
-                        (/^(ftp|ftps|file|chrome|chrome-extension)\:\/\/(.*)/).test(hi[i].url) == false) {
+                        INTERNAL_URL.test(hi[i].url) == false) {
 
                         // The time-of-day a page was last visited was computed
                         // here and dropped on the floor — mostVisited() in
