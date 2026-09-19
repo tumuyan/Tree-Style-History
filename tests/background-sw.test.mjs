@@ -279,6 +279,58 @@ test('tab state written by one worker is read by the next', async () => {
     assert.deepEqual(Array.from(second.ctx.recentTabs), [3]);
 });
 
+test('the tab list is mirrored into a key small enough for the popup', async () => {
+    // The popup reads this instead of messaging the worker: a message wakes the
+    // worker, and a worker that wakes runs the startup crawl again.
+    const session = new Map();
+    const w = loadWorker({ sessionStore: session, tabs: [] });
+    w.boot();
+    await w.settle();
+
+    w.fire('tabs.onActivated', { tabId: 3 });
+    w.fire('tabs.onActivated', { tabId: 7 });
+    await w.ctx.saveSessionState();
+
+    const list = session.get('tab-list');
+    assert.ok(list, 'the popup needs a snapshot of its own to read');
+    // Array.from(): built inside the vm context, so its prototype is that
+    // realm's Array and deepEqual would reject it on structure alone.
+    assert.deepEqual(Array.from(list.recentTabs), [7, 3],
+        'activation order is the point of the snapshot: newest first');
+    // The visit-id maps are what makes the full snapshot oversized; the popup
+    // must not have to deserialise them on every open.
+    assert.deepEqual(Object.keys(list).sort(), ['openedTabs', 'recentTabs', 'v'],
+        'the popup copy carries the two tab fields and nothing else');
+});
+
+test('a stale full snapshot does not take the tab list down with it', async () => {
+    // `tab-list` carries its own version, so bumping SESSION_STATE_VERSION must
+    // not discard it as a side effect. Before this it sat behind the version
+    // check: the next shape change would have quietly cost the popup the
+    // activation order — the one thing a live-tab query cannot rebuild.
+    const session = new Map();
+    const first = loadWorker({ sessionStore: session, tabs: [] });
+    first.boot();
+    await first.settle();
+
+    first.fire('tabs.onActivated', { tabId: 3 });
+    first.fire('tabs.onActivated', { tabId: 7 });
+    await first.ctx.saveSessionState();
+
+    // Fake forward: what the next worker would find after a version bump.
+    session.get('tab-state').v = 999;
+
+    const next = loadWorker({ sessionStore: session, tabs: [] });
+    next.boot();
+    await next.settle();
+
+    assert.equal(await next.ctx.restoreSessionState(), false, 'the stale snapshot itself is ignored');
+    // Array.from(): built inside the vm context, so its prototype is that
+    // realm's Array and deepEqual would reject it on structure alone.
+    assert.deepEqual(Array.from(next.ctx.recentTabs), [7, 3],
+        'the tab list is versioned separately, so it must still be applied');
+});
+
 test('a browser session with no snapshot starts cold instead of throwing', async () => {
     const w = loadWorker({});
     w.boot();

@@ -637,29 +637,100 @@ function openTab(id) {
 };
 
 
+// --- Recent tabs: where the data comes from --------------------------------
+//
+// This block used to fetch `openedTabs`/`recentTabs` with
+// chrome.runtime.sendMessage. A message wakes the service worker, and a worker
+// that wakes re-runs its entire startup crawl (a full-history search per day
+// plus a getVisits pass) — seconds of work whose only result here is a list of
+// tabs. On a cold start the reply was worse than the cost: the worker answers
+// `getData` from module scope, which is empty until the live-tab query finishes,
+// so the popup woke the worker to receive nothing.
+//
+// The worker now mirrors both fields into chrome.storage.session (TAB_LIST_KEY
+// in background-sw.js). Session storage lives in the browser process: reading it
+// wakes nothing, touches no disk, and — unlike the worker's module scope — it
+// survives the worker being recycled.
+const TAB_LIST_KEY = 'tab-list';
+const TAB_LIST_VERSION = 1;
+
+function tabListArea() {
+    return (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.session)
+        ? chrome.storage.session
+        : null;
+}
+
+function readTabList() {
+    const area = tabListArea();
+    if (!area) {
+        return Promise.reject(new Error('chrome.storage.session is unavailable'));
+    }
+    // get() is called inside a then() rather than passed to Promise.resolve():
+    // Chrome throws *synchronously* on a value it cannot read, i.e. before any
+    // .catch() would be attached.
+    return Promise.resolve().then(function () {
+        return area.get(TAB_LIST_KEY);
+    }).then(function (result) {
+        const saved = result && result[TAB_LIST_KEY];
+        if (!saved || saved.v !== TAB_LIST_VERSION) {
+            throw new Error('no tab list snapshot');
+        }
+        return {
+            openedTabs: saved.openedTabs || {},
+            recentTabs: Array.isArray(saved.recentTabs) ? saved.recentTabs : [],
+        };
+    });
+}
+
+/**
+ * Rebuild the list from live tabs when there is no snapshot — the first popup
+ * after a browser start, if the worker has not saved yet.
+ *
+ * Activation order is not recoverable here: `tabs.Tab.lastAccessed` is Chrome
+ * 121+ and the manifest floor is 102. The active tab therefore comes first and
+ * the rest follow in window order — a stable list rather than an arbitrary one.
+ */
+function readTabListFromTabs() {
+    return new Promise(function (resolve, reject) {
+        chrome.tabs.query({}, function (tabs) {
+            if (chrome.runtime.lastError) {
+                reject(new Error(chrome.runtime.lastError.message || 'chrome.tabs.query failed'));
+                return;
+            }
+            const openedTabs = {};
+            const active = [];
+            const rest = [];
+            for (const tab of tabs || []) {
+                if (!tab || tab.id === undefined) { continue; }
+                openedTabs[tab.id] = tab;
+                (tab.active ? active : rest).push(tab.id);
+            }
+            rest.sort(function (a, b) {
+                return ((openedTabs[a].windowId || 0) - (openedTabs[b].windowId || 0))
+                    || ((openedTabs[a].index || 0) - (openedTabs[b].index || 0));
+            });
+            resolve({ openedTabs: openedTabs, recentTabs: active.concat(rest) });
+        });
+    });
+}
+
 // Recent Tabs in popup
 function showRecentTabs(rhhistory, rt) {
     if (rhhistory !== undefined && rt !== undefined) {
-        // Data provided directly, skip message passing
+        // Data provided directly, skip reading
         showRecentTabsImpl(rhhistory, rt);
         return;
     }
-    if (typeof window.messageAdapter !== 'undefined') {
-        Promise.all([
-            window.messageAdapter.getBackgroundData('openedTabs'),
-            window.messageAdapter.getBackgroundData('recentTabs')
-        ]).then(([rhhistory, rt]) => {
-            showRecentTabsImpl(rhhistory, rt);
-        }).catch(err => {
-            console.error('Failed to get tab data:', err);
-            var el = $('rt-inject');
-            if (el) el.style.display = 'none';
-        });
-    } else {
-        rhhistory = chrome.extension.getBackgroundPage().openedTabs;
-        rt = chrome.extension.getBackgroundPage().recentTabs;
-        showRecentTabsImpl(rhhistory, rt);
-    }
+    readTabList().catch(function (reason) {
+        console.debug('[Popup] no tab list snapshot (' + (reason && reason.message) + '), querying live tabs');
+        return readTabListFromTabs();
+    }).then(function (data) {
+        showRecentTabsImpl(data.openedTabs, data.recentTabs);
+    }).catch(function (err) {
+        console.error('Failed to get tab data:', err);
+        var el = $('rt-inject');
+        if (el) el.style.display = 'none';
+    });
 }
 
 function showRecentTabsImpl(rhhistory, rt) {
@@ -704,7 +775,8 @@ function showRecentTabsImpl(rhhistory, rt) {
         }
 
         if ($$('#rt-inject .item').length == 0) {
-            $('rt-inject').style.display = 'none';
+            var container = $('rt-inject');
+            if (container) { container.style.display = 'none'; }
         }
 
     }

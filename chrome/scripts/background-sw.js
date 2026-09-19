@@ -65,12 +65,35 @@ const SESSION_STATE_KEY = 'tab-state';
 // rather than half-restored.
 const SESSION_STATE_VERSION = 1;
 const SESSION_SAVE_DELAY_MS = 1000;
+
+// The two tab fields on their own, for the popup.
+//
+// The popup used to fetch them with chrome.runtime.sendMessage, and a message
+// wakes this worker — which then runs the whole startup crawl again, seconds of
+// work whose only visible result is a list of tabs. chrome.storage.session is
+// read out of the browser process, so the popup can have the list without
+// paying for a wake.
+//
+// A separate key rather than a read of `tab-state`: that snapshot carries up to
+// 2 * SESSION_ID_LIMIT URL->visitId pairs, and deserialising it on every popup
+// open would cost more than the round trip it saves.
+const TAB_LIST_KEY = 'tab-list';
+const TAB_LIST_VERSION = 1;
 // urlIdJson/idUrlJson gain an entry per visited URL and nothing prunes them,
 // so the snapshot has to be capped before it is written: session storage
 // allowed 1MB until Chrome 112 (10MB since), and a long URL is ~1KB on its
 // own. 1000 remembered URLs is far more than a link chain needs.
 
 const SESSION_ID_LIMIT = 1000;
+
+/** The part of the snapshot the popup renders, without the visit-id maps. */
+function tabListSnapshot() {
+    return {
+        v: TAB_LIST_VERSION,
+        openedTabs: openedTabs,
+        recentTabs: recentTabs,
+    };
+}
 
 /**
  * Drop the oldest url -> visitId pairs once the cap is passed.
@@ -133,7 +156,13 @@ function saveSessionState() {
     // Chrome throw *synchronously*, i.e. before any .catch() is attached.
     const write = function (snapshot) {
         return Promise.resolve().then(function () {
-            return area.set({ [SESSION_STATE_KEY]: snapshot });
+            // One call, so the two copies can never disagree: session.set() is
+            // atomic and the tab list is re-read from module scope either way,
+            // including on the retry below, where it is the part that survives.
+            return area.set({
+                [SESSION_STATE_KEY]: snapshot,
+                [TAB_LIST_KEY]: tabListSnapshot(),
+            });
         });
     };
 
@@ -155,20 +184,42 @@ function restoreSessionState() {
     const area = sessionArea();
     if (!area) return Promise.resolve(false);
     return Promise.resolve().then(function () {
-        return area.get(SESSION_STATE_KEY);
+        return area.get([SESSION_STATE_KEY, TAB_LIST_KEY]);
     }).then(function (result) {
         const saved = result && result[SESSION_STATE_KEY];
-        if (!saved || saved.v !== SESSION_STATE_VERSION) return false;
+        const restored = Boolean(saved) && saved.v === SESSION_STATE_VERSION;
 
-        openerJson = saved.openerJson || {};
-        tabUrlJson = saved.tabUrlJson || {};
-        tabUrl0Json = saved.tabUrl0Json || {};
-        urlIdJson = saved.urlIdJson || {};
-        idUrlJson = saved.idUrlJson || {};
-        openedTabs = saved.openedTabs || {};
-        recentTabs = Array.isArray(saved.recentTabs) ? saved.recentTabs : [];
+        if (restored) {
+            openerJson = saved.openerJson || {};
+            tabUrlJson = saved.tabUrlJson || {};
+            tabUrl0Json = saved.tabUrl0Json || {};
+            urlIdJson = saved.urlIdJson || {};
+            idUrlJson = saved.idUrlJson || {};
+            openedTabs = saved.openedTabs || {};
+            recentTabs = Array.isArray(saved.recentTabs) ? saved.recentTabs : [];
+        }
 
-        return true;
+        // saveSessionState() drops the tab lists from the full snapshot when it
+        // does not fit. The popup-sized copy is written in the same call, so it
+        // still holds them — and activation order is the one thing
+        // initializeExistingTabs() cannot reconstruct from live tabs.
+        //
+        // Applied after the version check above rather than inside it: the tab
+        // list carries its own version, so bumping SESSION_STATE_VERSION must
+        // not discard it. Its position is what makes that work — it has to
+        // overwrite what the block above may have left empty, without being
+        // overwritten in turn.
+        const tabs = result[TAB_LIST_KEY];
+        if (tabs && tabs.v === TAB_LIST_VERSION) {
+            if (Object.keys(openedTabs).length === 0 && tabs.openedTabs) {
+                openedTabs = tabs.openedTabs;
+            }
+            if (recentTabs.length === 0 && Array.isArray(tabs.recentTabs)) {
+                recentTabs = tabs.recentTabs;
+            }
+        }
+
+        return restored;
     }).catch(function (error) {
         console.warn('SW: could not restore session state', error);
         return false;

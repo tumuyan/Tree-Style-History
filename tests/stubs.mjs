@@ -90,6 +90,9 @@ export function installStubs() {
     });
 
     const syncStore = new Map();
+    // chrome.storage.session, Chrome 102+ — the manifest's declared floor. It
+    // is what the popup reads the tab list from, so tests can seed it.
+    const sessionStore = new Map();
     const storageArea = (map) => ({
         get: (keys, cb) => {
             const out = {};
@@ -123,6 +126,7 @@ export function installStubs() {
         storage: {
             local: storageArea(store),
             sync: storageArea(syncStore),
+            session: storageArea(sessionStore),
             onChanged: { addListener() {} },
         },
         history: { search: (_q, cb) => cb && cb([]), getVisits: (_q, cb) => cb && cb([]) },
@@ -148,11 +152,13 @@ export function installStubs() {
     return {
         store,
         syncStore,
+        sessionStore,
         localStorage: localStorageProxy,
         chrome: chromeStub,
         reset() {
             store.clear();
             syncStore.clear();
+            sessionStore.clear();
             readyCallbacks.length = 0;
         },
         /** Run the queued onStorageReady callbacks, as the adapter does once the cache is filled. */

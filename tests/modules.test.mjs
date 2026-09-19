@@ -31,15 +31,33 @@ const config = await importModule('modules/config.js');
 // Built from components (not an epoch) so it is timezone-independent.
 const TS = new Date(2024, 0, 2, 13, 5, 6, 0).getTime();
 
-/** Swap in a `chrome.*` namespace for the duration of `fn`. */
+/**
+ * Swap in a `chrome.*` namespace for the duration of `fn`.
+ *
+ * `fn` may be async. The swap has to outlive it in that case: a `finally`
+ * around `return fn()` restores `chrome` while the promise is still pending, so
+ * every continuation — which is where a stubbed callback actually resolves —
+ * runs against the *original* namespace and silently gets the default stub.
+ */
 function withChromeApi(overrides, fn) {
     const saved = globalThis.chrome;
     globalThis.chrome = { ...saved, ...overrides, tabs: { ...saved.tabs, ...(overrides.tabs || {}) } };
+
+    let result;
     try {
-        return fn();
-    } finally {
+        result = fn();
+    } catch (error) {
         globalThis.chrome = saved;
+        throw error;
     }
+
+    // A synchronous fn is the common case, and its effects must be observable
+    // to the assertions that follow the call — so only wait on a promise.
+    if (result && typeof result.then === 'function') {
+        return result.finally(() => { globalThis.chrome = saved; });
+    }
+    globalThis.chrome = saved;
+    return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -1416,6 +1434,80 @@ test('recentHistory lists pages, not internal URLs', async (t) => {
     assert.doesNotMatch(rendered, /chrome:\/\/extensions/, "the browser's own pages must not be listed");
     assert.match(rendered, /https:\/\/alpha\.test\/1/);
     assert.match(rendered, /https:\/\/beta\.test\/1/);
+});
+
+test('showRecentTabs reads the tab list from session storage instead of waking the worker', async (t) => {
+    // The block used to fetch openedTabs/recentTabs with runtime.sendMessage.
+    // A message wakes the service worker, and a worker that wakes re-runs its
+    // startup crawl — seconds of work whose only result here is a list of tabs,
+    // and on a cold start it was answered from empty module scope anyway.
+    const popupCore = await importModule('modules/popup-core.js');
+    restoreStorage(t, ['rt-itemsno']);
+    t.after(() => env.sessionStore.clear());
+
+    const holder = dom.el('rt-inject');
+    holder.innerHTML = '';
+    localStorage['rt-itemsno'] = '6';
+    env.sessionStore.set('tab-list', {
+        v: 1,
+        openedTabs: { 5: { id: 5, url: 'https://a.test/1', title: 'A1' } },
+        recentTabs: [5],
+    });
+
+    let messages = 0;
+    let queries = 0;
+    await withChromeApi({
+        runtime: { ...globalThis.chrome.runtime, sendMessage: () => { messages++; return Promise.resolve(); } },
+        tabs: { query: (_q, cb) => { queries++; cb([]); } },
+    }, async () => {
+        popupCore.showRecentTabs();
+        await new Promise((r) => setTimeout(r, 0));
+    });
+
+    assert.equal(messages, 0, 'a message wakes the service worker; the tab list must not need one');
+    assert.equal(queries, 0, 'a session snapshot is enough, so no live-tab query either');
+    assert.equal(holder.children.length, 1, 'the snapshot has to reach the DOM');
+});
+
+test('showRecentTabs falls back to a live tab query when there is no snapshot', async (t) => {
+    // First popup after a browser start, before the worker has saved anything.
+    const popupCore = await importModule('modules/popup-core.js');
+    restoreStorage(t, ['rt-itemsno']);
+    // Cleared here as well as afterwards: the fallback only runs with no
+    // snapshot present, and leaning on the neighbouring test's t.after to have
+    // emptied it makes this one fail when it is run alone or reordered.
+    env.sessionStore.clear();
+    t.after(() => env.sessionStore.clear());
+
+    const holder = dom.el('rt-inject');
+    holder.innerHTML = '';
+    localStorage['rt-itemsno'] = '6';
+
+    let messages = 0;
+    let queries = 0;
+    await withChromeApi({
+        runtime: { ...globalThis.chrome.runtime, sendMessage: () => { messages++; return Promise.resolve(); } },
+        tabs: {
+            query: (_q, cb) => {
+                queries++;
+                cb([
+                    { id: 2, url: 'https://b.test/1', title: 'B1', active: false, windowId: 1, index: 0 },
+                    { id: 1, url: 'https://a.test/1', title: 'A1', active: true, windowId: 1, index: 1 },
+                ]);
+            },
+        },
+    }, async () => {
+        popupCore.showRecentTabs();
+        await new Promise((r) => setTimeout(r, 0));
+    });
+
+    assert.equal(queries, 1, 'the fallback must query live tabs');
+    assert.equal(messages, 0, 'the fallback must not reach for the service worker either');
+    // Activation order is not recoverable from a live query, so the active tab
+    // leads and the rest follow in window order.
+    assert.equal(holder.children.length, 2, 'both open tabs are listed');
+    assert.match(holder.children[0].innerHTML, /https:\/\/a\.test\/1/, 'the active tab comes first');
+    assert.match(holder.children[1].innerHTML, /https:\/\/b\.test\/1/);
 });
 
 test('getMoreItems survives a group checkbox that is not inside a group title', async (t) => {

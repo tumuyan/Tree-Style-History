@@ -7,10 +7,20 @@ document.addEventListener('DOMContentLoaded', function () {
         console.info('[Popup] Storage ready at', (storageReadyTime - _popupStartTime).toFixed(1) + 'ms');
 
         // Updated/Installed
+        //
+        // The banner is shown now, but the flag is written at the end of this
+        // callback: `localStorage[...] = ...` goes through
+        // chrome.storage.local.set(), and the service worker has a
+        // chrome.storage.onChanged listener, so every write wakes it and starts
+        // the startup crawl. It happens once per version, but it must not sit in
+        // front of the render calls below. The one exception is the redirect
+        // further down, which ends this callback before the deferred write.
 
-    if (localStorage['rh-version-' + getVersion()] !== 'true') {
+        var versionKey = 'rh-version-' + getVersion();
+        var showInstallNotice = localStorage[versionKey] !== 'true';
+
+    if (showInstallNotice) {
         alertUser(returnLang('successfullyInstalled') + '<span>v' + getVersion() + '</span>', 'open');
-        localStorage['rh-version-' + getVersion()] = 'true';
     }
 
     // if (localStorage['show-popup'] != 'yes') {
@@ -18,31 +28,22 @@ document.addEventListener('DOMContentLoaded', function () {
     //     window.close();
     // }
 
-    switch (localStorage['show-popup']) {
-        case 'history2':
-            window.open("history2.html");
-            window.close();
-            break;
-        case 'history':
-            window.open("history.html");
-            window.close();
-            break;
+    // A switch used to stand here, but every arm is the same two calls and each
+    // one ends this callback with window.close(). Collapsed to a lookup so the
+    // version flag can be written *before* the jump: the deferred write at the
+    // end of this callback is never reached once the popup closes itself.
+    var redirectPage = {
+        history2: 'history2.html',
+        history: 'history.html',
+        closed: 'closed.html',
+        bookmark: 'bookmark.html',
+        options: 'options.html',
+    }[localStorage['show-popup']];
 
-        case 'closed':
-            window.open("closed.html");
-            window.close();
-            break;
-
-        case 'bookmark':
-            window.open("bookmark.html");
-            window.close();
-            break;
-
-        case 'options':
-            window.open("options.html");
-            window.close();
-            break;
-
+    if (redirectPage) {
+        if (showInstallNotice) { localStorage[versionKey] = 'true'; }
+        window.open(redirectPage);
+        window.close();
     }
 
 
@@ -203,6 +204,11 @@ document.addEventListener('DOMContentLoaded', function () {
     $('alert-holder').addEventListener('click', function () {
         this.style.display = 'none';
     });
+
+    // -- Deferred write, see "Updated/Installed" above
+    if (showInstallNotice) {
+        localStorage[versionKey] = 'true';
+    }
 
     // -- Scrollbar fix
     //popup_scrollbar_fix.periodical(250);

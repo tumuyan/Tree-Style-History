@@ -164,7 +164,7 @@ MV3 取消了后台页面，因此代码分成两套互不相通的运行时：
 - `helpers.js` —— 纯工具，无副作用：时间格式化（`TimeToStr`/`timeNow`/`formatDate`，受 `rh-date`、`rh-timeformat` 配置控制）、i18n（`returnLang`/`echoLang`）、字符串转义（`escapeHtmlAttr`/`title_fix`）、URL 处理、bookmarklet 识别与执行、**favicon URL 生成体系**。
 - `config.js` —— 配置中心。`defaultValues` 是全部配置项的默认值表，`defaultConfig(clean)` 写入、`loadOptions(full)` 回填表单、`saveOptions(sync)` 收集保存。过滤域名由 `updateFilter()` 从 `rh-filtered` 编译成正则 `flist_r`，`filtUrl(url)` 供所有列表渲染前过滤。同步到 `chrome.storage.sync` 时把 key 的 `-` 换成 `_`，且过滤列表按每 100 条切片存成 `filterlist0..N`（绕过 sync 单 key 8KB 限制）。
 - `calendar.js` —— 侧边日历。`calendar_storage2` 是 `{startTime: 条数}` 映射，由 `history-core.js` 写入、本模块读取绘制热力色块，二者**循环依赖**，改动时需注意。
-- `popup-core.js` —— popup 各区块的渲染：`recentHistory` / `recentlyClosedTabs`（用 `chrome.sessions`）/ `recentBookmarks` / `mostVisited`（读 SW 写的 `mv-cache`）/ `showRecentTabs`（经 `messageAdapter` 取 SW 内存中的 `openedTabs`、`recentTabs`）/ `pinned`。统一由 `formatItem()` 生成条目，`leftClick`/`rightClick` 决定行为。
+- `popup-core.js` —— popup 各区块的渲染：`recentHistory` / `recentlyClosedTabs`（用 `chrome.sessions`）/ `recentBookmarks` / `mostVisited`（读 SW 写的 `mv-cache`）/ `showRecentTabs`（读 SW 镜像到 `chrome.storage.session` 的 `tab-list`；取不到才退回 `chrome.tabs.query`，**不再**走 `messageAdapter`——一次 `sendMessage` 就会唤醒 SW 并重跑启动爬库）/ `pinned`。统一由 `formatItem()` 生成条目，`leftClick`/`rightClick` 决定行为。
 - `history-core.js` —— 线性历史页渲染、分组（按 host）、排序（`rh-orderby` / `rh-order`）、`deleteHistoryItem('selected'|'range')`。**大列表用 `setInterval(..., 5)` 分片渲染**以免卡死，这是本项目反复出现的模式，新增长列表时应沿用。
 
 `scripts/dom-helper.js` 是 ES module 版的 `$`/`$$`/`createElement`，用来取代 3.3.0 中移除的 MooTools。
