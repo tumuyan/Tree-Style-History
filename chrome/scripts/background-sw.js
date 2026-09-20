@@ -186,7 +186,14 @@ function restoreSessionState() {
     return Promise.resolve().then(function () {
         return area.get([SESSION_STATE_KEY, TAB_LIST_KEY]);
     }).then(function (result) {
-        const saved = result && result[SESSION_STATE_KEY];
+        // get() always resolves with an object, so `|| {}` is not a real branch:
+        // it only keeps a bare read from throwing into the catch below, which
+        // would report a restore failure and skip the tab-list recovery — the
+        // part that survives a stale full snapshot.
+        const {
+            [SESSION_STATE_KEY]: saved,
+            [TAB_LIST_KEY]: tabs,
+        } = result || {};
         const restored = Boolean(saved) && saved.v === SESSION_STATE_VERSION;
 
         if (restored) {
@@ -209,7 +216,6 @@ function restoreSessionState() {
         // not discard it. Its position is what makes that work — it has to
         // overwrite what the block above may have left empty, without being
         // overwritten in turn.
-        const tabs = result[TAB_LIST_KEY];
         if (tabs && tabs.v === TAB_LIST_VERSION) {
             if (Object.keys(openedTabs).length === 0 && tabs.openedTabs) {
                 openedTabs = tabs.openedTabs;

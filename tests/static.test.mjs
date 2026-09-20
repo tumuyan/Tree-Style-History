@@ -215,6 +215,30 @@ test('every local src/href in HTML points at an existing file', () => {
     assert.deepEqual(missing, []);
 });
 
+test('popup.html loads neither message-adapter.js nor db-manager.js', () => {
+    // Both were dead there: the popup lists come from chrome.history /
+    // sessions / bookmarks and from the tab list the worker mirrors into
+    // chrome.storage.session, so it never touches IndexedDB. The tags were
+    // misleading — a message channel to the worker wakes it into re-running its
+    // startup crawl — so the removal is asserted, not just commented.
+    //
+    // The other pages still load them; this guard is deliberately about the
+    // popup alone.
+    const scripts = collectTags(fs.readFileSync(path.join(CHROME_DIR, 'popup.html'), 'utf8'))
+        .filter((tag) => tag.name === 'script')
+        .map((tag) => tag.attrs.src || '');
+
+    assert.deepEqual(
+        scripts.filter((s) => /message-adapter\.js|db-manager\.js/.test(s)),
+        [],
+        'the popup must not reach for the worker or IndexedDB',
+    );
+    // Guard against the tag being renamed away instead of removed: the comment
+    // in popup.html explains an absence, so it has to still be an absence.
+    assert.ok(scripts.some((s) => /storage-adapter\.js/.test(s)),
+        'storage-adapter.js is still required; did the script list change?');
+});
+
 // ---------------------------------------------------------------------------
 // i18n coverage
 // ---------------------------------------------------------------------------
