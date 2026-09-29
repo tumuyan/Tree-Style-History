@@ -1,10 +1,7 @@
 document.addEventListener('DOMContentLoaded', function () {
     onStorageReady(function () {
 
-        //释放jquery中$定义，并直接使用jQuery代替平时的$
-    var $jq = jQuery.noConflict();
-
-    // Fade in using CSS transition
+        // Fade in using CSS transition
     var historyContainer = $('history-container');
     if (historyContainer) {
         historyContainer.style.transition = 'margin-left 0.25s, margin-right 0.25s, opacity 0.25s';
@@ -84,53 +81,6 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
 
-    // ztree
-    var setting = {
-
-        view: {
-            nameIsHTML: true, //允许name支持html                
-            selectedMulti: false
-        },
-        edit: {
-            enable: false,
-            editNameSelectAll: false
-        },
-
-        data: {
-            key: {
-                title: "t"
-            },
-            simpleData: {
-                enable: true,
-                pIdKey: "pId"
-            }
-        },
-/*         callback: {
-            beforeRightClick: function (treeId, treeNode) {
-                //   var zTree = $.fn.zTree.getZTreeObj("tree");
-                if (treeNode == null) {
-                    // demoIframe.attr("src", treeNode.file + ".html");
-                    console.log('click R null');
-                    rightmenu('', 0, 0);
-                    return false;
-                }
-
-                if (treeNode.isParent == true) {
-                    // zTree.expandNode(treeNode);
-                    console.log('click R parent');
-                    return true;
-                } else {
-                    // demoIframe.attr("src", treeNode.file + ".html");
-                    console.log('click R');
-                    rightmenu('', 0, 0);
-                    return false;
-                }
-            },
-            onRightClick: zTreeOnRightClick
-        } */
-    };
-
-
     // 待插入的全部数据
     var zNodes = [];
     // 待插入的部分数据
@@ -155,14 +105,60 @@ document.addEventListener('DOMContentLoaded', function () {
         { id: 3, pId: 1, name: "没有找到关闭页面的记录", t: "😴", open: true }
     ];
 
+    // A page row carries its URL in `t`; a group row — a session (🗓️), a
+    // burst of quick closes (🕓), an abnormal exit (⚠️) — carries a label
+    // instead, because it has no URL of its own.
+    function isPageUrl(value) {
+        return /^(https?|ftp|ftps|file)\:\/\//i.test(String(value));
+    }
+
+    // Clicking a group reopens every page under it: README's "批量打开一个分组
+    // 的全部页面". refreshRMenu() used to wire that up by walking the
+    // `<a href="#">` elements zTree had just drawn; the tree reports the node
+    // now, so this walks the data instead — no dependency on the markup, and
+    // it survives a re-render.
+    function urlsBelow(node) {
+        return tree.childrenOf(node).flatMap(function (kid) {
+            return isPageUrl(kid.t) ? [kid.t] : urlsBelow(kid);
+        });
+    }
+
+    function onClickNodeUrl(event, treeId, treeNode) {
+        if (isPageUrl(treeNode.t)) {
+            chrome.tabs.query({ url: treeNode.t }, function (tabs) {
+                if (tabs.length > 0) {
+                    chrome.windows.update(tabs[0].windowId, { focused: true }, function () {
+                        chrome.tabs.update(tabs[0].id, { active: true });
+                    });
+                } else {
+                    window.open(treeNode.t, "_blank");
+                }
+            });
+            return;
+        }
+
+        for (const url of urlsBelow(treeNode)) {
+            window.open(url, "_blank");
+        }
+    }
+
+    // The tree: scripts/modules/tree.js renders the same class vocabulary
+    // zTree did, so css/zTreeStyle.css still draws the icons, the connector
+    // line and the indentation. jQuery, zTree, its locally patched exhide
+    // extension and fuzzysearch.js are gone from this page — see the header
+    // comment in modules/tree.js for what replaced them and why.
+    var tree = createTree($('treeDemo'), { onClick: onClickNodeUrl });
+    bindTreeSearch(tree, {
+        input: '#rh-search',
+        tags: '#search-tag a',
+        onStart: function () { alertLoadingHistory(false); },
+        onEnd: function () { alertLoadingHistory(true); },
+    });
+    tree.setNodes(nNodes);
+
     var tag = {};
 
 
-    $jq.fn.zTree.init($jq("#treeDemo"), setting, nNodes);
-    var treeObj = $jq.fn.zTree.getZTreeObj("treeDemo");
-    fuzzySearch('treeDemo', '#rh-search', null, false, '#search-tag a');
-
-    // var Filter = fuzzySearchNow('treeDemo','#rh-search',null,false);
 
     console.log("loading...");
     var DAY = 24 * 3600 * 1000;
@@ -303,7 +299,11 @@ document.addEventListener('DOMContentLoaded', function () {
                         // id: 'n' + v.id,
                         id: v.id,
                         pId: L2Id,
-                        name: TimeToStr(v.closeTime, true, true) + " - " + v.title.replace(/[<>]/g, ' '),
+                        // The raw title: a page title is attacker-controlled, and
+                        // escaping it is the renderer's job — it knows it is
+                        // writing text content, and it has to escape after
+                        // highlighting or a keyword cuts an entity in half.
+                        name: TimeToStr(v.closeTime, true, true) + " - " + v.title,
                         url: v.url,
                         icon: getFaviconUrl(v.url),
                         // icon:'chrome://favicon/'+site,
@@ -399,26 +399,15 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (zNodes.length < localStorage['load-range4'] && loadfrom - DAY * t > date - localStorage['load-range3'] * DAY) {
                     feach_History(loadfrom, loadto, t + 1);
                 } else {
-                    let nodes = treeObj.getNodes();
-                    while (nodes && nodes.length > 0) {
-                        treeObj.removeNode(nodes[0], false);
-                        // treeObj.removeNode(nodes,false);
-                    }
-
-                    if (zNodes.length > 0) {
-                        treeObj.addNodes(null, zNodes, false);
-                        // $('calendar-total-value').set('text',zNodes.length);
-                    } else {
-                        treeObj.addNodes(null, mNodes, false);
-                        // $('search-tag').set('text','');
-                        // $('calendar-total-value').set('text', '0');
-                    }
+                    // No "remove every node first" pass: zNodes is the whole
+                    // set, and setNodes() replaces it in one render. Removing
+                    // them one by one re-rendered the tree once per row.
+                    tree.setNodes(zNodes.length > 0 ? zNodes : mNodes);
                     $('calendar-total-value').textContent = zNodes.length;
 
                     // $('header-text').set('text',new Date(loadfrom-DAY*t).toLocaleString()+' - '+new Date(loadto).toLocaleString());
                     $('header-text').textContent = timeStr2(new Date(loadfrom - DAY * t), false) + ' ~ ' + timeStr2(new Date(loadto), true);
                     refreshSearchTags();
-                    refreshRMenu();
                     // 
                     alertLoadingHistory(true);
                     console.log(" pre_History() finish :( ");
@@ -468,29 +457,6 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
     }
-
-
-function refreshRMenu(){
-    var treeLinks = $('treeDemo').querySelectorAll('a[href="#"]');
-    for (var i = 0; i < treeLinks.length; i++) {
-        (function(el) {
-            if (el.id != undefined) {
-                el.addEventListener('click', function () {
-                    var subLinks = $$('#' + this.id.replace('_a',' a'));
-                    for (var j = 0; j < subLinks.length; j++) {
-                        (function(em) {
-                            if (em.href != undefined) {
-                                if (em.href.length > 3)
-                                    window.open(em.href);
-                            }
-                        })(subLinks[j]);
-                    }
-                });
-            }
-        })(treeLinks[i]);
-    }
-}
-
 
 
 

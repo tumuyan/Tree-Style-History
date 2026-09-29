@@ -229,6 +229,10 @@ function createTree(container, opts) {
     // Node objects are the identity: the same node keeps its element id across
     // renders, so a click can be mapped back to it.
     const ids = new Map();
+    // Kept between renders because callers walk it: closed.js reopens every
+    // page under the group that was clicked, which is a question about the
+    // data, not about the markup.
+    let index = indexNodes(nodes);
 
     function byTid(tid) {
         for (const [node, id] of ids) if (id === tid) return node;
@@ -236,6 +240,7 @@ function createTree(container, opts) {
     }
 
     function render() {
+        index = indexNodes(nodes);
         container.innerHTML = treeHtml(nodes, { treeId, keyword, urlKey, ids });
     }
 
@@ -282,7 +287,11 @@ function createTree(container, opts) {
         },
         /** The roots, in insertion order. */
         getNodes() {
-            return indexNodes(nodes).roots;
+            return index.roots;
+        },
+        /** Direct children of a node, in insertion order. */
+        childrenOf(node) {
+            return index.children.get(node) || [];
         },
         removeNode(node) {
             nodes = nodes.filter(function (n) { return n !== node; });

@@ -132,14 +132,10 @@ const crossFileGlobals = {
     shiftState: 'writable',
     itemSelectedColor: 'writable',
 
-    // --- modules/tree.js (mounted in func.js, used by history2.js) ---
+    // --- modules/tree.js (mounted in func.js, used by the tree pages) ---
     treeHtml: 'writable',
     createTree: 'writable',
     bindTreeSearch: 'writable',
-
-    // --- vendored libraries loaded via <script> ---
-    jQuery: 'writable',
-    fuzzySearch: 'writable',
 
     // --- UMD guard in db-manager.js (dead branch in the browser) ---
     module: 'readonly',
@@ -149,11 +145,6 @@ export default [
     {
         ignores: [
             'node_modules/**',
-            // Vendored third-party code — do not lint, do not edit.
-            'chrome/scripts/jquery-3.6.0.min.js',
-            'chrome/scripts/jquery.ztree.core.js',
-            'chrome/scripts/jquery.ztree.exhide.js',
-            'chrome/scripts/fuzzysearch.js',
         ],
     },
 

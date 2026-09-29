@@ -307,6 +307,29 @@ test('removeNode drops one row and clear empties the tree', () => {
     assert.deepEqual(tree.getNodes(), []);
 });
 
+test('childrenOf reports the direct children in insertion order', () => {
+    // closed.js walks it to reopen every page under the group that was clicked.
+    // It has to survive a re-render (the index is rebuilt, not cached from the
+    // first one) and to report the data's order rather than the markup's.
+    const branching = [
+        { id: 'g', pId: 0, name: 'group', t: '#' },
+        { id: 'b', pId: 'g', name: 'burst', t: '#' },
+        { id: 'p2', pId: 'b', name: 'second page', t: 'https://two.test/' },
+        { id: 'p1', pId: 'b', name: 'first page', t: 'https://one.test/' },
+    ];
+    const { tree } = treeFixture(branching);
+
+    const group = tree.getNodes()[0];
+    assert.deepEqual(tree.childrenOf(group).map((n) => n.id), ['b']);
+    assert.deepEqual(tree.childrenOf(branching[1]).map((n) => n.id), ['p2', 'p1'],
+        'insertion order, not the order the rows happen to be drawn in');
+
+    tree.setNodes(branching.slice(0, 2));
+    assert.deepEqual(tree.childrenOf(group).map((n) => n.id), ['b'],
+        'the index follows setNodes(), otherwise a click would reopen stale rows');
+    assert.deepEqual(tree.childrenOf(branching[2]), [], 'a node that is no longer in the tree has no children');
+});
+
 test('filter() narrows the tree and getKeyword() reports what is applied', () => {
     const { container, tree } = treeFixture(NODES);
 

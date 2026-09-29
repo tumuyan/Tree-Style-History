@@ -5,7 +5,7 @@
 状态图例：`[ ]` 未开始 · `[x]` 已完成 · `[-]` 暂缓
 
 > **护栏已就位**：`npm run check`（ESLint + `node:test` + 4 个校验脚本）是唯一准入闸门，约 5 秒跑完，CI 强制执行。
-> 当前基线：**lint 0 error / 0 warning（`--max-warnings 0`）· 194 测试 · 194 通过 · 0 skip · 0 失败**（另：e2e 10 测试 · 10 通过）。
+> 当前基线：**lint 0 error / 0 warning（`--max-warnings 0`）· 197 测试 · 197 通过 · 0 skip · 0 失败**（另：e2e 11 测试 · 11 通过）。
 > 2 个 skip 已在「第 3 批」消除（`rh-list-order` 硬编码与失效的 `treeOptionsDetail`）。**当前无 skip**；后续若需标注已知缺陷，沿用 `test(name, { skip: '原因' }, fn)` 写法（函数体内写期望行为，修完去掉 skip）。
 
 ---
@@ -309,10 +309,10 @@
   - ~~现状：函数名拼写错误；`id: oid + '_' + tid` 与 `oid: oid - 1` 语义不一致。~~
   - 已做：改名 `addCloseRecord`（3 处调用点 + 定义）；`oid` 字段改回 `oid`（原为 `oid - 1`）。新增断言 `record.id === record.oid + '_' + record.tid`，并变异验证。
 
-- [-] **处理 zTree 内含 `eval` 的 CSP 风险**（`chrome/scripts/jquery.ztree.core.js:1105`）
-  - ~~现状：`newNodes = eval("(" + msg + ")")`，MV3 默认 CSP 禁用 `eval`。当前走本地 `zNodes` 未触发，属潜在风险。~~
-  - 进展（见「第 8 批」）：`history2.html` **已不再加载 zTree**，风险面减半——jQuery、`jquery.ztree.core.js`、本地改过的 `exhide` 扩展、`fuzzysearch.js` 四个文件都从该页面的 `<script>` 列表移除，改由 `chrome/scripts/modules/tree.js` 原生渲染。
-  - 剩余：`closed.html` 仍在用，文件本身也还在仓库里（不能删）。等它迁移完，这个 `eval` 分支就没有任何调用方了。
+- [x] **处理 zTree 内含 `eval` 的 CSP 风险** — **已消除**（见「第 8 批」）
+  - ~~现状：`newNodes = eval("(" + msg + ")")`（`jquery.ztree.core.js:1105`），MV3 默认 CSP 禁用 `eval`。~~
+  - 两个树状页都改由 `chrome/scripts/modules/tree.js` 原生渲染后，该分支再无调用方；四个第三方文件（jQuery、`jquery.ztree.core.js`、本地改过的 `exhide`、`fuzzysearch.js`）已从仓库删除，`chrome/scripts/` 下不再有第三方代码。
+  - 两条静态守卫钉住：页面不得再 `<script src>` 这些文件、`chrome/scripts/` 下不得再出现同名文件；首方脚本里不得再出现 `$.fn.*` / `$jq` / `jQuery` / `fuzzySearch(`。均经变异验证。
 
 ---
 
@@ -338,10 +338,10 @@
   - 现状：`func.js` 把几十个函数逐个挂 `window`，`popup.js`/`history.js`/`closed.js`/`bookmark.js` 仍通过全局变量调用——物理拆了文件、逻辑仍是全局脚本。
   - 做法：页面脚本改为 `import`，删掉 `window.*` 挂载，使依赖可被静态分析。
 
-- [-] **统一前端技术栈**
+- [x] **统一前端技术栈** — **已完成**（见「第 8 批」）
   - ~~现状：`history2.html`/`closed.html` 用 jQuery+zTree（约 2.6k 行第三方代码，`jQuery.noConflict()` 后 `$` 让给 `dom-helper`），其余页面已原生化，两套并存且无共识。~~
-  - 进展（见「第 8 批」）：**`history2.html` 已迁移**。`chrome/scripts/modules/tree.js` 用原生 DOM 做树（建树、展开/折叠、关键字过滤保留祖先链、点击回调），并沿用 zTree 的 class 词汇，所以 `css/zTreeStyle.css` 仍然负责图标、连接线与缩进——只丢库，不丢样式。
-  - 剩余：`closed.html` 照旧用 jQuery+zTree 与 `fuzzysearch.js`。它要迁的话照同一套 API 走：`createTree($('treeDemo'), { onClick })` + `bindTreeSearch(tree, { input, tags })`。
+  - `history2.html`（第 8 批上半）与 `closed.html`（下半）都由 `chrome/scripts/modules/tree.js` 原生渲染：建树、展开/折叠、关键字过滤保留祖先链、点击回调。沿用 zTree 的 class 词汇，所以 `css/zTreeStyle.css` 仍然负责图标、连接线与缩进——只丢库，不丢样式。
+  - `closed.js` 的 `refreshRMenu()` 一并提供：它当初遍历 zTree 刚画出来的 `<a href="#">` 实现「点分组批量打开」，重渲染即失效。改由 `isPageUrl()` 判断 + `tree.childrenOf()` 递归（新增 API）走数据，不再依赖标记。
 
 - [ ] **重新审视全局劫持 `localStorage`**（`chrome/scripts/storage-adapter.js:290`）
   - 现状：`Object.defineProperty` 把 `localStorage` 换成 Proxy，对所有第三方脚本生效，且 `storageAdapter.ready()` 之前读取全是 `undefined`（P0 中 `updateFilter` 的 bug 正是这个语义陷阱的产物）。至少应让未就绪时读取打出告警。
@@ -472,6 +472,23 @@
   - 已做：改为 30 分钟。「最常访问」变化很慢，半小时足够。这也顺带缓解了第 4 批要解决的状态丢失问题。
   - 未做（留给后续）：更彻底的方案是去掉 alarm、popup 打开时按需刷新；以及 `mostVisitedInit()` 目前仍对 28 天全量 `sort()` 只取前 45——每 30 分钟一次尚可接受，暂不改（改成 top-K 会漏掉「很久没访问但总次数高」的站点）。
 
+### 第 8 批（已完成）：`closed.html` 迁移 + 第三方库出仓
+
+- [x] **`closed.html` 改由 `modules/tree.js` 渲染**
+  - 做法照 `history2.js` 同一套 API：`createTree($('treeDemo'), { onClick: onClickNodeUrl })` + `bindTreeSearch(tree, { input, tags })`。`setting` 对象（zTree 配置）、`$jq = jQuery.noConflict()`、`$jq.fn.zTree.init()`、`fuzzySearch()` 四处一并删除。
+  - `tree.setNodes()` 一次替换整棵树，取代「先 `removeNode()` 逐个删空、再 `addNodes()`」——后者每删一行重渲染一次。
+  - 声明顺序随之调整：`createTree()` 会立刻渲染 `nNodes`，所以占位节点必须先声明（zTree 的 `init()` 拿的是同一个数组，顺序本就如此）。
+- [x] **点分组批量打开不再依赖标记**
+  - 原实现 `refreshRMenu()`：遍历 `#treeDemo` 里 `a[href="#"]` 逐个绑监听，点击时再按 id 前缀查子链接。它依赖 zTree 刚画出来的 DOM，重渲染（筛选、翻页）后全部失效——而 zTree 每次筛选都会重画。
+  - 现改为：分组行的 `t` 是 `'#'`（无 URL），`isPageUrl()` 据此分流；批量打开走 `tree.childrenOf()` 递归数据。顺带补上 `en/messages.json` 里 `tidClosedTab` 早就写着的「Click me to open the tab group」。
+- [x] **`tree.js` 新增 `childrenOf(node)`**
+  - `indexNodes()` 的结果此前只在 `treeHtml()` 内部用一次就丢。`createTree()` 现在把索引存为 `index`，每次 `render()` 重建——不缓存第一次的，否则 `setNodes()` 之后点击会照旧数据打开页面。
+  - 1 条单测（直接子节点按插入顺序 + 索引随 `setNodes()` 更新 + 已移除节点返回空）。**变异验证**：把 `index = indexNodes(nodes)` 改成只在首次渲染时计算，该用例与既有用例各红一条。
+- [x] **四个第三方文件删除**：`jquery-3.6.0.min.js`（89KB）、`jquery.ztree.core.js`（75KB）、`jquery.ztree.exhide.js`（13KB）、`fuzzysearch.js`（8KB），共约 185KB。
+  - 连带撤销三处白名单：`eslint.config.mjs` 的 `ignores` 与 `jQuery`/`fuzzySearch` 全局、`scripts/check-syntax.mjs` 的 `VENDORED`、`tests/static.test.mjs` 的 `VENDORED`。**撒掉白名单后 lint 立刻报出 246 个 error**（含 jQuery 的 `no-undef`），正是删除这些文件的依据，不是噪音。
+  - 两条静态守卫：`no page loads jQuery, zTree or fuzzysearch any more`（页面 `<script src>` 与 `scripts/` 目录双向）+ `first-party scripts never reference jQuery or zTree globals`（`$.fn.*` / `$jq` / `jQuery` / `fuzzySearch(`）。均经变异验证（往 `closed.html` 加一个 zTree 标签 → 红；往 `closed.js` 加一行 `$jq.fn.zTree.init` → 红）。
+- [x] **e2e 断言推广**：`history2.html renders its tree without zTree` 参数化为两个页面。空库时它们渲染「没有找到记录」的占位节点，那也是渲染器必须画出来的两行，所以这条不需要喂数据。**变异验证**：让 `render()` 输出空串，两条同时红。
+
 ## 建议执行顺序
 
 | 批次 | 内容 | 理由 |
@@ -486,7 +503,8 @@
 | ✅ 第 5 批 | `dbManager` 缓存连接未作废、`date = date + DAY` 三处、`minimum_chrome_version` 对齐、`closest()` 与按范围删除的输入校验 | **已完成**。13 条新测试 + 3 条静态守卫，均先红后绿。插队在第 4 批之前：都是小改动且已有测试兜底 |
 | ✅ 第 6 批 | 抓取改批量事务、徽章节流、分片渲染按预算批量 + 分组查表、`mostVisited` alarm 降频 | **已完成**。4 条新测试（含首个真正跑渲染循环的用例），均先红后绿 |
 | ✅ 第 7 批 | `addCloseRecord` 命名与 id 语义、**lint 清零并加 `--max-warnings 0`** | **已完成**。1 条新测试（变异验证）+ 140 处警告清零。**顺带发现 `recentHistory()` 的过滤判定算了没用，待你决定是否启用** |
-| ⏳ 第 8 批 | zTree `eval` 风险；模块化收尾（删 `func.js` 的 window 层）、技术栈统一、重新审视 `localStorage` 全局劫持 | **进行中**：`history2.html` 已脱离 jQuery+zTree（新增 `modules/tree.js`，16 条单测 + 1 条 e2e 断言，均变异验证）。剩余：`closed.html` 迁移、`func.js` window 层、`localStorage` 劫持 |
+| ✅ 第 8 批 | `closed.html` 迁移到 `modules/tree.js`、删除 zTree/jQuery 四个第三方文件、技术栈统一 | **已完成**。`tree.js` 新增 `childrenOf()`（1 条单测）+ 2 条静态守卫防库回归 + e2e 断言推广到两个树状页，均变异验证。第三方库彻底出仓，`chrome/scripts/` 只剩首方代码 |
+| ⏳ 第 9 批 | 模块化收尾（删 `func.js` 的 window 层）、重新审视 `localStorage` 全局劫持 | 未开始 |
 
 > **插队说明**：第 1.5 / 1.6 / 1.7 批是顺手做掉的——它们都由新写的测试或 review 直接暴露，且改动小、有 skip 测试兜底，不值得单独排队。
 > 1.5 = `filtUrl` 子串误伤 + `te` 未初始化 + `addList` 空格；1.6 = 选项页 `#mvlist` 缺失（**会导致选项页打不开**）+ 其附带的属性注入；1.7 = `filtUrl` 降段死分支 + `www` 子域过滤。

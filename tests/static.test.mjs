@@ -32,21 +32,13 @@ function collectTags(html) {
 
 const hasClass = (tag, cls) => (tag.attrs.class || '').split(/\s+/).includes(cls);
 
-// Vendored third-party code: excluded from every source-shape check below.
-const VENDORED = new Set([
-    'jquery-3.6.0.min.js',
-    'jquery.ztree.core.js',
-    'jquery.ztree.exhide.js',
-    'fuzzysearch.js',
-]);
-
 /** Visit every first-party script as (relativePath, source). */
 function walkScripts(visit) {
     const walk = (dir) => {
         for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
             const p = path.join(dir, entry.name);
             if (entry.isDirectory()) walk(p);
-            else if (entry.name.endsWith('.js') && !VENDORED.has(entry.name)) {
+            else if (entry.name.endsWith('.js')) {
                 visit(path.relative(CHROME_DIR, p), fs.readFileSync(p, 'utf8'));
             }
         }
@@ -237,6 +229,48 @@ test('popup.html loads neither message-adapter.js nor db-manager.js', () => {
     // in popup.html explains an absence, so it has to still be an absence.
     assert.ok(scripts.some((s) => /storage-adapter\.js/.test(s)),
         'storage-adapter.js is still required; did the script list change?');
+});
+
+test('no page loads jQuery, zTree or fuzzysearch any more', () => {
+    // Every tree page now renders through scripts/modules/tree.js. The four
+    // vendored files are deleted from the repo, so a re-add would be a new
+    // dependency, not a restoration: assert both halves.
+    //
+    // Why it matters beyond size: zTree's async loader ships an eval() that
+    // MV3's CSP forbids, and `first-party scripts never compile code at
+    // runtime` above only ever exempted it by looking the other way.
+    const BANNED = /jquery|ztree|fuzzysearch/i;
+
+    const loaded = [];
+    for (const file of htmlFiles()) {
+        for (const tag of collectTags(fs.readFileSync(path.join(CHROME_DIR, file), 'utf8'))) {
+            if (tag.name !== 'script') continue;
+            if (BANNED.test(tag.attrs.src || '')) loaded.push(`${file}: ${tag.attrs.src}`);
+        }
+    }
+    assert.deepEqual(loaded, [], 'a page is loading the vendored tree library again');
+
+    // A file that exists but is unreferenced is dead weight in the package the
+    // user has to download, and it comes back the moment someone re-adds a tag.
+    const shipped = fs.readdirSync(path.join(CHROME_DIR, 'scripts'))
+        .filter((name) => BANNED.test(name));
+    assert.deepEqual(shipped, [], 'the vendored library files are back in scripts/');
+});
+
+test('first-party scripts never reference jQuery or zTree globals', () => {
+    // The library is gone from the pages; a leftover `$jq(…)` / `$.fn.zTree`
+    // would be an undefined-variable crash at the first click, which no static
+    // check above catches because `$` is also dom-helper's getElementById. So
+    // match the shapes that only ever meant the library: the `$.fn.` namespace
+    // and the noConflict() alias the two tree pages used.
+    const offenders = [];
+    walkScripts((file, src) => {
+        const code = stripJsComments(src);
+        for (const m of code.matchAll(/\$\.fn\.\w|\bfuzzySearch\s*\(|\bjQuery\b|\$jq\b/g)) {
+            offenders.push(`${file.replace(/\\/g, '/')}: ${m[0]}`);
+        }
+    });
+    assert.deepEqual(offenders, [], 'a reference to the removed library survived');
 });
 
 // ---------------------------------------------------------------------------
