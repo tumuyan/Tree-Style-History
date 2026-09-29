@@ -1,10 +1,7 @@
 document.addEventListener('DOMContentLoaded', function () {
     onStorageReady(function () {
 
-        //释放jquery中$定义，并直接使用jQuery代替平时的$
-    var $jq = jQuery.noConflict();
-
-    // Fade in using CSS transition
+        // Fade in using CSS transition
     var historyContainer = $('history-container');
     if (historyContainer) {
         historyContainer.style.transition = 'margin-left 0.25s, margin-right 0.25s, opacity 0.25s';
@@ -82,7 +79,9 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
 
-    function zTreeOnClickUrl(event, treeId, treeNode) {
+    // Named for what it does now: there is no zTree callback any more, just a
+    // click on a node carrying a URL.
+    function onClickNodeUrl(event, treeId, treeNode) {
         chrome.tabs.query({ url: treeNode.t }, function (tabs) {
             if (tabs.length > 0) {
                 chrome.windows.update(tabs[0].windowId, { focused: true }, function () {
@@ -93,32 +92,6 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
     }; 
-
-    // ztree
-    var setting = {
-
-        view: {
-            nameIsHTML: true, //允许name支持html                
-            selectedMulti: false
-        },
-        edit: {
-            enable: false,
-            editNameSelectAll: false
-        },
-
-        data: {
-            key: {
-                title: "t"
-            },
-            simpleData: {
-                enable: true,
-                pIdKey: "pId"
-            }
-        },
-        callback: {
-            onClick: zTreeOnClickUrl
-        }
-    };
 
     // 待插入的全部数据
     var zNodes = [];
@@ -141,11 +114,14 @@ document.addEventListener('DOMContentLoaded', function () {
     var showLessItem = localStorage['less-item'];
 
 
-    $jq.fn.zTree.init($jq("#treeDemo"), setting, nNodes);
-    var treeObj = $jq.fn.zTree.getZTreeObj("treeDemo");
-    fuzzySearch('treeDemo', '#rh-search', null, false, '#search-tag a');
-
-    // var Filter = fuzzySearchNow('treeDemo','#rh-search',null,false);
+    // The tree itself: scripts/modules/tree.js renders the same class
+    // vocabulary zTree did, so css/zTreeStyle.css still draws the icons, the
+    // connector line and the indentation. jQuery, zTree, its locally patched
+    // exhide extension and fuzzysearch.js are gone from this page — see the
+    // header comment in modules/tree.js for what replaced them and why.
+    var tree = createTree($('treeDemo'), { onClick: onClickNodeUrl });
+    bindTreeSearch(tree, { input: '#rh-search', tags: '#search-tag a' });
+    tree.setNodes(nNodes);
 
     var transition_value = {
         link: "🔗",
@@ -294,9 +270,13 @@ document.addEventListener('DOMContentLoaded', function () {
 
                 if (filtUrl(v.url) == false) {
                     let node = {
-                        id: v.visitId,
-                        pId: parseInt(v.referringVisitId),
-                        name: TimeToStr(v.visitTime, true, true) + " - " + v.title.replace(/[<>]/g, ' ') + ' ' + transitionIcon,
+                    id: v.visitId,
+                    pId: parseInt(v.referringVisitId),
+                    // The raw title: a page title is attacker-controlled,
+                    // and escaping it is the renderer's job — it knows it
+                    // is writing text content, and it has to escape after
+                    // highlighting or a keyword cuts an entity in half.
+                    name: TimeToStr(v.visitTime, true, true) + " - " + v.title + ' ' + transitionIcon,
                         // url: v.url,
                         icon: getFaviconUrl(v.url.replace(/(?<![\/])\/[^\/].+/, "")),
                         open: true,
@@ -319,12 +299,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (zNodes.length < localStorage['load-range4'] && loadfrom - DAY * t > date - localStorage['load-range3'] * DAY) {
                     feach_History(loadfrom, loadto, t + 1);
                 } else {
-                    let nodes = treeObj.getNodes();
-                    while (nodes && nodes.length > 0) {
-                        treeObj.removeNode(nodes[0], false);
-                        // treeObj.removeNode(nodes,false);
-                    }
-
+                    // No "remove every node first" pass: zNodes is the whole
+                    // set, and setNodes() replaces it in one render. Removing
+                    // them one by one re-rendered the tree once per row.
                     if (zNodes.length > 0 && showLessItem == 'yes') {
 
                         let urls = {};
@@ -347,14 +324,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         }
                     }
 
-                    if (zNodes.length > 0) {
-                        treeObj.addNodes(null, zNodes, false);
-                        // $('calendar-total-value').set('text',zNodes.length);
-                    } else {
-                        treeObj.addNodes(null, mNodes, false);
-                        // $('search-tag').set('text','');
-                        // $('calendar-total-value').set('text', '0');
-                    }
+                    tree.setNodes(zNodes.length > 0 ? zNodes : mNodes);
                     $('calendar-total-value').textContent = zNodes.length;
 
                     // $('header-text').set('text',new Date(loadfrom-DAY*t).toLocaleString()+' - '+new Date(loadto).toLocaleString());

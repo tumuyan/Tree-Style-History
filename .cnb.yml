@@ -43,6 +43,19 @@ $:
         # 而且它只在终端里跑，重建环境但不开终端时就不会生效。
         - name: 预装扩展到 Chromium
           script: bash scripts/dev-browser.sh
+        # 让云原生开发环境也能直接跑 `npm run test:e2e`：
+        # 镜像自带 Chromium 仅供 dev-browser.sh 侧载扩展做人工验收，
+        # 与 Playwright 的 `channel: 'chromium'` 不是同一个浏览器（见文件头注释），
+        # 所以端到端测试要单独装 Playwright 的 Chromium 及其系统库。
+        - name: 安装依赖
+          # `npm ci`，不是 `npm install`：lock 已提交，ci 装出来的树是确定的，
+          # 也不会像 install 那样顺手改写 package-lock.json 把工作区弄脏。
+          script: npm ci
+        - name: 安装端到端测试浏览器
+          # playwright install --with-deps 会走 apt-get，需要 root 与外网；
+          # 失败就是失败，不吞——开发环境缺了浏览器，跑 test:e2e 时报的是
+          # "browser not found"，比这里静默通过更难查。
+          script: npm run browser:install
 
 # 引用源：以 "." 开头的 key 不会作为流水线执行，仅供锚点复用。
 # 与 .github/workflows/ci.yml 共用同一批 npm 脚本，避免两套 CI 逻辑漂移。

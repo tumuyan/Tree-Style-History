@@ -5,7 +5,7 @@
 状态图例：`[ ]` 未开始 · `[x]` 已完成 · `[-]` 暂缓
 
 > **护栏已就位**：`npm run check`（ESLint + `node:test` + 4 个校验脚本）是唯一准入闸门，约 5 秒跑完，CI 强制执行。
-> 当前基线：**lint 0 error / 0 warning（`--max-warnings 0`）· 151 测试 · 151 通过 · 0 skip · 0 失败**（另：e2e 9 测试 · 9 通过）。
+> 当前基线：**lint 0 error / 0 warning（`--max-warnings 0`）· 194 测试 · 194 通过 · 0 skip · 0 失败**（另：e2e 10 测试 · 10 通过）。
 > 2 个 skip 已在「第 3 批」消除（`rh-list-order` 硬编码与失效的 `treeOptionsDetail`）。**当前无 skip**；后续若需标注已知缺陷，沿用 `test(name, { skip: '原因' }, fn)` 写法（函数体内写期望行为，修完去掉 skip）。
 
 ---
@@ -309,8 +309,10 @@
   - ~~现状：函数名拼写错误；`id: oid + '_' + tid` 与 `oid: oid - 1` 语义不一致。~~
   - 已做：改名 `addCloseRecord`（3 处调用点 + 定义）；`oid` 字段改回 `oid`（原为 `oid - 1`）。新增断言 `record.id === record.oid + '_' + record.tid`，并变异验证。
 
-- [ ] **处理 zTree 内含 `eval` 的 CSP 风险**（`chrome/scripts/jquery.ztree.core.js:1105`）
-  - 现状：`newNodes = eval("(" + msg + ")")`，MV3 默认 CSP 禁用 `eval`。当前走本地 `zNodes` 未触发，属潜在风险。
+- [-] **处理 zTree 内含 `eval` 的 CSP 风险**（`chrome/scripts/jquery.ztree.core.js:1105`）
+  - ~~现状：`newNodes = eval("(" + msg + ")")`，MV3 默认 CSP 禁用 `eval`。当前走本地 `zNodes` 未触发，属潜在风险。~~
+  - 进展（见「第 8 批」）：`history2.html` **已不再加载 zTree**，风险面减半——jQuery、`jquery.ztree.core.js`、本地改过的 `exhide` 扩展、`fuzzysearch.js` 四个文件都从该页面的 `<script>` 列表移除，改由 `chrome/scripts/modules/tree.js` 原生渲染。
+  - 剩余：`closed.html` 仍在用，文件本身也还在仓库里（不能删）。等它迁移完，这个 `eval` 分支就没有任何调用方了。
 
 ---
 
@@ -336,9 +338,10 @@
   - 现状：`func.js` 把几十个函数逐个挂 `window`，`popup.js`/`history.js`/`closed.js`/`bookmark.js` 仍通过全局变量调用——物理拆了文件、逻辑仍是全局脚本。
   - 做法：页面脚本改为 `import`，删掉 `window.*` 挂载，使依赖可被静态分析。
 
-- [ ] **统一前端技术栈**
-  - 现状：`history2.html`/`closed.html` 用 jQuery+zTree（约 2.6k 行第三方代码，`jQuery.noConflict()` 后 `$` 让给 `dom-helper`），其余页面已原生化，两套并存且无共识。
-  - 做法：制定迁移路径（原生递归渲染或轻量虚拟树替换 zTree），消除双栈与 `eval` 风险。
+- [-] **统一前端技术栈**
+  - ~~现状：`history2.html`/`closed.html` 用 jQuery+zTree（约 2.6k 行第三方代码，`jQuery.noConflict()` 后 `$` 让给 `dom-helper`），其余页面已原生化，两套并存且无共识。~~
+  - 进展（见「第 8 批」）：**`history2.html` 已迁移**。`chrome/scripts/modules/tree.js` 用原生 DOM 做树（建树、展开/折叠、关键字过滤保留祖先链、点击回调），并沿用 zTree 的 class 词汇，所以 `css/zTreeStyle.css` 仍然负责图标、连接线与缩进——只丢库，不丢样式。
+  - 剩余：`closed.html` 照旧用 jQuery+zTree 与 `fuzzysearch.js`。它要迁的话照同一套 API 走：`createTree($('treeDemo'), { onClick })` + `bindTreeSearch(tree, { input, tags })`。
 
 - [ ] **重新审视全局劫持 `localStorage`**（`chrome/scripts/storage-adapter.js:290`）
   - 现状：`Object.defineProperty` 把 `localStorage` 换成 Proxy，对所有第三方脚本生效，且 `storageAdapter.ready()` 之前读取全是 `undefined`（P0 中 `updateFilter` 的 bug 正是这个语义陷阱的产物）。至少应让未就绪时读取打出告警。
@@ -483,7 +486,7 @@
 | ✅ 第 5 批 | `dbManager` 缓存连接未作废、`date = date + DAY` 三处、`minimum_chrome_version` 对齐、`closest()` 与按范围删除的输入校验 | **已完成**。13 条新测试 + 3 条静态守卫，均先红后绿。插队在第 4 批之前：都是小改动且已有测试兜底 |
 | ✅ 第 6 批 | 抓取改批量事务、徽章节流、分片渲染按预算批量 + 分组查表、`mostVisited` alarm 降频 | **已完成**。4 条新测试（含首个真正跑渲染循环的用例），均先红后绿 |
 | ✅ 第 7 批 | `addCloseRecord` 命名与 id 语义、**lint 清零并加 `--max-warnings 0`** | **已完成**。1 条新测试（变异验证）+ 140 处警告清零。**顺带发现 `recentHistory()` 的过滤判定算了没用，待你决定是否启用** |
-| 第 8 批 | zTree `eval` 风险；模块化收尾（删 `func.js` 的 window 层）、技术栈统一、重新审视 `localStorage` 全局劫持 | 长期收益，可渐进推进 |
+| ⏳ 第 8 批 | zTree `eval` 风险；模块化收尾（删 `func.js` 的 window 层）、技术栈统一、重新审视 `localStorage` 全局劫持 | **进行中**：`history2.html` 已脱离 jQuery+zTree（新增 `modules/tree.js`，16 条单测 + 1 条 e2e 断言，均变异验证）。剩余：`closed.html` 迁移、`func.js` window 层、`localStorage` 劫持 |
 
 > **插队说明**：第 1.5 / 1.6 / 1.7 批是顺手做掉的——它们都由新写的测试或 review 直接暴露，且改动小、有 skip 测试兜底，不值得单独排队。
 > 1.5 = `filtUrl` 子串误伤 + `te` 未初始化 + `addList` 空格；1.6 = 选项页 `#mvlist` 缺失（**会导致选项页打不开**）+ 其附带的属性注入；1.7 = `filtUrl` 降段死分支 + `www` 子域过滤。

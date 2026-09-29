@@ -10,6 +10,7 @@
 //   modules/calendar.js     - Calendar/date picker
 //   modules/popup-core.js   - Popup UI rendering functions
 //   modules/history-core.js - History page rendering functions
+//   modules/tree.js         - Native tree renderer for the two tree pages
 // ============================================================================
 
 // Import from dom-helper (now an ES module)
@@ -75,6 +76,12 @@ import {
     recentBookmarks,
     pinned
 } from './modules/popup-core.js';
+
+import {
+    treeHtml,
+    createTree,
+    bindTreeSearch
+} from './modules/tree.js';
 
 import {
     history,
@@ -180,6 +187,11 @@ window.mostVisited = mostVisited;
 window.recentBookmarks = recentBookmarks;
 window.pinned = pinned;
 
+// --- Tree (history2.html / closed.html) ---
+window.treeHtml = treeHtml;
+window.createTree = createTree;
+window.bindTreeSearch = bindTreeSearch;
+
 // --- History core ---
 window.historyView = history;
 window.toggleGroup = toggleGroup;
@@ -232,4 +244,4 @@ document.addEventListener('DOMContentLoaded', function () {
 // ============================================================================
 
 console.log('Tree Style History v' + getVersion() + ' (' + getVersionType() + ')');
-console.log('Module structure: helpers.js | config.js | calendar.js | popup-core.js | history-core.js');
+console.log('Module structure: helpers.js | config.js | calendar.js | popup-core.js | history-core.js | tree.js');

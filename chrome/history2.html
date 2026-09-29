@@ -12,14 +12,12 @@
     <script type="module" src="scripts/func.js"></script>
     <script defer src="scripts/history2.js"></script>
 
+    <!-- Still zTree's stylesheet: the native renderer in scripts/modules/tree.js
+         emits zTree's class vocabulary, so the icons, the connector line and
+         the indentation are this file's. What is gone is the library itself —
+         jQuery, jquery.ztree.core.js, the locally patched exhide extension and
+         fuzzysearch.js. closed.html still uses them; this page does not. -->
     <link rel="stylesheet" href="css/zTreeStyle.css" type="text/css">
-    <script type="text/javascript" src="scripts/jquery-3.6.0.min.js"></script>
-    <script type="text/javascript" src="scripts/jquery.ztree.core.js"></script>
-
-    <script type="text/javascript" src="scripts/jquery.ztree.exhide.js"></script>
-    <script type="text/javascript" src="scripts/fuzzysearch.js"></script>
-
-
 </head>
 
 <body class="tree-view">

@@ -165,6 +165,14 @@ export function createDom(options = {}) {
         const s = String(sel).trim();
         if (s.startsWith('#')) return el.id === s.slice(1);
         if (s.startsWith('.')) return el.classes.has(s.slice(1));
+        // Presence: `li[data-tid]`, the shape a delegated handler uses to find
+        // the row a click landed in. `getAttribute()` returns null for an
+        // attribute that was never set, which is what distinguishes it.
+        const present = /^([a-zA-Z]*)\[([\w-]+)\]$/.exec(s);
+        if (present) {
+            return (!present[1] || el.tagName === present[1].toUpperCase())
+                && el.getAttribute(present[2]) !== null;
+        }
         const attr = /^([a-zA-Z]*)\[([\w-]+)="((?:[^"\\]|\\.)*)"\]$/.exec(s);
         if (attr) {
             return (!attr[1] || el.tagName === attr[1].toUpperCase())

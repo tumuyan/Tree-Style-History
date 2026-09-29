@@ -334,6 +334,7 @@ const MODULES = [
     'scripts/modules/calendar.js',
     'scripts/modules/popup-core.js',
     'scripts/modules/history-core.js',
+    'scripts/modules/tree.js',
 ];
 
 // Exports that stay module-private on purpose: they are filter state that no

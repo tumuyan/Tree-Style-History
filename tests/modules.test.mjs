@@ -155,6 +155,7 @@ const EXPECTED_EXPORTS = {
         'history', 'toggleGroup', 'getActiveHistory', 'getMoreItems', 'resetColor',
         'selectHistoryItem', 'deleteHistoryItem', 'alertLoadingHistory',
     ],
+    'modules/tree.js': ['treeHtml', 'createTree', 'bindTreeSearch'],
 };
 
 // Exports that are data rather than callables.

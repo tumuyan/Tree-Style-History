@@ -132,6 +132,11 @@ const crossFileGlobals = {
     shiftState: 'writable',
     itemSelectedColor: 'writable',
 
+    // --- modules/tree.js (mounted in func.js, used by history2.js) ---
+    treeHtml: 'writable',
+    createTree: 'writable',
+    bindTreeSearch: 'writable',
+
     // --- vendored libraries loaded via <script> ---
     jQuery: 'writable',
     fuzzySearch: 'writable',

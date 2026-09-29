@@ -16,10 +16,8 @@
     "test:only": "node --test --test-reporter=spec",
     "test:watch": "node --test --watch --test-reporter=spec \"tests/**/*.test.mjs\"",
     "test:ci": "node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=junit.xml \"tests/**/*.test.mjs\"",
-
     "test:e2e": "node --test --test-reporter=spec \"e2e/**/*.spec.mjs\"",
     "test:e2e:ci": "node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=junit-e2e.xml \"e2e/**/*.spec.mjs\"",
-
     "browser:install": "playwright install --with-deps chromium",
     "verify:json": "node scripts/check-json.mjs",
     "verify:syntax": "node scripts/check-syntax.mjs",
@@ -34,6 +32,6 @@
   "devDependencies": {
     "eslint": "^9.17.0",
     "globals": "^15.14.0",
-    "playwright": "^1.62.1"
+    "playwright": "^1.63.0"
   }
 }
