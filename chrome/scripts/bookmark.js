@@ -1,3 +1,20 @@
+// Tree Style History - linear bookmarks page
+//
+// An ES module: every function it calls is imported, not read off `window`.
+
+import { $, $$, createElement, getStyle } from './dom-helper.js';
+import {
+    TimeToStr, formatDate, truncate, returnLang, get_host,
+    getFaviconUrl, getFaviconOnerror, setupFaviconElement,
+    escapeHtmlAttr, escapeHtmlText, executeBookmarklet, isBookmarkletUrl
+} from './modules/helpers.js';
+import { filtUrl } from './modules/config.js';
+import { getActiveHistory, toggleGroup, getMoreItems, alertLoadingHistory } from './modules/history-core.js';
+import { modifierState, ITEM_SELECTED_COLOR } from './modules/ui-state.js';
+import { initPage } from './modules/page-init.js';
+
+initPage();
+
 // How long one tick of the chunked render loop may run before yielding. One
 // item per tick rendered a long bookmark list at the browser's ~4ms timer
 // floor, not at the speed the work actually takes. Keep in sync with the same
@@ -116,13 +133,13 @@ document.addEventListener('DOMContentLoaded', function () {
     // Shift listener
 
     document.body.addEventListener('keydown', function (e) {
-        if (e.keyCode == 16 && shiftState == 'false') {
-            shiftState = 'true';
+        if (e.keyCode == 16 && !modifierState.shift) {
+            modifierState.shift = true;
         }
     });
     document.body.addEventListener('keyup', function (e) {
         if (e.keyCode == 16) {
-            shiftState = 'false';
+            modifierState.shift = false;
         }
     });
 
@@ -680,12 +697,10 @@ document.addEventListener('DOMContentLoaded', function () {
             into = '#rh-views-search-insert';
         }
         
-        var itemSelectedColor = '#ffcbd3';
-        
         if (w == 'single') {
             if (el.checked == true) {
                 var parent = el.closest('div.item-holder');
-                if (parent) parent.style.backgroundColor = itemSelectedColor;
+                if (parent) parent.style.backgroundColor = ITEM_SELECTED_COLOR;
             } else if (el.checked == false) {
                 var iurl = el.value;
                 var items = $$(into + ' .chkbx');
@@ -720,7 +735,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     (function(ele) {
                         ele.checked = true;
                         var parent = ele.closest('div.item-holder');
-                        if (parent) parent.style.backgroundColor = itemSelectedColor;
+                        if (parent) parent.style.backgroundColor = ITEM_SELECTED_COLOR;
                     })(items[i]);
                 }
                 el.value = 'true';

@@ -353,11 +353,13 @@ test('every data-lang-string element also carries the .lang class', () => {
     });
 
 // ---------------------------------------------------------------------------
-// Module graph vs. func.js compatibility layer
+// Module graph vs. the page scripts that consume it
 //
-// func.js re-exports the modules onto `window` by hand. Nothing checks that
-// list: if a module renames or drops an export, `window.X` silently becomes
-// undefined and only fails when a page happens to call it.
+// The page scripts used to be classic scripts calling module functions through
+// `window.*` mounts installed by func.js, so a missing mount was a runtime
+// `undefined` that nothing reported. They are ES modules now: every symbol
+// they call arrives by import, so what has to be checked is that each page
+// script really imports what it uses.
 // ---------------------------------------------------------------------------
 
 // Paths are relative to CHROME_DIR, matching moduleExports()/fs calls above.
@@ -369,26 +371,104 @@ const MODULES = [
     'scripts/modules/popup-core.js',
     'scripts/modules/history-core.js',
     'scripts/modules/tree.js',
+    'scripts/modules/ui-state.js',
+    'scripts/modules/page-init.js',
 ];
 
-// Exports that stay module-private on purpose: they are filter state that no
-// page script reads, so mounting them would only widen the global surface.
-const MODULE_PRIVATE = new Set(['flist', 'flist_r']);
+// The pages: a script reached by navigating to a real HTML file. Everything
+// else under scripts/ is either a module or loaded by importScripts().
+const PAGE_SCRIPTS = [
+    'scripts/popup.js',
+    'scripts/history.js',
+    'scripts/history2.js',
+    'scripts/closed.js',
+    'scripts/bookmark.js',
+    'scripts/options.js',
+];
 
-test('func.js re-exports every module symbol the page scripts rely on', () => {
-    const funcSrc = fs.readFileSync(path.join(CHROME_DIR, 'scripts/func.js'), 'utf8');
-    const unmounted = [];
-    for (const file of MODULES) {
-        for (const name of moduleExports(file)) {
-            if (MODULE_PRIVATE.has(name)) continue;
-            // Some are mounted under a different name (history -> historyView).
-            // The property itself can be `$`/`$$`, hence the permissive class.
-            if (!new RegExp(`^window\\.[\\w$]+\\s*=\\s*${escapeRe(name)}\\s*;`, 'm').test(funcSrc)) {
-                unmounted.push(`${file}: ${name}`);
+const readScript = (rel) => fs.readFileSync(path.join(CHROME_DIR, rel), 'utf8');
+
+/** Names a script brings into scope: imports plus its own top-level bindings. */
+function scopeOf(rel) {
+    const src = readScript(rel);
+    const names = new Set();
+
+    // `import { a, b as c } from '…'` — the local binding is what matters.
+    for (const clause of src.matchAll(/import\s*\{([\s\S]*?)\}\s*from/g)) {
+        for (const part of clause[1].split(',')) {
+            const trimmed = part.trim();
+            if (!trimmed) continue;
+            const as = trimmed.split(/\s+as\s+/);
+            names.add((as[1] || as[0]).trim());
+        }
+    }
+    for (const clause of src.matchAll(/import\s+(\w+)\s*,?\s*(?:\{([\s\S]*?)\})?\s*from/g)) {
+        if (clause[1]) names.add(clause[1]);
+        for (const part of (clause[2] || '').split(',')) {
+            const trimmed = part.trim();
+            if (trimmed) names.add(trimmed.split(/\s+as\s+/).pop().trim());
+        }
+    }
+
+    const addDecl = (re, group = 1) => {
+        for (const m of src.matchAll(re)) names.add(m[group]);
+    };
+    // Top-level-ish declarations. Nested ones are included too: a false
+    // negative here would only make these guards stricter, never wrong.
+    addDecl(/(?:^|\n)\s*(?:const|let|var)\s+([\w$]+)/g);
+    addDecl(/(?:^|\n)\s*function\s+([\w$]+)/g);
+    addDecl(/(?:^|\n)\s*for\s*\(\s*(?:const|let|var)\s+([\w$]+)/g);
+    addDecl(/function\s*\(([^)]*)\)\s*\{/g);
+    for (const params of src.matchAll(/function\s*\(([^)]*)\)/g)) {
+        for (const arg of params[1].split(',')) {
+            if (arg.trim()) names.add(arg.trim());
+        }
+    }
+    return names;
+}
+
+test('no first-party script mounts anything onto window any more', () => {
+    // The window layer is what made dependencies invisible: a page script
+    // called `filtUrl()`, nothing said where it came from, and a rename or a
+    // deleted mount surfaced as `undefined is not a function` at runtime.
+    //
+    // Two exemptions, both genuine cross-file boundaries rather than a
+    // compatibility layer:
+    //   - storage-adapter.js replaces the `localStorage` global itself;
+    //   - db-manager.js / message-adapter.js expose singletons to classic
+    //     scripts, including the service worker's importScripts().
+    const EXEMPT = new Set([
+        'scripts/storage-adapter.js',
+        'scripts/db-manager.js',
+        'scripts/message-adapter.js',
+    ]);
+
+    const offenders = [];
+    walkScripts((file, src) => {
+        if (EXEMPT.has(file.replace(/\\/g, '/'))) return;
+        for (const m of src.matchAll(/^\s*(?:window|self|globalThis)\.[\w$]+\s*=/gm)) {
+            offenders.push(`${file}: ${m[0].trim()}`);
+        }
+    });
+    assert.deepEqual(offenders, [], 'a first-party script writes to a global again — import it instead');
+});
+
+test('every page script is loaded as a module, not as a classic script', () => {
+    // The inverse of the guard above, and the one that would actually break
+    // the pages: `import` is a syntax error in a classic script, so a stray
+    // `<script src>` instead of `<script type="module" src>` fails before the
+    // page renders anything.
+    const offenders = [];
+    for (const file of htmlFiles()) {
+        const html = stripComments(fs.readFileSync(path.join(CHROME_DIR, file), 'utf8'));
+        for (const rel of PAGE_SCRIPTS) {
+            const tag = new RegExp(`<script\\b[^>]*src=["']${escapeRe(rel)}["']`, 'g');
+            for (const m of html.matchAll(tag)) {
+                if (!/type=["']module["']/.test(m[0])) offenders.push(`${file}: ${rel}`);
             }
         }
     }
-    assert.deepEqual(unmounted, []);
+    assert.deepEqual(offenders, []);
 });
 
 test('the ES module graph is acyclic', () => {
@@ -436,19 +516,43 @@ test('the ES module graph is acyclic', () => {
     assert.deepEqual(cycles, [], `import cycles found:\n${cycles.join('\n')}`);
 });
 
-test('every window.* assignment in func.js resolves to a real binding', () => {
-    const funcSrc = fs.readFileSync(path.join(CHROME_DIR, 'scripts/func.js'), 'utf8');
-    const exported = new Set(MODULES.flatMap(moduleExports));
-    // Locals declared inside func.js itself.
-    const locals = new Set(['itemSelectedColor']);
-
-    const dangling = [];
-    for (const m of funcSrc.matchAll(/^window\.([\w$]+)\s*=\s*([^;]+);/gm)) {
-        const value = m[2].trim();
-        if (locals.has(m[1]) || /^['"]/.test(value)) continue;
-        if (!exported.has(value)) dangling.push(`window.${m[1]} = ${value}`);
+test('every page script imports what it calls', () => {
+    // The check the window layer used to defeat. `no-undef` covers this while
+    // the file is linted as a module; this covers it independently, because
+    // the eslint config's module list is a separate thing to forget.
+    const exportsByModule = new Map();
+    for (const file of MODULES) {
+        for (const name of moduleExports(file)) exportsByModule.set(name, file);
     }
-    assert.deepEqual(dangling, [], 'func.js mounts a symbol no module exports — it would be undefined at runtime');
+
+    // Provided by the classic scripts a page loads before its module, or by
+    // the platform. Not imports, and not something these guards should force
+    // into one.
+    const PROVIDED = new Set([
+        'onStorageReady', 'dbManager', 'messageAdapter', 'storageAdapter', 'localStorage',
+        'window', 'document', 'chrome', 'console', 'location', 'navigator', 'performance',
+        'Array', 'Date', 'JSON', 'Math', 'Number', 'Object', 'String', 'Set', 'Map',
+        'RegExp', 'Promise', 'URL', 'CSS', 'IDBKeyRange', 'setTimeout', 'clearTimeout',
+        'setInterval', 'clearInterval', 'parseInt', 'parseFloat', 'isNaN', 'undefined',
+        'alert', 'views', 'module', 'history', 'arguments', 'this', 'event', 'Element',
+    ]);
+
+    const unresolved = [];
+    for (const file of PAGE_SCRIPTS) {
+        const src = stripJsComments(readScript(file));
+        const local = scopeOf(file);
+        const unresolvedInFile = new Set();
+
+        // Calls, reads and writes of anything not imported or declared locally.
+        for (const m of src.matchAll(/(?<![.\w$])([a-zA-Z_$][\w$]*)\s*\(/g)) {
+            const name = m[1];
+            if (local.has(name) || PROVIDED.has(name)) continue;
+            if (!exportsByModule.has(name)) continue; // not ours; another guard's business
+            unresolvedInFile.add(name);
+        }
+        for (const name of unresolvedInFile) unresolved.push(`${file}: ${name}`);
+    }
+    assert.deepEqual(unresolved, [], 'a page script calls a module function it never imports');
 });
 
 // ---------------------------------------------------------------------------

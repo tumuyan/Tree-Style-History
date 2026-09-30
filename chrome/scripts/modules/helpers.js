@@ -5,11 +5,24 @@
 // `modules/shared/` — the dependency-free bottom layer that
 // `scripts/gen-sw-utils.mjs` mechanically flattens into
 // `scripts/background-utils.js`. They are imported for internal use and
-// re-exported, so the public API (`func.js` mounts these on `window`) is
-// unchanged.
+// re-exported, so importers see one module rather than two layers.
 
 import { _DATE, returnLang, advanceDateToToday } from './shared/format.js';
 import { isBookmarkletUrl } from './shared/url.js';
+
+/**
+ * The `rh-date` display format, e.g. `'dd/mm/yyyy'`.
+ *
+ * Falls back to the default because this is read while a page initialises, in
+ * the window before storage-adapter.js has resolved chrome.storage.local —
+ * where every key still reads `undefined`. Callers go straight to
+ * `.replace()` on the result, so without the fallback a cold page start threw
+ * inside its own DOMContentLoaded handler and left the rest of the page
+ * uninitialised: no date dropdowns, no calendar, no list.
+ */
+function dateFormat() {
+    return localStorage['rh-date'] || 'mm/dd/yyyy';
+}
 
 export { _DATE, DAY, timeNow, returnLang, getVersion, getVersionType } from './shared/format.js';
 export { isBookmarkletUrl, get_host } from './shared/url.js';
@@ -327,6 +340,7 @@ function setupFaviconElement(imgEl, primaryUrl, fallbackUrl) {
 // The shared-bottom-layer symbols are re-exported in the `export ... from`
 // blocks at the top of this file; everything below is page-only.
 export {
+    dateFormat,
     TimeToStr, formatDate,
     echoLang,
     stripScripts, escapeHtmlAttr, escapeHtmlText, escapeRegExp, truncate, extractFileName, calcSize,

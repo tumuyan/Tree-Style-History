@@ -27,115 +27,23 @@ const crossFileGlobals = {
     // --- injected by storage-adapter.js ---
     dbManager: 'writable',
     storageAdapter: 'writable',
-    localStorageAdapter: 'writable',
     messageAdapter: 'writable',
     onStorageReady: 'writable',
 
-    // --- dom-helper.js ---
-    $: 'writable',
-    $$: 'writable',
-    createElement: 'writable',
-    emptyElement: 'writable',
-    getStyle: 'writable',
+    // --- shared/module imports are statically checked; only the drilled-in
+    // page scripts and UMD guards need declaring ---
+    localStorageAdapter: 'writable',
 
-    // --- modules/helpers.js ---
-    _DATE: 'writable',
-    DAY: 'writable',
-    TimeToStr: 'writable',
-    timeNow: 'writable',
-    formatDate: 'writable',
-    echoLang: 'writable',
-    returnLang: 'writable',
-    stripScripts: 'writable',
-    escapeHtmlAttr: 'writable',
-    escapeHtmlText: 'writable',
-    truncate: 'writable',
-    extractFileName: 'writable',
-    calcSize: 'writable',
-    getUrlVars: 'writable',
-    isBookmarkletUrl: 'writable',
-    extractBookmarkletCode: 'writable',
-    decodeBookmarkletCode: 'writable',
-    executeBookmarklet: 'writable',
-    chromeURL: 'writable',
-    getVersion: 'writable',
-    getVersionType: 'writable',
-    Clipboard: 'writable',
-    popup_scrollbar_fix: 'writable',
-    get_host: 'writable',
-    getFaviconUrl: 'writable',
-    getFaviconOnerror: 'writable',
-    setupFaviconElement: 'writable',
-
-    // --- modules/shared/ (flattened into background-utils.js, so the Service
-    // Worker sees it as a bare global) ---
+    // --- pulled in by background-sw.js via importScripts('background-utils.js') ---
+    // The service worker cannot importScripts() an ES module, which is why
+    // background-utils.js exists at all; see scripts/gen-sw-utils.mjs.
     INTERNAL_URL: 'writable',
-
-    // --- modules/config.js ---
-    defaultValues: 'writable',
-    defaultConfig: 'writable',
-    loadOptions: 'writable',
-    saveOptions: 'writable',
-    downloadOptions: 'writable',
-    loadSlider: 'writable',
-    loadOptionsLang: 'writable',
-    initSortable: 'writable',
-    previewItem: 'writable',
-    mostVisitedBlocklist: 'writable',
-    filteredDomainsList: 'writable',
-    addFilteredItem: 'writable',
-    addList: 'writable',
-    mergeList: 'writable',
-    updateFilter: 'writable',
-    filtUrl: 'writable',
-
-    // --- modules/calendar.js ---
-    calendar_storage2: 'writable',
-    isLeapYear: 'writable',
+    DAY: 'writable',
     calendar: 'writable',
-    showCalendar: 'writable',
+    getFaviconUrl: 'writable',
+    getVersion: 'writable',
+    returnLang: 'writable',
     save_calendar_storage2: 'writable',
-
-    // --- modules/popup-core.js ---
-    leftClick: 'writable',
-    rightClick: 'writable',
-    formatItem: 'writable',
-    popupSearch: 'writable',
-    isBookmarked: 'writable',
-    isPinned: 'writable',
-    uiEditItems: 'writable',
-    alertUser: 'writable',
-    uiPinItem: 'writable',
-    uiDeleteItem: 'writable',
-    recentHistory: 'writable',
-    recentlyClosedTabs: 'writable',
-    openTab: 'writable',
-    showRecentTabs: 'writable',
-    showRecentTabsImpl: 'writable',
-    mostVisited: 'writable',
-    recentBookmarks: 'writable',
-    pinned: 'writable',
-
-    // --- modules/history-core.js ---
-    historyView: 'writable',
-    toggleGroup: 'writable',
-    getActiveHistory: 'writable',
-    getMoreItems: 'writable',
-    resetColor: 'writable',
-    selectHistoryItem: 'writable',
-    deleteHistoryItem: 'writable',
-    alertUserHistory: 'writable',
-    alertLoadingHistory: 'writable',
-
-    // --- shared mutable state declared in func.js ---
-    ctrlState: 'writable',
-    shiftState: 'writable',
-    itemSelectedColor: 'writable',
-
-    // --- modules/tree.js (mounted in func.js, used by the tree pages) ---
-    treeHtml: 'writable',
-    createTree: 'writable',
-    bindTreeSearch: 'writable',
 
     // --- UMD guard in db-manager.js (dead branch in the browser) ---
     module: 'readonly',
@@ -235,7 +143,15 @@ export default [
     // ---------------------------------------------------------------------
     {
         files: [
-            'chrome/scripts/func.js',
+            // Page scripts: the last classic scripts in the tree. They used to
+            // call modules through `window.*` mounts installed by func.js;
+            // those are gone, so each one imports what it uses.
+            'chrome/scripts/popup.js',
+            'chrome/scripts/options.js',
+            'chrome/scripts/history.js',
+            'chrome/scripts/history2.js',
+            'chrome/scripts/closed.js',
+            'chrome/scripts/bookmark.js',
             'chrome/scripts/dom-helper.js',
             'chrome/scripts/modules/*.js',
             'chrome/scripts/modules/shared/*.js',

@@ -1,3 +1,18 @@
+// Tree Style History - linear history page
+//
+// An ES module: every function it calls is imported, not read off `window`.
+
+import { $, $$, getStyle } from './dom-helper.js';
+import { returnLang, dateFormat } from './modules/helpers.js';
+import { calendar, showCalendar } from './modules/calendar.js';
+import {
+    history as historyView, getActiveHistory, selectHistoryItem, deleteHistoryItem
+} from './modules/history-core.js';
+import { modifierState } from './modules/ui-state.js';
+import { initPage } from './modules/page-init.js';
+
+initPage();
+
 document.addEventListener('DOMContentLoaded', function(){
     onStorageReady(function () {
   
@@ -119,13 +134,13 @@ document.addEventListener('DOMContentLoaded', function(){
     // Shift listener
     
     document.body.addEventListener('keydown', function(e){
-      if(e.keyCode == 16 && shiftState == 'false'){
-        shiftState = 'true';
+      if (e.keyCode == 16 && !modifierState.shift) {
+        modifierState.shift = true;
       }
     });
     document.body.addEventListener('keyup', function(e){
-      if(e.keyCode == 16){
-        shiftState = 'false';
+      if (e.keyCode == 16) {
+        modifierState.shift = false;
       }
     });
 
@@ -138,7 +153,7 @@ document.addEventListener('DOMContentLoaded', function(){
     
     // Date events
     
-    var derhdf = localStorage['rh-date'];
+    var derhdf = dateFormat();
     derhdf = derhdf.replace('dd', 'dsdi').replace('mm', 'dsmi').replace('yyyy', 'dsyi');
     derhdf = derhdf.split('/');
     $(derhdf[0]).innerHTML = '<select class="select" id="date-select-day"></select>';

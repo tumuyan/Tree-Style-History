@@ -160,9 +160,13 @@ MV3 取消了后台页面，因此代码分成两套互不相通的运行时：
 
 ### 3. 前端模块结构（3.3.0 重构后的新分层）
 
-`scripts/func.js` 是**模块入口与兼容层**：它 `import` 各领域模块，再把每个函数挂到 `window` 上，供仍然使用全局函数的旧页面脚本（`popup.js`、`history.js`、`closed.js`、`bookmark.js`）调用。`func.js` 同时承担全局 DOMContentLoaded 时的 i18n 填充（`.lang` + `data-lang-string`）与页面缩放（`popup-zoom` / `page-zoom`）。
+六个页面脚本（`popup.js`、`history.js`、`history2.js`、`closed.js`、`bookmark.js`、`options.js`）**都是 ES module**，各自 `import` 需要的符号——曾经那个把几十个函数逐个挂 `window` 的 `func.js` 兼容层已经删除。
 
-`scripts/modules/` 下六个模块，职责与依赖：
+`scripts/modules/page-init.js` 承担每页都要做的三件事（由页面脚本 `initPage()` 调用）：`DOMContentLoaded` 时填充 `.lang`（按 `data-lang-string`）、应用 `popup-zoom` / `page-zoom`、吞掉 `href="#"` 的点击。**别把它挪到模块顶层执行**：模块先于 `storage-adapter.js` 灌好缓存求值，那时读 `localStorage` 全是 `undefined`，且会被记成一次 unready read。
+
+`scripts/modules/ui-state.js` 放跨文件的页面状态：`modifierState.{shift,ctrl}`（由各页的 keydown/keyup 写、由 `popup-core.js` / `history-core.js` 读）与 `ITEM_SELECTED_COLOR`（选中行底色）。
+
+`scripts/modules/` 下的领域模块（`page-init.js` 与 `ui-state.js` 是其中两个，职责如上），依赖关系：
 
 - `helpers.js` —— 纯工具，无副作用：时间格式化（`TimeToStr`/`timeNow`/`formatDate`，受 `rh-date`、`rh-timeformat` 配置控制）、i18n（`returnLang`/`echoLang`）、字符串转义（`escapeHtmlAttr` 用于属性 / `escapeHtmlText` 用于文本，`title_fix` 已删除）/ `escapeRegExp`、URL 处理、bookmarklet 识别与执行、**favicon URL 生成体系**。
 - `config.js` —— 配置中心。`defaultValues` 是全部配置项的默认值表，`defaultConfig(clean)` 写入、`loadOptions(full)` 回填表单、`saveOptions(sync)` 收集保存。过滤域名由 `updateFilter()` 从 `rh-filtered` 编译成正则 `flist_r`，`filtUrl(url)` 供所有列表渲染前过滤。同步到 `chrome.storage.sync` 时把 key 的 `-` 换成 `_`，且过滤列表按每 100 条切片存成 `filterlist0..N`（绕过 sync 单 key 8KB 限制）。
@@ -219,7 +223,7 @@ MV3 取消了后台页面，因此代码分成两套互不相通的运行时：
 
 - `localStorage` 里所有值都是**字符串**，`storageAdapter` 强制 `String(value)`。比较数量时务必 `Number(localStorage['rh-itemsno'])`，比较开关时用 `=== 'yes'` / `!== 'no'`（注意 `share-favicon-cache` 是反向的 `!== 'no'`）。
 - 配置键用连字符（如 `load-range`），同步到 `chrome.storage.sync` 时转下划线。新增开关类配置需同时加进 `modules/config.js` 的 `defaultValues`、`loadOptions`、`saveOptions` 与 `options.html` 的表单，以及 `_locales/*/messages.json`。
-- i18n 文案写在 `chrome/_locales/en/messages.json` 与 `chrome/_locales/zh_CN/messages.json`，两边都要补。`.lang` 元素由 `func.js` 自动填充，无需手写。
+- i18n 文案写在 `chrome/_locales/en/messages.json` 与 `chrome/_locales/zh_CN/messages.json`，两边都要补。`.lang` 元素由 `page-init.js` 自动填充，无需手写。
 - 渲染用户可控的标题/URL 时一律经过 `escapeHtmlAttr`（属性位置）或 `escapeHtmlText`（文本位置），本项目多处直接拼 HTML 字符串。`title_fix` 已删除（`tests/static.test.mjs` 有断言禁止它重新出现）。
 - 分支：`main` 是当前 MV3 主线（`mv3-3` 已合并，`master` 是旧的 MV2 代码，已废弃）。
 - README 的 Changelog 段落记录了每个版本的行为变更与已知问题（例如 MV3 导致部分页面 favicon 无法显示、popup 中点击小书签可能不触发），排查"看起来像 bug"的现象前先读一遍。

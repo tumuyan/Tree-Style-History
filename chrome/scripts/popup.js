@@ -1,3 +1,19 @@
+// Tree Style History - popup bootstrap
+//
+// An ES module: everything it calls is imported, so nothing here depends on a
+// `window.*` mount having happened first. See modules/page-init.js for the
+// i18n/zoom/placeholder-link setup every page shares.
+
+import { $, $$, createElement } from './dom-helper.js';
+import { returnLang, chromeURL, getVersion } from './modules/helpers.js';
+import {
+    alertUser, recentHistory, recentlyClosedTabs, recentBookmarks,
+    mostVisited, showRecentTabs, popupSearch
+} from './modules/popup-core.js';
+import { modifierState } from './modules/ui-state.js';
+import { initPage } from './modules/page-init.js';
+
+initPage();
 
 var _popupStartTime = window._htmlStartTime || ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now());
 
@@ -50,13 +66,13 @@ document.addEventListener('DOMContentLoaded', function () {
     // Ctrl listener
 
     document.body.addEventListener('keydown', function (e) {
-        if (e.keyCode == 17 && ctrlState == 'false') {
-            ctrlState = 'true';
+        if (e.keyCode == 17 && !modifierState.ctrl) {
+            modifierState.ctrl = true;
         }
     });
     document.body.addEventListener('keyup', function (e) {
         if (e.keyCode == 17) {
-            ctrlState = 'false';
+            modifierState.ctrl = false;
         }
     });
 
