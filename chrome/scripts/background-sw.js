@@ -22,12 +22,12 @@ var recentTabs = [];
 
 // Session data (will be persisted to storage due to SW lifecycle)
 var oid;
-DAY = 24 * 3600 * 1000;
+DAY = 24 * 3600 * 1000; // from background-utils.js
 var date = new Date();
 date.setHours(23); date.setMinutes(59); date.setSeconds(59); date.setMilliseconds(999);
 
 var calendar_str;
-calendar = {};
+var calendar = {};
 var calendar_r = {};
 
 var urls_wait_load = new Array();

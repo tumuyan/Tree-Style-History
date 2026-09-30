@@ -338,8 +338,8 @@ test('every returnLang()/echoLang() key used in JS exists in both locales', () =
 });
 
 test('every data-lang-string element also carries the .lang class', () => {
-        // func.js fills only elements matching '.lang', so an element with just
-        // data-lang-string renders as an empty box — silently, with no console
+        // page-init.js fills only elements matching '.lang', so an element with
+        // just data-lang-string renders as an empty box — silently, with no console
         // error to point at the cause.
         const offenders = [];
         for (const file of htmlFiles()) {
@@ -534,7 +534,7 @@ test('every page script imports what it calls', () => {
         'Array', 'Date', 'JSON', 'Math', 'Number', 'Object', 'String', 'Set', 'Map',
         'RegExp', 'Promise', 'URL', 'CSS', 'IDBKeyRange', 'setTimeout', 'clearTimeout',
         'setInterval', 'clearInterval', 'parseInt', 'parseFloat', 'isNaN', 'undefined',
-        'alert', 'views', 'module', 'history', 'arguments', 'this', 'event', 'Element',
+        'alert', 'module',
     ]);
 
     const unresolved = [];

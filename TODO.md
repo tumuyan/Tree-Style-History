@@ -482,7 +482,7 @@
   - 为什么必须六个一起改：留下任何一个都会变成「一半靠 import、一半靠 `window`」，而后者崩起来比纯全局更隐蔽——只在漏改的那个文件里是 undefined。
   - **`func.js` 原本借「被 import」这个副作用干三件事**——填充 `.lang`、应用 `popup-zoom`/`page-zoom`、吞掉 `href="#"` 的点击。这三件事每页都要做且与「导出什么函数」无关，抽出来比塞回六个入口合适。
   - **替代品 `modules/ui-state.js`**：`window.ctrlState` / `window.shiftState` / `window.itemSelectedColor` 都是「此处写、彼处读、始终同一页」，改成模块级绑定即可。`itemSelectedColor` 原先在 `history-core.js` 与 `bookmark.js` 里各有一份字面量（已经漂成两个颜色），现在统一为 `ITEM_SELECTED_COLOR`。
-  - `crossFileGlobals`（eslint 白名单）**~60 项 → 9 项**。剩下的都是真实的跨文件边界：`storage-adapter.js` 注射的全局、`background-sw.js` 经 `importScripts()` 取用的符号。`no-undef` 现在是可靠的，因为它不再需要一份手工维护的名单才能工作。
+  - `crossFileGlobals`（eslint 白名单）**~60 项 → 8 项**。剩下的都是真实的跨文件边界：`storage-adapter.js` 注射的全局、`background-sw.js` 经 `importScripts()` 取用的符号。`no-undef` 现在是可靠的，因为它不再需要一份手工维护的名单才能工作。
 
 - [x] **递进发现的崩溃：`localStorage['rh-date']` 未就绪时整页初始化中断** — **连带修复**
   - 现象：冷启动时约 1/3 概率 `history2.html` / `closed.html` / `history.html` 报 `Cannot read properties of undefined (reading 'replace')`，位置在每个页面脚本自己的 `DOMContentLoaded` 里。
@@ -497,6 +497,11 @@
   - `every page script imports what it calls`：逐文件比对「用到的模块导出」与「实际 import 的符号」。这条取代了原来那两条读 `func.js` 源码的守卫（认 mount 名单），改为认 import 边。
   - 均经变异验证：删一个 import → 红；`<script type="module">` 改回 `defer` → 红；往 `tree.js` 加一行 `window.createTree = createTree` → 红。
   - **e2e 也确认不是「永远绿」**：往 `page-init.js` 注入一个 `throw`，11 条 e2e 里 9 条立刻红——证明六个页面真的都走这条初始化路径。
+
+- [x] **第 9 批评审收尾：注释/白名单跟着代码走**
+  - `tree.js` 头注释原本仍写「`closed.html` has not been migrated yet and still loads all four」——而它这次就是被迁走的那个页面。这是该模块的主注释，照它读会把库加回去。同理改掉 `tree.js` 的 `export {}` 注释、`eslint.config.mjs` 三处导语、`static.test.mjs` 的 `.lang` 注释、`config.js` 里那句 `func.js` 注册顺序——它们都还描述着已删除的那一层。
+  - `eslint.config.mjs` 的 `DAY` / `calendar` 原本被归到「经 `importScripts()` 取用」，实际都是 `background-sw.js` 自己的模块级变量。`DAY` 保留（它是 `background-utils.js` 声明的 `var`，SW 只是重新赋值，注释已改正）；`calendar` 从白名单删掉并改成 `var calendar = {}`——原来那句裸赋值在没有白名单时就是隐式全局。
+  - `static.test.mjs` 的 `PROVIDED` 删掉 `views` / `history` / `arguments` / `this` / `event` / `Element` 六个没有对应调用的名字；留着等于告诉下一个人这些名字可以随便用，正是这条守卫要防的事（删掉重跑，40 条仍全绿）。
 
 ### 第 8 批（已完成）：`closed.html` 迁移 + 第三方库出仓
 

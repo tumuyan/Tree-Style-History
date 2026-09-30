@@ -1,10 +1,10 @@
 // Tree Style History - tree renderer
 //
-// history2.html used to render through jQuery + zTree, plus a locally patched
-// exhide extension and fuzzysearch.js for filtering. That was ~2.6k lines of
-// third-party code for one widget, and zTree's async loader shipped a runtime
-// compiler that MV3's CSP forbids. It is gone from that page; closed.html has
-// not been migrated yet and still loads all four.
+// Both tree pages (history2.html and closed.html) used to render through
+// jQuery + zTree, plus a locally patched exhide extension and fuzzysearch.js
+// for filtering. That was ~2.6k lines of third-party code for one widget, and
+// zTree's async loader shipped a runtime compiler that MV3's CSP forbids.
+// All four files are gone from the repo; this module renders both pages.
 //
 // This module does what the page actually uses: build a tree out of flat
 // `{ id, pId }` nodes, expand/collapse, filter by keyword (keeping the
@@ -370,6 +370,6 @@ function bindTreeSearch(tree, opts) {
 }
 
 // One `export {}` block rather than three inline `export function`s:
-// tests/static.test.mjs reads this block to check that func.js really mounts
-// every symbol a page script can call, and it cannot see the inline form.
+// tests/static.test.mjs reads this block to cross-check the module's public
+// API, and it cannot see the inline form.
 export { treeHtml, createTree, bindTreeSearch };

@@ -5,8 +5,7 @@
 //    Lint must therefore match what the browser actually executes, i.e. two
 //    distinct source types coexist:
 //      - classic scripts  (chrome/scripts/*.js)        sourceType: "script"
-//      - ES modules       (func.js, dom-helper.js, modules/*.js)
-//  * Third-party/ vendored files are ignored (see `ignores`).
+//      - ES modules       (the six page scripts, dom-helper.js, modules/*.js)
 //  * Rule selection favours "would have caught a real bug" over style.
 //    Rules that would trigger a large stylistic diff (eqeqeq, no-implicit-coercion,
 //    no-implicit-globals) are intentionally OFF: churning thousands of lines in a
@@ -14,15 +13,16 @@
 
 import globals from 'globals';
 
-// Functions/objects that cross file boundaries.
+// Functions/objects that cross file boundaries. None of this is statically
+// analysable, so it is declared here:
+//  * globals injected by storage-adapter.js via Object.defineProperty;
+//  * symbols background-sw.js takes from background-utils.js / db-manager.js
+//    via importScripts() (an ES module cannot be loaded that way, which is why
+//    background-utils.js exists at all; see scripts/gen-sw-utils.mjs).
 //
-// func.js attaches module exports onto `window`, and the classic page scripts
-// (popup.js / history.js / history2.js / closed.js / bookmark.js / options.js)
-// call them as bare globals. background-sw.js pulls more in via importScripts().
-// None of this is statically analysable, so it is declared here.
-//
-// IMPORTANT: if you add a new export to modules/*.js and mount it in func.js,
-// add it here too, otherwise `no-undef` will report a false positive.
+// Everything else resolves through real imports, and
+// tests/static.test.mjs fails when a page script calls something it did not
+// import - so keep this list short.
 const crossFileGlobals = {
     // --- injected by storage-adapter.js ---
     dbManager: 'writable',
@@ -34,12 +34,9 @@ const crossFileGlobals = {
     // page scripts and UMD guards need declaring ---
     localStorageAdapter: 'writable',
 
-    // --- pulled in by background-sw.js via importScripts('background-utils.js') ---
-    // The service worker cannot importScripts() an ES module, which is why
-    // background-utils.js exists at all; see scripts/gen-sw-utils.mjs.
+    // --- declared in background-utils.js, reached from background-sw.js ---
     INTERNAL_URL: 'writable',
-    DAY: 'writable',
-    calendar: 'writable',
+    DAY: 'writable', // background-sw.js re-assigns it at startup
     getFaviconUrl: 'writable',
     getVersion: 'writable',
     returnLang: 'writable',
@@ -143,9 +140,9 @@ export default [
     // ---------------------------------------------------------------------
     {
         files: [
-            // Page scripts: the last classic scripts in the tree. They used to
-            // call modules through `window.*` mounts installed by func.js;
-            // those are gone, so each one imports what it uses.
+            // Page scripts. They used to be classic scripts calling modules
+            // through `window.*` mounts installed by func.js; those are gone,
+            // so each one imports what it uses.
             'chrome/scripts/popup.js',
             'chrome/scripts/options.js',
             'chrome/scripts/history.js',
