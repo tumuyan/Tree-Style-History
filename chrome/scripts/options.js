@@ -1,3 +1,16 @@
+// Tree Style History - options page
+//
+// An ES module: every function it calls is imported, not read off `window`.
+
+import { $, $$ } from './dom-helper.js';
+import { returnLang, getVersion, getUrlVars, chromeURL } from './modules/helpers.js';
+import {
+    defaultConfig, loadOptions, saveOptions, downloadOptions,
+    loadSlider, loadOptionsLang, addFilteredItem, mergeList
+} from './modules/config.js';
+import { initPage } from './modules/page-init.js';
+
+initPage();
 
 document.addEventListener('DOMContentLoaded', function () {
     onStorageReady(function () {

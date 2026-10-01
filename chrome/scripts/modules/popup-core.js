@@ -9,6 +9,7 @@ import { filtUrl } from './config.js';
 // Straight from the shared layer, like config.js does: only module code uses
 // it, so it stays off `window` (tests/static.test.mjs keeps that surface honest).
 import { INTERNAL_URL } from './shared/url.js';
+import { modifierState } from './ui-state.js';
 
 // Left click
 function leftClick(url, event) {
@@ -22,7 +23,7 @@ function leftClick(url, event) {
             fallbackToUpdate: true,
             onSuccess: function () {
                 // Close popup if needed
-                if (window.ctrlState != 'true' && (localStorage['rh-click'] === 'newtab' || localStorage['rh-click'] === 'current')) {
+                if (!modifierState.ctrl && (localStorage['rh-click'] === 'newtab' || localStorage['rh-click'] === 'current')) {
                     window.close();
                 }
             },
@@ -34,8 +35,7 @@ function leftClick(url, event) {
     }
 
     var ca = localStorage['rh-click'];
-    var cs = window.ctrlState;
-    if (cs == 'true' || (event && event.button == 1)) {
+    if (modifierState.ctrl || (event && event.button == 1)) {
         chrome.tabs.create({
             url: url,
             selected: false

@@ -816,8 +816,8 @@ function updateFilter() {
 function filtUrl(url) {
     // Safety net for callers that run before the onStorageReady hook above:
     // retry until storage has actually been read. Without this, filtering would
-    // silently depend on page scripts and func.js registering their ready
-    // callbacks in the right order.
+    // silently depend on page scripts and page-init.js registering their
+    // ready callbacks in the right order.
     if (!filterLoaded) updateFilter();
 
     if (flist == undefined || flist == 'false' || url == undefined || url == '')

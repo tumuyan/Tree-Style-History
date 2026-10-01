@@ -7,6 +7,7 @@ import { filtUrl } from './config.js';
 // Straight from the bottom layer, not via calendar.js: that module imports
 // `history` from here, and going through it closed an import cycle.
 import { save_calendar_storage2 } from './shared/calendar-storage.js';
+import { modifierState, ITEM_SELECTED_COLOR } from './ui-state.js';
 
 // How long one tick of the chunked render loop may run before yielding.
 //
@@ -470,7 +471,7 @@ function getMoreItems(el) {
             var eleh = get_host(ele.value);
             if (ihost == eleh) {
                 ele.checked = true;
-                paintClosest(el, 'div.group-title', window.itemSelectedColor);
+                paintClosest(el, 'div.group-title', ITEM_SELECTED_COLOR);
                 selectHistoryItem(ele, 'single');
             }
         });
@@ -500,7 +501,7 @@ function resetColor() {
         }
         var chkInput = el.querySelector('input.chkbx');
         if (chkInput && chkInput.checked == true) {
-            el.style.backgroundColor = window.itemSelectedColor;
+            el.style.backgroundColor = ITEM_SELECTED_COLOR;
         }
     });
 }
@@ -516,7 +517,7 @@ function selectHistoryItem(el, w) {
     }
     if (w == 'single') {
         if (el.checked == true) {
-            if (window.shiftState == 'true' && selectedItem !== undefined) {
+            if (modifierState.shift && selectedItem !== undefined) {
                 var hitState = 'false';
                 var chkbxs = $$(into + ' .chkbx');
                 for (var i = 0; i < chkbxs.length; i++) {
@@ -538,13 +539,13 @@ function selectHistoryItem(el, w) {
                             }
                         } else if (chkbxs[i].checked == false) {
                             chkbxs[i].checked = true;
-                            paintClosest(chkbxs[i], 'div.item-holder', window.itemSelectedColor);
+                            paintClosest(chkbxs[i], 'div.item-holder', ITEM_SELECTED_COLOR);
                         }
                     }
                 }
             }
             selectedItem = el;
-            paintClosest(el, 'div.item-holder', window.itemSelectedColor);
+            paintClosest(el, 'div.item-holder', ITEM_SELECTED_COLOR);
         } else if (el.checked == false) {
             selectedItem = undefined;
             var iurl = el.value;
@@ -574,7 +575,7 @@ function selectHistoryItem(el, w) {
                 if (chkbxCount == chkbxChecked) {
                     var titleDivs = $$(into + ' div[title="' + CSS.escape(elem.getAttribute('rel')) + '"]');
                     if (titleDivs.length > 0) {
-                        titleDivs[0].style.backgroundColor = window.itemSelectedColor;
+                        titleDivs[0].style.backgroundColor = ITEM_SELECTED_COLOR;
                         var chkBox = titleDivs[0].querySelector('.group-title-checkbox');
                         if (chkBox) chkBox.checked = true;
                     }
@@ -598,13 +599,13 @@ function selectHistoryItem(el, w) {
         if (el.value == 'false') {
             Array.from($$(into + ' .chkbx')).forEach(function (ele) {
                 ele.checked = true;
-                paintClosest(ele, 'div.item-holder', window.itemSelectedColor);
+                paintClosest(ele, 'div.item-holder', ITEM_SELECTED_COLOR);
             });
             if (grp == 'yes') {
                 Array.from($$(into + ' .group-title')).forEach(function (gel) {
                     var chkInput = gel.querySelector('input');
                     if (chkInput) chkInput.checked = true;
-                    gel.style.backgroundColor = window.itemSelectedColor;
+                    gel.style.backgroundColor = ITEM_SELECTED_COLOR;
                 });
             }
             el.value = 'true';

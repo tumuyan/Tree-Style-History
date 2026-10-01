@@ -78,7 +78,8 @@ npm run check   # 本地门禁：lint + test + verify，约 3 秒
   - **不能用 `networkidle` 判断渲染完成**：页面会持续向第三方 favicon 服务发请求，离线时全部失败，网络空闲点既晚又不稳定。改为 `goto(waitUntil:'load')` → 等 `storageAdapter.ready()` → 固定 settle 1.5s。
   - 网络错误只记录、不判失败：popup 的 favicon 走第三方服务与 `chrome://favicon/`，无外网时必然全挂，那是图标降级，不是页面坏了。只有扩展自身代码产出的错误才算数。
   - 这套断言经过**变异验证**（往 `popup.js` 注入 `throw` + `console.error`，确认只有该页面变红），不是"永远绿"的假测试。
-  - 只断言"没抛错"是不够的——这些页面渲染的都是空列表，渲染循环根本没跑。所以另有两条**喂真实数据**的用例：`bookmark.html` 建一个书签断言标题逐字渲染，`history2.html` 断言 `#treeDemo` 里真的有 `li[data-tid]`、每行都带 `switch`/`ico` span、且 `window.jQuery` 已不存在（后者锁住"删掉 zTree 库"这件事，同样变异验证过：让渲染器返回空串即红）。
+  - 只断言"没抛错"是不够的——这些页面渲染的都是空列表，渲染循环根本没跑。所以另有**喂真实数据**的用例：`bookmark.html` 建一个书签断言标题逐字渲染；两个树状页各断言 `#treeDemo` 里真的有 `li[data-tid]`、每行都带 `switch`/`ico` span、且 `window.jQuery` 已不存在（后者锁住"删掉 zTree 库"这件事，同样变异验证过：让渲染器返回空串即两条都红）。
+    - 树状页那两条不需要喂数据：空库时它们渲染"没有找到记录"的占位节点，那也是渲染器必须画出来的两行。
   - 新增 e2e 用例时沿用同一模式：`collectErrors(page)` → `goto` → `settle(page)` → 断言 `jsErrors` 为空。**不要**用 `networkidle`。
   - 手工验证路径（无法自动化时）：`chrome://extensions` → 加载已解压的 `chrome/`，再逐个打开页面看控制台。
 - **重要约定**：`test(name, { skip: '原因' }, fn)` 表示**已知缺陷**，函数体内写的是*期望*行为。修 bug 时把对应 skip 去掉即可（先看到红，再改到绿）。当前 **0 个 skip**（历史欠账已清零；基线数字见 `TODO.md` 文件头）。
@@ -125,7 +126,7 @@ Service Worker 侧（`background-sw.js`、`background-utils.js`、`db-manager.js
 2. **SW 没有 DOM，也没有 `window`**。SW 里不能碰 `document`。
    `localStorage` 在 SW 中根本不存在——本项目之所以能在 `background-sw.js` 里到处写 `localStorage[...]`，是因为 `importScripts('storage-adapter.js')` 用 `Object.defineProperty` 把它替换掉了。**不要移除这个 import。**
 3. **CSP 禁止动态代码执行**。扩展页面内不得出现 `eval`、内联 `<script>`、内联事件处理器（`onclick=` 等）、远程托管的 `<script src>`。这几条都有自动化断言。
-   注意：zTree 内部有 `eval`（`jquery.ztree.core.js:1105`），仅在其异步加载分支中，目前未触发。`history2.html` 已不再加载 zTree，`closed.html` 仍在用它。
+   （历史注记）zTree 曾内含一个 `eval`（仅异步加载分支）。它随库一起删掉了——两个树状页现在都由 `modules/tree.js` 渲染，`chrome/scripts/` 下已无第三方文件。
 4. **`importScripts` 无法加载 ES module**。SW 无法复用 `modules/` 下的 ESM，所以两侧共用的那批函数（`getVersion`/`timeNow`/`getFaviconUrl`/`defaultConfig`/`save_calendar_storage2` …）放在 `chrome/scripts/modules/shared/`——**无依赖的底层**，由 `scripts/gen-sw-utils.mjs` 机械展开成经典脚本 `background-utils.js`。**改这些函数只需改 `shared/` 下那一份**，然后 `npm run gen` 重新生成并提交；`npm run verify:sw-sync` 会拦住忘记生成的情况。见下方「架构」一节。
 5. **`chrome://favicon/` 在 MV3 中已不可靠**。这是本项目要配置第三方 favicon 服务、并由 SW 拦截 `fetch` 做缓存的根本原因，也是 README 里"部分页面无法正常显示 favicon"的来源。
 6. **`chrome.storage.sync` 配额很紧**：单个 key 8KB、总量 100KB。所以过滤域名要按每 100 条切片成 `filterlist0..N` 保存。
@@ -159,16 +160,20 @@ MV3 取消了后台页面，因此代码分成两套互不相通的运行时：
 
 ### 3. 前端模块结构（3.3.0 重构后的新分层）
 
-`scripts/func.js` 是**模块入口与兼容层**：它 `import` 各领域模块，再把每个函数挂到 `window` 上，供仍然使用全局函数的旧页面脚本（`popup.js`、`history.js`、`closed.js`、`bookmark.js`）调用。`func.js` 同时承担全局 DOMContentLoaded 时的 i18n 填充（`.lang` + `data-lang-string`）与页面缩放（`popup-zoom` / `page-zoom`）。
+六个页面脚本（`popup.js`、`history.js`、`history2.js`、`closed.js`、`bookmark.js`、`options.js`）**都是 ES module**，各自 `import` 需要的符号——曾经那个把几十个函数逐个挂 `window` 的 `func.js` 兼容层已经删除。
 
-`scripts/modules/` 下六个模块，职责与依赖：
+`scripts/modules/page-init.js` 承担每页都要做的三件事（由页面脚本 `initPage()` 调用）：`DOMContentLoaded` 时填充 `.lang`（按 `data-lang-string`）、应用 `popup-zoom` / `page-zoom`、吞掉 `href="#"` 的点击。**别把它挪到模块顶层执行**：模块先于 `storage-adapter.js` 灌好缓存求值，那时读 `localStorage` 全是 `undefined`，且会被记成一次 unready read。
+
+`scripts/modules/ui-state.js` 放跨文件的页面状态：`modifierState.{shift,ctrl}`（由各页的 keydown/keyup 写、由 `popup-core.js` / `history-core.js` 读）与 `ITEM_SELECTED_COLOR`（选中行底色）。
+
+`scripts/modules/` 下的领域模块（`page-init.js` 与 `ui-state.js` 是其中两个，职责如上），依赖关系：
 
 - `helpers.js` —— 纯工具，无副作用：时间格式化（`TimeToStr`/`timeNow`/`formatDate`，受 `rh-date`、`rh-timeformat` 配置控制）、i18n（`returnLang`/`echoLang`）、字符串转义（`escapeHtmlAttr` 用于属性 / `escapeHtmlText` 用于文本，`title_fix` 已删除）/ `escapeRegExp`、URL 处理、bookmarklet 识别与执行、**favicon URL 生成体系**。
 - `config.js` —— 配置中心。`defaultValues` 是全部配置项的默认值表，`defaultConfig(clean)` 写入、`loadOptions(full)` 回填表单、`saveOptions(sync)` 收集保存。过滤域名由 `updateFilter()` 从 `rh-filtered` 编译成正则 `flist_r`，`filtUrl(url)` 供所有列表渲染前过滤。同步到 `chrome.storage.sync` 时把 key 的 `-` 换成 `_`，且过滤列表按每 100 条切片存成 `filterlist0..N`（绕过 sync 单 key 8KB 限制）。
 - `calendar.js` —— 侧边日历。`calendar_storage2` 是 `{startTime: 条数}` 映射，由 `history-core.js` 写入、本模块读取绘制热力色块，二者**循环依赖**，改动时需注意。
 - `popup-core.js` —— popup 各区块的渲染：`recentHistory` / `recentlyClosedTabs`（用 `chrome.sessions`）/ `recentBookmarks` / `mostVisited`（读 SW 写的 `mv-cache`）/ `showRecentTabs`（读 SW 镜像到 `chrome.storage.session` 的 `tab-list`；取不到才退回 `chrome.tabs.query`，**不再**走 `messageAdapter`——一次 `sendMessage` 就会唤醒 SW 并重跑启动爬库）/ `pinned`。统一由 `formatItem()` 生成条目，`leftClick`/`rightClick` 决定行为。
 - `history-core.js` —— 线性历史页渲染、分组（按 host）、排序（`rh-orderby` / `rh-order`）、`deleteHistoryItem('selected'|'range')`。**大列表用 `setInterval(..., 5)` 分片渲染**以免卡死，这是本项目反复出现的模式，新增长列表时应沿用。
-- `tree.js` —— 树状页的原生渲染器（`history2.html` 已用它替换 jQuery + zTree，`closed.html` 尚未迁移）。`treeHtml(nodes, opts)` 是纯函数（扁平 `{id, pId}` → 嵌套 `<li>/<ul>` 字符串，可按关键字过滤并保留命中项的祖先链）；`createTree(container, opts)` 是有状态包装，负责渲染进元素、`toggle` 折叠与点击回调；`bindTreeSearch(tree, opts)` 接筛选框与 transition 标签（取代 `fuzzysearch.js`）。它**沿用 zTree 的 class 词汇**（`root_/center_/bottom_ × open/close/docu`、`ico_*`），所以 `css/zTreeStyle.css` 仍然负责图标、连接线与缩进——只丢库，不丢样式。节点 `name` 是**纯文本**（原始页面标题），转义在这里做：先按原文定位高亮、再分段 `escapeHtmlText()`，否则关键字会把 `&amp;` 之类的实体切成两半。
+- `tree.js` —— 两个树状页的原生渲染器（已完全取代 jQuery + zTree）。`treeHtml(nodes, opts)` 是纯函数（扁平 `{id, pId}` → 嵌套 `<li>/<ul>` 字符串，可按关键字过滤并保留命中项的祖先链）；`createTree(container, opts)` 是有状态包装，负责渲染进元素、`toggle` 折叠与点击回调；`bindTreeSearch(tree, opts)` 接筛选框与 transition 标签（取代 `fuzzysearch.js`）。它**沿用 zTree 的 class 词汇**（`root_/center_/bottom_ × open/close/docu`、`ico_*`），所以 `css/zTreeStyle.css` 仍然负责图标、连接线与缩进——只丢库，不丢样式。节点 `name` 是**纯文本**（原始页面标题），转义在这里做：先按原文定位高亮、再分段 `escapeHtmlText()`，否则关键字会把 `&amp;` 之类的实体切成两半。
 
 `scripts/dom-helper.js` 是 ES module 版的 `$`/`$$`/`createElement`，用来取代 3.3.0 中移除的 MooTools。
 
@@ -195,18 +200,16 @@ MV3 取消了后台页面，因此代码分成两套互不相通的运行时：
 | `popup.html` | `popup.js` | 原生 DOM 字符串拼接，按 `rh-list-order` 顺序插入区块 | chrome.history / sessions / bookmarks / SW 内存 |
 | `history2.html` | `history2.js` | **原生树渲染**（`modules/tree.js`，核心功能） | IndexedDB `VisitItem` |
 | `history.html` | `history.js` | 原生 DOM 分片渲染 | `chrome.history.search` |
-| `closed.html` | `closed.js` | **jQuery + zTree** | IndexedDB `closed` |
+| `closed.html` | `closed.js` | **原生树渲染**（`modules/tree.js`） | IndexedDB `closed` |
 | `bookmark.html` | `bookmark.js` | 原生 DOM 分片渲染 | `chrome.bookmarks` |
 | `options.html` | `options.js` | 表单 | localStorage / `chrome.storage.sync` |
 
 两个树状页的数据形状相同：`id = visitId`，`pId = referringVisitId`，节点名拼上时间、标题和 transition 对应的 emoji（见 `history2.js` 中的 `transition_value` 表）。
 
-- `history2.html`：**不再加载 jQuery / zTree**，改由 `modules/tree.js` 原生渲染，筛选框与 transition 标签走 `bindTreeSearch()`（取代 `fuzzysearch.js`）。页面保留了 `css/zTreeStyle.css`，因为渲染器输出的是 zTree 的那套 class。
-- `closed.html`：**仍是 jQuery + zTree**，筛选走 `fuzzySearch`。迁移时照 `history2.js` 同一套 API 即可。
+- 两个页面都**不再加载 jQuery / zTree**，改由 `modules/tree.js` 原生渲染，筛选框与 transition 标签走 `bindTreeSearch()`（取代 `fuzzysearch.js`）。两者都保留了 `css/zTreeStyle.css`，因为渲染器输出的是 zTree 的那套 class——只丢库，不丢样式。
+- `closed.html` 的分组行（🗓️ 会话 / 🕓 连续关闭 / ⚠️ 异常关闭）没有自己的 URL，`t` 字段是 `'#'`。点击这类行会批量打开它下面所有页面：判断靠 `isPageUrl()`，遍历靠 `tree.childrenOf()`——走数据而不是走 DOM，所以重渲染后依然成立（`refreshRMenu()` 当年是遍历 zTree 刚画出来的 `<a href="#">`，重渲染就失效）。
 
-`closed.js` 用 `jQuery.noConflict()` 后以 `$jq` 引用 jQuery，而 `$` 保留给 `dom-helper` 的 `getElementById` —— **不要在这个页面里混用**（`history2.js` 已经没有 jQuery 了）。
-
-`scripts/` 下的 `jquery-3.6.0.min.js`、`jquery.ztree.core.js`、`jquery.ztree.exhide.js`、`fuzzysearch.js` 是第三方库，不要修改（`jquery.ztree.exhide.js` 已被本地定制以支持搜索隐藏，非上游原版）。现在只有 `closed.html` 还在加载它们。
+`chrome/scripts/` 下已无第三方文件：`jquery-3.6.0.min.js`、`jquery.ztree.core.js`、`jquery.ztree.exhide.js`、`fuzzysearch.js` 随最后一个加载它们的页面一起删除。`tests/static.test.mjs` 有两条守卫：页面不得再引用这些文件，`chrome/scripts/` 下不得再出现同名文件；首方脚本里也不得再出现 `$.fn.*` / `$jq` / `jQuery` / `fuzzySearch(`。
 
 ### 5. favicon 子系统（跨三层，改动需通盘考虑）
 
@@ -220,7 +223,7 @@ MV3 取消了后台页面，因此代码分成两套互不相通的运行时：
 
 - `localStorage` 里所有值都是**字符串**，`storageAdapter` 强制 `String(value)`。比较数量时务必 `Number(localStorage['rh-itemsno'])`，比较开关时用 `=== 'yes'` / `!== 'no'`（注意 `share-favicon-cache` 是反向的 `!== 'no'`）。
 - 配置键用连字符（如 `load-range`），同步到 `chrome.storage.sync` 时转下划线。新增开关类配置需同时加进 `modules/config.js` 的 `defaultValues`、`loadOptions`、`saveOptions` 与 `options.html` 的表单，以及 `_locales/*/messages.json`。
-- i18n 文案写在 `chrome/_locales/en/messages.json` 与 `chrome/_locales/zh_CN/messages.json`，两边都要补。`.lang` 元素由 `func.js` 自动填充，无需手写。
+- i18n 文案写在 `chrome/_locales/en/messages.json` 与 `chrome/_locales/zh_CN/messages.json`，两边都要补。`.lang` 元素由 `page-init.js` 自动填充，无需手写。
 - 渲染用户可控的标题/URL 时一律经过 `escapeHtmlAttr`（属性位置）或 `escapeHtmlText`（文本位置），本项目多处直接拼 HTML 字符串。`title_fix` 已删除（`tests/static.test.mjs` 有断言禁止它重新出现）。
 - 分支：`main` 是当前 MV3 主线（`mv3-3` 已合并，`master` 是旧的 MV2 代码，已废弃）。
 - README 的 Changelog 段落记录了每个版本的行为变更与已知问题（例如 MV3 导致部分页面 favicon 无法显示、popup 中点击小书签可能不触发），排查"看起来像 bug"的现象前先读一遍。

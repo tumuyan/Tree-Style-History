@@ -184,32 +184,38 @@ for (const file of PAGES) {
     });
 }
 
-test('history2.html renders its tree without zTree', { skip: SKIP }, async () => {
-    // The suites above only prove the page does not throw, and a page that
-    // silently renders nothing passes them — which is exactly what dropping a
-    // library can produce. history2.html now draws through
-    // scripts/modules/tree.js, so assert the rows are really there, that they
-    // carry the class names css/zTreeStyle.css styles (the stylesheet stayed,
-    // the library did not), and that jQuery is gone from this page.
-    const page = await context.newPage();
-    const { jsErrors, netErrors } = collectErrors(page);
-    await page.goto(`chrome-extension://${extensionId}/history2.html`, { waitUntil: 'load' });
-    await settle(page);
+for (const file of ['history2.html', 'closed.html']) {
+    test(`${file} renders its tree without zTree`, { skip: SKIP }, async () => {
+        // The suites above only prove the page does not throw, and a page that
+        // silently renders nothing passes them — which is exactly what dropping
+        // a library can produce. Both tree pages now draw through
+        // scripts/modules/tree.js, so assert the rows are really there, that
+        // they carry the class names css/zTreeStyle.css styles (the stylesheet
+        // stayed, the library did not), and that jQuery is gone.
+        //
+        // No seeded data: with an empty database both pages fall back to their
+        // "nothing found" placeholder, and that is still two rows the renderer
+        // has to draw.
+        const page = await context.newPage();
+        const { jsErrors, netErrors } = collectErrors(page);
+        await page.goto(`chrome-extension://${extensionId}/${file}`, { waitUntil: 'load' });
+        await settle(page);
 
-    const shape = await page.evaluate(() => ({
-        rows: document.querySelectorAll('#treeDemo li[data-tid]').length,
-        switches: document.querySelectorAll('#treeDemo span.button.switch').length,
-        icons: document.querySelectorAll('#treeDemo span.button.ico').length,
-        jquery: typeof window.jQuery,
-    }));
-    await page.close();
+        const shape = await page.evaluate(() => ({
+            rows: document.querySelectorAll('#treeDemo li[data-tid]').length,
+            switches: document.querySelectorAll('#treeDemo span.button.switch').length,
+            icons: document.querySelectorAll('#treeDemo span.button.ico').length,
+            jquery: typeof window.jQuery,
+        }));
+        await page.close();
 
-    assert.deepEqual(jsErrors, [], `history2.html threw (${netErrors.length} network error(s) ignored)`);
-    assert.ok(shape.rows > 0, 'the native renderer drew no rows at all');
-    assert.equal(shape.switches, shape.rows, 'every row needs a switch span for the stylesheet');
-    assert.equal(shape.icons, shape.rows, 'and an ico span, or the favicon/folder glyph is missing');
-    assert.equal(shape.jquery, 'undefined', 'history2.html must not load jQuery any more');
-});
+        assert.deepEqual(jsErrors, [], `${file} threw (${netErrors.length} network error(s) ignored)`);
+        assert.ok(shape.rows > 0, `the native renderer drew no rows at all on ${file}`);
+        assert.equal(shape.switches, shape.rows, 'every row needs a switch span for the stylesheet');
+        assert.equal(shape.icons, shape.rows, 'and an ico span, or the favicon/folder glyph is missing');
+        assert.equal(shape.jquery, 'undefined', `${file} must not load jQuery any more`);
+    });
+}
 
 test('bookmark.html renders a bookmark title verbatim in grouped mode', { skip: SKIP }, async () => {
     // The six suites above only prove the pages do not throw; every one of them

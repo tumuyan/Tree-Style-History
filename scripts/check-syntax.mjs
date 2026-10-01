@@ -4,8 +4,9 @@
 // browser loads the page — it shows up as a silently broken feature rather
 // than an error message. `node --check` catches it in CI in milliseconds.
 //
-// Vendored libraries are skipped: they are minified third-party code we do not
-// edit, and stale formatting there is not actionable.
+// Every script under chrome/scripts is first-party: the zTree/jQuery bundle
+// shipped with the extension was dropped along with the last page that loaded
+// it, so there is nothing left to skip.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -14,19 +15,12 @@ import { execFileSync } from 'node:child_process';
 const CHROME_DIR = new URL('../chrome/', import.meta.url).pathname;
 const SCRIPTS_DIR = path.join(CHROME_DIR, 'scripts');
 
-const VENDORED = new Set([
-    'jquery-3.6.0.min.js',
-    'jquery.ztree.core.js',
-    'jquery.ztree.exhide.js',
-    'fuzzysearch.js',
-]);
-
 function collect(dir) {
     const out = [];
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
         const p = path.join(dir, entry.name);
         if (entry.isDirectory()) out.push(...collect(p));
-        else if (entry.name.endsWith('.js') && !VENDORED.has(entry.name)) out.push(p);
+        else if (entry.name.endsWith('.js')) out.push(p);
     }
     return out;
 }

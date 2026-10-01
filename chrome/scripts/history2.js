@@ -1,3 +1,18 @@
+// Tree Style History - tree-shaped history page
+//
+// An ES module: every function it calls is imported, not read off `window`.
+
+import { $, $$ } from './dom-helper.js';
+import { TimeToStr, dateFormat, getFaviconUrl } from './modules/helpers.js';
+import { filtUrl } from './modules/config.js';
+import { calendar, showCalendar } from './modules/calendar.js';
+import { alertLoadingHistory } from './modules/history-core.js';
+import { createTree, bindTreeSearch } from './modules/tree.js';
+import { modifierState } from './modules/ui-state.js';
+import { initPage } from './modules/page-init.js';
+
+initPage();
+
 document.addEventListener('DOMContentLoaded', function () {
     onStorageReady(function () {
 
@@ -15,13 +30,13 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Shift listener
     document.body.addEventListener('keydown', function (e) {
-        if (e.keyCode == 16 && shiftState == 'false') {
-            shiftState = 'true';
+        if (e.keyCode == 16 && !modifierState.shift) {
+            modifierState.shift = true;
         }
     });
     document.body.addEventListener('keyup', function (e) {
         if (e.keyCode == 16) {
-            shiftState = 'false';
+            modifierState.shift = false;
         }
     });
 
@@ -35,7 +50,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // updateFilter();
 
     // Date events
-    var derhdf = localStorage['rh-date'];
+    var derhdf = dateFormat();
     derhdf = derhdf.replace('dd', 'dsdi').replace('mm', 'dsmi').replace('yyyy', 'dsyi');
     derhdf = derhdf.split('/');
     $(derhdf[0]).innerHTML = '<select class="select" id="date-select-day"></select>';
@@ -167,7 +182,7 @@ document.addEventListener('DOMContentLoaded', function () {
     DAY = 24 * 3600 * 1000;
 
     function timeStr2(time, wait_space) {
-        var datestr = localStorage['rh-date'].replace('yyyy/', '').replace('/yyyy', '');
+        var datestr = dateFormat().replace('yyyy/', '').replace('/yyyy', '');
 
         if (time >= date && wait_space)
             return '';

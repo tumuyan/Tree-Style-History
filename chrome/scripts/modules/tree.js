@@ -1,10 +1,10 @@
 // Tree Style History - tree renderer
 //
-// history2.html used to render through jQuery + zTree, plus a locally patched
-// exhide extension and fuzzysearch.js for filtering. That was ~2.6k lines of
-// third-party code for one widget, and zTree's async loader shipped a runtime
-// compiler that MV3's CSP forbids. It is gone from that page; closed.html has
-// not been migrated yet and still loads all four.
+// Both tree pages (history2.html and closed.html) used to render through
+// jQuery + zTree, plus a locally patched exhide extension and fuzzysearch.js
+// for filtering. That was ~2.6k lines of third-party code for one widget, and
+// zTree's async loader shipped a runtime compiler that MV3's CSP forbids.
+// All four files are gone from the repo; this module renders both pages.
 //
 // This module does what the page actually uses: build a tree out of flat
 // `{ id, pId }` nodes, expand/collapse, filter by keyword (keeping the
@@ -229,6 +229,10 @@ function createTree(container, opts) {
     // Node objects are the identity: the same node keeps its element id across
     // renders, so a click can be mapped back to it.
     const ids = new Map();
+    // Kept between renders because callers walk it: closed.js reopens every
+    // page under the group that was clicked, which is a question about the
+    // data, not about the markup.
+    let index = indexNodes(nodes);
 
     function byTid(tid) {
         for (const [node, id] of ids) if (id === tid) return node;
@@ -236,6 +240,7 @@ function createTree(container, opts) {
     }
 
     function render() {
+        index = indexNodes(nodes);
         container.innerHTML = treeHtml(nodes, { treeId, keyword, urlKey, ids });
     }
 
@@ -282,7 +287,11 @@ function createTree(container, opts) {
         },
         /** The roots, in insertion order. */
         getNodes() {
-            return indexNodes(nodes).roots;
+            return index.roots;
+        },
+        /** Direct children of a node, in insertion order. */
+        childrenOf(node) {
+            return index.children.get(node) || [];
         },
         removeNode(node) {
             nodes = nodes.filter(function (n) { return n !== node; });
@@ -361,6 +370,6 @@ function bindTreeSearch(tree, opts) {
 }
 
 // One `export {}` block rather than three inline `export function`s:
-// tests/static.test.mjs reads this block to check that func.js really mounts
-// every symbol a page script can call, and it cannot see the inline form.
+// tests/static.test.mjs reads this block to cross-check the module's public
+// API, and it cannot see the inline form.
 export { treeHtml, createTree, bindTreeSearch };

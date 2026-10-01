@@ -1286,6 +1286,21 @@ function captureDeleteRange(fn) {
     return captured;
 }
 
+test('dateFormat falls back to the default until storage is ready', async (t) => {
+    // Every page script builds its date dropdowns by string-replacing on this
+    // key. It reads `undefined` in the window before storage-adapter.js has
+    // resolved chrome.storage.local, and the `.replace()` on the next line then
+    // threw inside the page's own DOMContentLoaded handler — taking the rest of
+    // the page's initialisation with it. Roughly one cold start in three hit it.
+    const h = await importModule('modules/helpers.js');
+    restoreStorage(t, ['rh-date']);
+    delete localStorage['rh-date'];
+    assert.equal(h.dateFormat(), 'mm/dd/yyyy');
+
+    localStorage['rh-date'] = 'yyyy/mm/dd';
+    assert.equal(h.dateFormat(), 'yyyy/mm/dd');
+});
+
 test('deleteHistoryItem("range") deletes exactly the range the inputs describe', async (t) => {
     const historyCore = await importModule('modules/history-core.js');
     seedRangeInputs(t, 'yyyy/mm/dd', '2026/09/01', '2026/09/10');
