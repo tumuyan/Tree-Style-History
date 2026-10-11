@@ -1429,13 +1429,18 @@ test('recentHistory lists pages, not internal URLs', async (t) => {
     holder.innerHTML = '';
     localStorage['rh-itemsno'] = '3';
 
+    // `TS` is a fixed date in 2024; recentHistory() only lists the last 28
+    // days, so entries stamped with it would all be filtered out and the
+    // assertions below would pass for the wrong reason. "now" keeps the
+    // fixture about internal URLs, which is what this test is for.
+    const now = Date.now();
     const entries = [
         { url: 'file:///home/me/notes.txt', title: 'Notes' },
         { url: 'chrome://extensions', title: 'Extensions' },
         { url: 'https://alpha.test/1', title: 'A1' },
         { url: 'chrome-extension://abcdefg/popup.html', title: 'Popup' },
         { url: 'https://beta.test/1', title: 'B1' },
-    ].map((e) => ({ ...e, visitCount: 1, lastVisitTime: TS }));
+    ].map((e) => ({ ...e, visitCount: 1, lastVisitTime: now }));
 
     withChromeApi({ history: { search: (_q, cb) => cb(entries) } }, () => {
         popupCore.recentHistory();
@@ -1450,6 +1455,43 @@ test('recentHistory lists pages, not internal URLs', async (t) => {
     assert.doesNotMatch(rendered, /chrome:\/\/extensions/, "the browser's own pages must not be listed");
     assert.match(rendered, /https:\/\/alpha\.test\/1/);
     assert.match(rendered, /https:\/\/beta\.test\/1/);
+});
+
+test('recentHistory drops entries older than 28 days without spending a slot', async (t) => {
+    // The window used to be passed to chrome.history.search as startTime,
+    // which makes the backend scan by time range — hundreds of milliseconds on
+    // a large profile. It is now applied in JS, and this pins down the part
+    // that is easy to get wrong: an old entry must be skipped *without*
+    // counting towards the configured number of items, or a filtered-down
+    // history would render short.
+    const popupCore = await importModule('modules/popup-core.js');
+    restoreStorage(t, ['rh-itemsno']);
+
+    const holder = dom.el('rh-inject');
+    holder.innerHTML = '';
+    localStorage['rh-itemsno'] = '2';
+
+    const now = Date.now();
+    const DAY = 24 * 3600 * 1000;
+    const entries = [
+        { url: 'https://old.test/a', title: 'Old A', visitCount: 9, lastVisitTime: now - 40 * DAY },
+        { url: 'https://new.test/a', title: 'New A', visitCount: 1, lastVisitTime: now },
+        { url: 'https://old.test/b', title: 'Old B', visitCount: 8, lastVisitTime: now - 30 * DAY },
+        { url: 'https://new.test/b', title: 'New B', visitCount: 1, lastVisitTime: now - 1000 },
+        { url: 'https://new.test/c', title: 'New C', visitCount: 1, lastVisitTime: now - 2000 },
+        { url: 'https://new.test/d', title: 'New D', visitCount: 1, lastVisitTime: now - 3000 },
+    ];
+
+    withChromeApi({ history: { search: (_q, cb) => cb(entries) } }, () => {
+        popupCore.recentHistory();
+    });
+
+    const rendered = holder.children.map((el) => el.innerHTML).join('\n');
+
+    assert.equal(holder.children.length, 2, 'two slots were configured and two recent pages exist');
+    assert.doesNotMatch(rendered, /old\.test/, 'a page last visited 40 days ago must not be listed');
+    assert.match(rendered, /https:\/\/new\.test\/a/);
+    assert.match(rendered, /https:\/\/new\.test\/b/);
 });
 
 test('showRecentTabs reads the tab list from session storage instead of waking the worker', async (t) => {

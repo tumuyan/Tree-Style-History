@@ -5,7 +5,7 @@
 状态图例：`[ ]` 未开始 · `[x]` 已完成 · `[-]` 暂缓
 
 > **护栏已就位**：`npm run check`（ESLint + `node:test` + 4 个校验脚本）是唯一准入闸门，约 5 秒跑完，CI 强制执行。
-> 当前基线：**lint 0 error / 0 warning（`--max-warnings 0`）· 209 测试 · 209 通过 · 0 skip · 0 失败**（另：e2e 12 测试 · 12 通过）。
+> 当前基线：**lint 0 error / 0 warning（`--max-warnings 0`）· 212 测试 · 212 通过 · 0 skip · 0 失败**（另：e2e 12 测试 · 12 通过）。
 > 2 个 skip 已在「第 3 批」消除（`rh-list-order` 硬编码与失效的 `treeOptionsDetail`）。**当前无 skip**；后续若需标注已知缺陷，沿用 `test(name, { skip: '原因' }, fn)` 写法（函数体内写期望行为，修完去掉 skip）。
 
 ---
