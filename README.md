@@ -72,6 +72,11 @@ chrome/scripts/modules/tree.js 是树状显示的渲染器，两个树状页面�
 过去本目录曾包含 MooTools、jQuery、zTree（jquery.ztree.core.js / jquery.ztree.exhide.js）与 fuzzysearch.js，这些第三方库已全部移除，不要再引入。
 
 ## Changlog
+3.3.2 (未发布)  
+Bug 修复: 自定义页面缩放偶尔不生效。缩放配置的读取早于存储就绪，读到空值就被静默跳过  
+Bug 修复: 在存储初始化完成之前写入或删除的配置，会被随后到达的快照覆盖回去  
+破坏性变更: 最低支持的 Chrome 版本提升到 102（此前声明为 88）。低版本能安装但一运行就崩，因为需要 MV3 起才有的 `chrome.storage.session` 等 API（`manifest.json` 已于 #4 提升至 102，此处补记）  
+
 3.3.1 (2026/06/19)  
 修复设置丢失的bug 
 优化自定义缩放的外观

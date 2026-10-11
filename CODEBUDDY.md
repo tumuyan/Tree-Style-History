@@ -146,8 +146,13 @@ MV3 取消了后台页面，因此代码分成两套互不相通的运行时：
 
 ### 2. 存储三件套（理解本仓库的关键）
 
-**`scripts/storage-adapter.js`** —— 它用 `Object.defineProperty` 把全局 `localStorage` 替换成一个 Proxy，后端是 `chrome.storage.local` 的内存缓存（`localStorage` 在 MV3 Service Worker 中不可用）。所有业务代码仍然照常写 `localStorage['xxx']`，无需改动。
+**`scripts/storage-adapter.js`** —— 它用 `Object.defineProperty` 把全局 `localStorage` 替换成一个 Proxy（挂在页面的 `window` **和** Service Worker 的 `self` 上），后端是 `chrome.storage.local` 的内存缓存（`localStorage` 在 MV3 Service Worker 中不可用）。所有业务代码仍然照常写 `localStorage['xxx']`，无需改动。
 **重要**：读取前必须等缓存就绪，即把初始化代码包进 `onStorageReady(function () { ... })`（等价于 `storageAdapter.ready()`）。所有页面的入口脚本都是这个模式。`chrome.storage.onChanged` 会自动同步缓存，所以选项页改配置后其他页面能看到。
+
+替换全局对象的代价是两个不那么显眼的语义陷阱，都已处理但改这块时要知道：
+
+- **未就绪时的写/删除会被初始快照回冲**。`chrome.storage.local.get(null)` 在脚本求值时发出，期间发生的写删除立刻落盘，**却不在那次读的应答里**（Chrome 应答的是调用时刻的快照）。适配器因此把未就绪期间的写删除记进 `_pendingWrites`，在初始化完成时重新应用。写入方有两路，都要记：本上下文的 `setItem()` / `removeItem()`，以及别处（SW 的 `defaultConfig()`）经 `chrome.storage.onChanged` 送达的变更——漏掉后者的话洞只补了一半。两个写入方法都用 `!this._initialized` 守卫，因为初始化后该 Map 再无读取方。
+- **与适配器成员同名的存储键会顶掉成员本身**。`localStorage['getItem'] = x` 走 Proxy 的 `set`，命中 `prop in target` 就把方法本身替换掉：值不会被持久化，刷新即无，而此后读这个名字只拿得到 `x`。`RESERVED_KEYS`（由 `Object.keys(adapter)` 推导）在写入时拒绝、报错，并让 `set` 返回 `false`（严格模式下赋值抛 `TypeError`）。
 
 **`scripts/db-manager.js`** —— IndexedDB 单例 `dbManager`，库名 `testDB`（历史遗留命名），版本 6。三个 object store：
 - `VisitItem`（keyPath `visitId`）：一次访问 = 一条记录，含 `referringVisitId`（父节点）、`url`、`visitTime`、`title`、`transition`。**树状结构就建立在这个自引用关系上**。
@@ -162,7 +167,8 @@ MV3 取消了后台页面，因此代码分成两套互不相通的运行时：
 
 六个页面脚本（`popup.js`、`history.js`、`history2.js`、`closed.js`、`bookmark.js`、`options.js`）**都是 ES module**，各自 `import` 需要的符号——曾经那个把几十个函数逐个挂 `window` 的 `func.js` 兼容层已经删除。
 
-`scripts/modules/page-init.js` 承担每页都要做的三件事（由页面脚本 `initPage()` 调用）：`DOMContentLoaded` 时填充 `.lang`（按 `data-lang-string`）、应用 `popup-zoom` / `page-zoom`、吞掉 `href="#"` 的点击。**别把它挪到模块顶层执行**：模块先于 `storage-adapter.js` 灌好缓存求值，那时读 `localStorage` 全是 `undefined`，且会被记成一次 unready read。
+`scripts/modules/page-init.js` 承担每页都要做的三件事（由页面脚本 `initPage()` 调用）：填充 `.lang`（按 `data-lang-string`）、应用 `popup-zoom` / `page-zoom`、吞掉 `href="#"` 的点击。**别把它挪到模块顶层执行**：模块先于 `storage-adapter.js` 灌好缓存求值，那时读 `localStorage` 全是 `undefined`，且会被记成一次 unready read。
+其中只有 `applyZoom()` 读存储，所以它挂在 `onStorageReady()` 而不是 `DOMContentLoaded` 上——后者**早于** 缓存就绪，缩放会静默失效（不抛错、不告警，页面按 100% 渲染）。
 
 `scripts/modules/ui-state.js` 放跨文件的页面状态：`modifierState.{shift,ctrl}`（由各页的 keydown/keyup 写、由 `popup-core.js` / `history-core.js` 读）与 `ITEM_SELECTED_COLOR`（选中行底色）。
 

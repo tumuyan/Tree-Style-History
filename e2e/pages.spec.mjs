@@ -283,3 +283,74 @@ test('bookmark.html renders a bookmark title verbatim in grouped mode', { skip: 
         }
     }
 });
+
+test('a page still applies its saved zoom when storage answers late', { skip: SKIP }, async () => {
+    // `page-init.js` reads `popup-zoom` / `page-zoom` at DOMContentLoaded, which
+    // fires BEFORE chrome.storage.local.get() has answered — so the key reads
+    // `undefined` and the page silently renders at 100%. Nothing is thrown and
+    // nothing is logged, which is why this survived every existing suite: the
+    // six "opens without JavaScript errors" cases all pass with the zoom lost.
+    //
+    // The delay below is what makes it reproducible: normally the read resolves
+    // in ~30ms and DOMContentLoaded often (but not reliably) lands after it.
+    const ZOOM_DELAY_MS = 1500;
+
+    const zoomOf = async (file) => {
+        const page = await context.newPage();
+        const { jsErrors, netErrors } = collectErrors(page);
+        await page.addInitScript((delay) => {
+            const realGet = chrome.storage.local.get.bind(chrome.storage.local);
+            chrome.storage.local.get = (keys, cb) => realGet(keys, (items) => setTimeout(() => cb(items), delay));
+        }, ZOOM_DELAY_MS);
+        await page.goto(`chrome-extension://${extensionId}/${file}`, { waitUntil: 'load' });
+        // `settle()` cannot be used here: it polls `storageAdapter.ready()`, and
+        // readiness is exactly what is being delayed. Wait for the effect the
+        // test is about instead, then give the rest of the boot a fixed margin
+        // before collecting errors — every other case settles in `SETTLE_MS`.
+        //
+        // The margin is bounded by `ZOOM_DELAY_MS`, not stacked on top of it:
+        // `waitForFunction` already returns once the delayed `get()` has landed,
+        // so what is left to wait for is the same render the other cases wait
+        // for. Adding the delay again would just re-pay for time already spent.
+        let zoom = '';
+        try {
+            await page.waitForFunction(() => document.body.style.zoom !== '', { timeout: ZOOM_DELAY_MS });
+            zoom = await page.evaluate(() => document.body.style.zoom);
+        } catch {
+            zoom = await page.evaluate(() => document.body.style.zoom);
+        }
+        await new Promise((resolve) => setTimeout(resolve, SETTLE_MS));
+        await page.close();
+        assert.deepEqual(jsErrors, [], `${file} threw while waiting for storage (${netErrors.length} network error(s) ignored)`);
+        return zoom;
+    };
+
+    // Seeded and restored through an ordinary page, so both go through the
+    // adapter. Restoring matters: these two keys are global to the extension
+    // profile, and a run that leaves them at 150 changes what every later case
+    // in this file renders.
+    const seed = await context.newPage();
+    const { jsErrors: seedErrors } = collectErrors(seed);
+    await seed.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: 'load' });
+    await settle(seed);
+
+    try {
+        await seed.evaluate(async () => {
+            localStorage['page-zoom'] = '150';
+            localStorage['popup-zoom'] = '150';
+            await window.storageAdapter.ready();
+        });
+
+        for (const file of ['history2.html', 'popup.html']) {
+            assert.equal(await zoomOf(file), '150%', `${file} lost the saved zoom`);
+        }
+        assert.deepEqual(seedErrors, [], 'seeding the zoom threw');
+    } finally {
+        await seed.evaluate(async () => {
+            localStorage['page-zoom'] = '100';
+            localStorage['popup-zoom'] = '100';
+            await window.storageAdapter.ready();
+        });
+        await seed.close();
+    }
+});

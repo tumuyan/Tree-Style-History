@@ -5,7 +5,7 @@
 状态图例：`[ ]` 未开始 · `[x]` 已完成 · `[-]` 暂缓
 
 > **护栏已就位**：`npm run check`（ESLint + `node:test` + 4 个校验脚本）是唯一准入闸门，约 5 秒跑完，CI 强制执行。
-> 当前基线：**lint 0 error / 0 warning（`--max-warnings 0`）· 199 测试 · 199 通过 · 0 skip · 0 失败**（另：e2e 11 测试 · 11 通过）。
+> 当前基线：**lint 0 error / 0 warning（`--max-warnings 0`）· 209 测试 · 209 通过 · 0 skip · 0 失败**（另：e2e 12 测试 · 12 通过）。
 > 2 个 skip 已在「第 3 批」消除（`rh-list-order` 硬编码与失效的 `treeOptionsDetail`）。**当前无 skip**；后续若需标注已知缺陷，沿用 `test(name, { skip: '原因' }, fn)` 写法（函数体内写期望行为，修完去掉 skip）。
 
 ---
@@ -344,8 +344,12 @@
   - `history2.html`（第 8 批上半）与 `closed.html`（下半）都由 `chrome/scripts/modules/tree.js` 原生渲染：建树、展开/折叠、关键字过滤保留祖先链、点击回调。沿用 zTree 的 class 词汇，所以 `css/zTreeStyle.css` 仍然负责图标、连接线与缩进——只丢库，不丢样式。
   - `closed.js` 的 `refreshRMenu()` 一并提供：它当初遍历 zTree 刚画出来的 `<a href="#">` 实现「点分组批量打开」，重渲染即失效。改由 `isPageUrl()` 判断 + `tree.childrenOf()` 递归（新增 API）走数据，不再依赖标记。
 
-- [ ] **重新审视全局劫持 `localStorage`**（`chrome/scripts/storage-adapter.js:290`）
-  - 现状：`Object.defineProperty` 把 `localStorage` 换成 Proxy，对所有第三方脚本生效，且 `storageAdapter.ready()` 之前读取全是 `undefined`（P0 中 `updateFilter` 的 bug 正是这个语义陷阱的产物）。至少应让未就绪时读取打出告警。
+- [x] **重新审视全局劫持 `localStorage`**（`chrome/scripts/storage-adapter.js`）— **已修复**（见「第 10 批」）
+  - ~~现状：`Object.defineProperty` 把 `localStorage` 换成 Proxy，对所有第三方脚本生效，且 `storageAdapter.ready()` 之前读取全是 `undefined`（P0 中 `updateFilter` 的 bug 正是这个语义陷阱的产物）。~~
+  - 全局劫持本身保留：MV3 的 Service Worker 里根本没有 `localStorage`，而这个替换让 SW 与页面共用同一套写法（`importScripts('storage-adapter.js')` 一行搞定），去掉它要付出的代价比收益大得多。修的是它的三个语义陷阱：
+    - 未就绪读取：仍会告警（第 8 批已加 `_unreadyReads`）。
+    - **未就绪写入/删除会被初始快照回冲**：`chrome.storage.local.get(null)` 在脚本求值时就发出，期间发生的所有写删除都会先落盘、**却不会出现在那次读的返回值里**（Chrome 应答的是调用时刻的快照，实测确认）。原先 `_cache = normalized` 直接覆盖，于是写完再读是旧值、删完又复活。现在用 `_pendingWrites` 记下来，初始化完成时重新应用。
+    - **存储键与适配器成员同名时会顶掉成员本身**：`localStorage['getItem'] = x` 会走 Proxy 的 `set` 落到 `target[prop] = value`，把方法本身替换掉。值不会被持久化（既不进 `chrome.storage.local`，也不在初始快照里），刷新即无；而此后每次读这个名字拿到的都是 `x`，不再是存取接口。现在按 `Object.keys(adapter)` 白名单拒绝写入并报错，拒绝时 `set` 陷阱返回 `false`，严格模式下的赋值会抛 `TypeError` 而不是假装成功（`_` 开头的键不在名单里，现有配置键不受影响）。
 
 - [x] **补充最小测试 + CI**（第二轮已覆盖前两类；第三类仍未做）
   - 已覆盖：`filtUrl` 匹配、配置读写往返（`saveOptions`/`loadOptions`/`downloadOptions`/`addList`）、favicon 子系统、小书签执行、时间格式化、模块图与 `func.js` 挂载一致性、manifest 权限覆盖、SW 副本同步、**`dbManager` 的连接生命周期**（`tests/db-manager.test.mjs`，见「第 5 批」）。
@@ -520,6 +524,32 @@
   - 两条静态守卫：`no page loads jQuery, zTree or fuzzysearch any more`（页面 `<script src>` 与 `scripts/` 目录双向）+ `first-party scripts never reference jQuery or zTree globals`（`$.fn.*` / `$jq` / `jQuery` / `fuzzySearch(`）。均经变异验证（往 `closed.html` 加一个 zTree 标签 → 红；往 `closed.js` 加一行 `$jq.fn.zTree.init` → 红）。
 - [x] **e2e 断言推广**：`history2.html renders its tree without zTree` 参数化为两个页面。空库时它们渲染「没有找到记录」的占位节点，那也是渲染器必须画出来的两行，所以这条不需要喂数据。**变异验证**：让 `render()` 输出空串，两条同时红。
 
+### 第 10 批（已完成）：`localStorage` 的三处语义陷阱与丢失的页面缩放
+
+之前 P3 只写了一句「至少应让未就绪时读取打出告警」，告警早已有之。这一批处理的是真正会造成后果的两项，加上一个由此暴露的 P1。
+
+- [x] **`page-init.js` 在 storage 就绪前读 `popup-zoom` / `page-zoom`** — **P1，真实可见的功能失效**
+  - 现象：`applyZoom()` 挂在 `DOMContentLoaded` 上，而该事件**早于** `storage-adapter.js` 拿到 `chrome.storage.local` 的结果。此刻缩放键读作 `undefined` → 条件不成立 → 页面按 100% 渲染。不抛异常、不打日志，所以六个页面的 e2e 全绿而缩放是丢的。
+  - 缘何今天才暴露：平时那次读只需约 30ms，多数情况下赶得上；只有冷启动、慢机器或首次安装（此时还没跑过 `defaultConfig()`）才会稳定丢。用 CDP 给 `chrome.storage.local.get` 注入 1.5s 延迟可 100% 复现。
+  - 已做：`applyZoom()` 改挂 `onStorageReady()`。它是三件 bootstrap 里唯一读存储的，所以只有它要等。
+  - 测试：`e2e/pages.spec.mjs` 新增 `a page still applies its saved zoom when storage answers late`——先置 `page-zoom` / `popup-zoom` 为 150，再注入延迟打开两个页面并断言 `document.body.style.zoom === '150%'`。**变异验证**：改回 `DOMContentLoaded` 直接读，立刻红。
+
+- [x] **未就绪写入/删除被初始快照回冲**（`chrome/scripts/storage-adapter.js`）
+  - 原状：`completeInitialization()` 的 `_cache = normalized` 直接覆盖。**Chrome 的 `get()` 应答的是调用时刻的快照**，而写删除会立刻落盘，所以「期间发生的事」既进了磁盘、又不在快照里——偏偏初始化用的是快照。于是写入后读到旧值、删除后又复活。
+  - 已做：`setItem()` / `removeItem()` 在未就绪时记进 `_pendingWrites`，初始化完成时重新应用；`removeItem()` 记 `undefined` 表示「删除」，与写入值区分。**两个写入方都要 `!this._initialized` 守卫**——初始化后该 Map 已无人读，再塞条目只是泄漏（`background-sw.js` 按需 `removeItem('favicon-negative-cache')` 就走这条路径）。
+  - **另一路写入方：`chrome.storage.onChanged`**。第 10 批只处理了本上下文的 `setItem` / `removeItem`，但从别的上下文（SW 启动时的 `defaultConfig()`）送达的变更此前只写进 `_cache`，随后仍被快照整体覆盖——同一个洞的另一半。现在未就绪时同样记进 `_pendingWrites`。
+  - 测试 2 条，均先红后绿。
+
+- [x] **存储键与适配器成员同名时会顶掉成员本身**（同上）
+  - 原状：Proxy 的 `set` 先判 `prop in target`，命中就走 `target[prop] = value`。于是 `localStorage['getItem'] = x` 覆盖的是方法本身：值既没存下（不进 `chrome.storage.local`，也不在初始快照里，刷新即无），此后所有读取又都拿到那个 `x`，全程无提示。这是把「劫持全局对象」换成 Proxy 的固有代价。
+  - 已做：`RESERVED_KEYS` 由 `Object.keys(adapter)` 推导（不手写名单，成员增减自动跟上），命中即拒绝写入并 `console.error`，并返回 `false` 让赋值在严格模式下抛 `TypeError`——原先记完日志照样 `return true`，等于告诉调用方「存好了」。**不带 `_` 的键才收进名单**——现有配置键里有下划线前缀的写法不能误伤。
+  - 测试 3 条（拒绝真的发生了 + 严格模式能看见失败 + 普通键不受影响），均先红后绿。
+
+- [x] **顺带修掉测试夹具的一个假绿**（`tests/storage-adapter.test.mjs`）
+  - 假 `chrome.storage.local.get()` 原先答复「现在 `store` 里有什么」，而它的 `set()` 又是同步改同一个对象——于是「调用期间发生写入」在测试里**总是可见**，上面两条竞态用例怎么写都是绿的。
+  - 已做：`get()` 在调用时刻拍快照 `{ ...store }`，`flush()` 把当时的那份交回去，与实测到的 Chrome 行为一致。修正后老用例仍全绿（它们不依赖这个时机）。
+  - 教训：桩替身复刻了存储的字符串化语义，却没复刻**快照时机**——而后者正是这次两个 bug 成立的前提。替身不必完整，但它必须与被测的那条因果有关的那部分是诚实的，否则写出来的用例只是装饰。
+
 ## 建议执行顺序
 
 | 批次 | 内容 | 理由 |
@@ -535,7 +565,9 @@
 | ✅ 第 6 批 | 抓取改批量事务、徽章节流、分片渲染按预算批量 + 分组查表、`mostVisited` alarm 降频 | **已完成**。4 条新测试（含首个真正跑渲染循环的用例），均先红后绿 |
 | ✅ 第 7 批 | `addCloseRecord` 命名与 id 语义、**lint 清零并加 `--max-warnings 0`** | **已完成**。1 条新测试（变异验证）+ 140 处警告清零。**顺带发现 `recentHistory()` 的过滤判定算了没用，待你决定是否启用** |
 | ✅ 第 8 批 | `closed.html` 迁移到 `modules/tree.js`、删除 zTree/jQuery 四个第三方文件、技术栈统一 | **已完成**。`tree.js` 新增 `childrenOf()`（1 条单测）+ 2 条静态守卫防库回归 + e2e 断言推广到两个树状页，均变异验证。第三方库彻底出仓，`chrome/scripts/` 只剩首方代码 |
-| ✅ 第 9 批 | 六个页面脚本改 ES module、删除 `func.js`、**修掉 `rh-date` 未就绪崩溃** | **已完成**。199 测试（+1）+ 3 条静态守卫防 window 层回归，均变异验证。剩余：`localStorage` 全局劫持 |
+| ✅ 第 9 批 | 六个页面脚本改 ES module、删除 `func.js`、**修掉 `rh-date` 未就绪崩溃** | **已完成**。199 测试（+1）+ 3 条静态守卫防 window 层回归，均变异验证 |
+| ✅ 第 10 批 | `localStorage` 全局劫持的三个语义陷阱 + **`page-init.js` 在 storageAdapter 就绪之前读缩放导致缩放静默丢失** | **已完成**。205 测试（+6）+ e2e 12（+1），均变异验证。**顺带修好测试夹具：假 `chrome.storage.local.get()` 此前答复「当时存储里有什么」，而不是「调用时刻的快照」，把两个竞态用例变成永远绿** |
+| ✅ 第 10.1 批 | 第 10 批评审收尾：`onChanged` 那半条竞态、`removeItem()` 守卫对齐、**夹具里 `evalStrict()` 的 `localStorage` 根本没接上代理（那条用例是假绿）** | **已完成**。209 测试（+4），两条变异都验过：删 `onChanged` 记录 / 删 `removeItem` 守卫 → 各自红 |
 
 > **插队说明**：第 1.5 / 1.6 / 1.7 批是顺手做掉的——它们都由新写的测试或 review 直接暴露，且改动小、有 skip 测试兜底，不值得单独排队。
 > 1.5 = `filtUrl` 子串误伤 + `te` 未初始化 + `addList` 空格；1.6 = 选项页 `#mvlist` 缺失（**会导致选项页打不开**）+ 其附带的属性注入；1.7 = `filtUrl` 降段死分支 + `www` 子域过滤。

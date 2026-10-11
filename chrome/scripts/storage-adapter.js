@@ -68,6 +68,12 @@
         // with `undefined`, and the caller cannot tell that apart from
         // "genuinely unset" — so the window is reported instead of ignored.
         _unreadyReads: new Set(),
+        // Changes made before the initial `chrome.storage.local.get()` answered,
+        // from this context (setItem/removeItem) or from another one (the SW's
+        // `defaultConfig()`, delivered by chrome.storage.onChanged). That read
+        // returns the pre-change snapshot, so without re-applying these the
+        // change silently evaporates. Cleared once it has served its purpose.
+        _pendingWrites: new Map(),
 
         init(callback) {
             if (this._initialized) {
@@ -119,16 +125,30 @@
         setItem(key, value) {
             const stringValue = toStorageString(value);
             this._cache[key] = stringValue;
+            // A write that happens before chrome.storage.local.get() answers is
+            // persisted straight away, but the snapshot arriving afterwards does
+            // not include it — so remember it and re-apply it, instead of letting
+            // the older value roll the write back.
+            if (!this._initialized) {
+                this._pendingWrites.set(String(key), stringValue);
+            }
             chrome.storage.local.set({ [key]: stringValue });
         },
 
         removeItem(key) {
             delete this._cache[key];
+            // Same race as setItem(), mirrored — and guarded the same way: once
+            // the cache is filled the snapshot can no longer resurrect anything,
+            // and an entry added now would sit unread forever.
+            if (!this._initialized) {
+                this._pendingWrites.set(String(key), undefined);
+            }
             chrome.storage.local.remove(key);
         },
 
         clear() {
             this._cache = {};
+            this._pendingWrites.clear();
             chrome.storage.local.clear();
         },
 
@@ -152,6 +172,17 @@
         
         const { normalized, updates } = normalizeItems(items);
         adapter._cache = normalized;
+        // Anything written during the initial read lands in storage before that
+        // read answers, and therefore is absent from `items`. Re-applying here is
+        // what keeps `localStorage[k] = v` truthful in that window.
+        for (const [key, value] of adapter._pendingWrites) {
+            if (value === undefined) {
+                delete adapter._cache[key];
+            } else {
+                adapter._cache[key] = value;
+            }
+        }
+        adapter._pendingWrites.clear();
         adapter._initialized = true;
         adapter._initializing = false;
 
@@ -268,10 +299,17 @@
         }
         Object.keys(changes).forEach((key) => {
             const change = changes[key];
-            if ('newValue' in change) {
-                adapter._cache[key] = ('newValue' in change) ? toStorageString(change.newValue) : adapter._cache[key];
-            } else {
+            const value = 'newValue' in change ? toStorageString(change.newValue) : undefined;
+            // Before completion the initial `get()`'s snapshot is still on its
+            // way, and applying it wholesale would discard this change. Record it
+            // like a local write so it is replayed along with them.
+            if (!adapter._initialized) {
+                adapter._pendingWrites.set(key, value);
+            }
+            if (value === undefined) {
                 delete adapter._cache[key];
+            } else {
+                adapter._cache[key] = value;
             }
         });
     });
@@ -282,6 +320,17 @@
     // `await localStorage` probes `then`, JSON.stringify probes `toJSON`.
     const OBJECT_PROBES = new Set(['then', 'toJSON', 'constructor', 'prototype']);
 
+    // Storage keys and adapter members share one namespace, and the adapter
+    // owns the collision: `localStorage['getItem'] = x` would run
+    // `target.getItem = x` (the `set` trap checks `prop in target` first) and
+    // replace the method itself. The value is then never persisted — not to
+    // chrome.storage.local, not into the initial snapshot — so it vanishes on
+    // reload, while every later read of that name hands back `x` instead of a
+    // stored string. Refusing the write at least says so out loud.
+    const RESERVED_KEYS = new Set(
+        Object.keys(adapter).filter((k) => !k.startsWith('_')),
+    );
+
     const storageProxy = new Proxy(adapter, {
         get(target, prop) {
             if (prop in target) {
@@ -290,6 +339,19 @@
             return target.getItem(String(prop), typeof prop === 'string' && !OBJECT_PROBES.has(prop));
         },
         set(target, prop, value) {
+            // Checked before `prop in target`: the adapter owns these names, so
+            // the plain assignment below would otherwise overwrite `getItem`
+            // itself and leave no trace of the collision.
+            if (typeof prop === 'string' && RESERVED_KEYS.has(prop)) {
+                console.error(
+                    'storageAdapter: refusing to store the key "' + prop
+                    + '" — it names one of the adapter\'s own members, so writing it'
+                    + ' would replace that member and never persist the value.',
+                );
+                // Returning false makes the assignment throw a TypeError in a
+                // strict-mode caller, instead of quietly doing nothing.
+                return false;
+            }
             if (prop in target) {
                 target[prop] = value;
             } else {

@@ -30,18 +30,21 @@ function fillLangStrings() {
 /**
  * Apply `popup-zoom` or `page-zoom`, whichever belongs to this document.
  *
- * Runs after DOMContentLoaded, not on import: every localStorage read that
- * happens before storage-adapter.js has filled its cache is answered
- * `undefined` AND recorded as an unready read, so evaluating this early would
- * put a spurious warning in the console of a healthy page.
+ * Waits for `onStorageReady`, not merely for DOMContentLoaded: DOMContentLoaded
+ * fires *before* storage-adapter.js has its cache, so zoom is read as
+ * `undefined` and the page silently renders at 100%. It is the only one of the
+ * three bootstrap steps that reads storage, so it is the only one that has to
+ * wait.
  */
 function applyZoom() {
     // The popup marks itself with an element no other page has.
     var zoomKey = $('popup') ? 'popup-zoom' : 'page-zoom';
-    var zoom = parseInt(localStorage[zoomKey], 10);
-    if (!isNaN(zoom) && zoom !== 100) {
-        document.body.style.zoom = zoom + '%';
-    }
+    onStorageReady(function () {
+        var zoom = parseInt(localStorage[zoomKey], 10);
+        if (!isNaN(zoom) && zoom !== 100) {
+            document.body.style.zoom = zoom + '%';
+        }
+    });
 }
 
 // Placeholder links: without this every `href="#"` jumps to the top of the
@@ -56,7 +59,8 @@ function swallowHashClicks() {
 }
 
 // Every page script calls this once, on import. The work itself waits for
-// DOMContentLoaded — see applyZoom() for why none of it can run earlier.
+// DOMContentLoaded — except applyZoom(), which additionally waits for the
+// storage cache, see above.
 export function initPage() {
     document.addEventListener('DOMContentLoaded', function () {
         applyZoom();
