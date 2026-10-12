@@ -6,6 +6,19 @@
 
 export var DAY = 24 * 3600 * 1000;
 
+// How far back "recent" reaches, in days. Shared because two runtimes ask the
+// same question with the same answer: the popup filters its recent-history list
+// by it, and the Service Worker filters the most-visited candidates by it.
+// Declared with `var`, not `const`: gen-sw-utils.mjs emits `/* exported ... */`
+// for the Service Worker's benefit, and that directive only covers `var`.
+export var RECENT_HISTORY_DAYS = 28;
+
+// How many most-visited entries are kept in `mv-cache`. Shared for the same
+// reason: the Service Worker fills the cache up to this many rows and the popup
+// walks exactly this many of them, so the two must agree or the list silently
+// loses its tail.
+export var MOST_VISITED_MAX = 45;
+
 // Midnight today. `TimeToStr()` rolls it forward when a page stays open past
 // midnight, so it is mutable state and must live in exactly one module.
 export var _DATE = new Date();

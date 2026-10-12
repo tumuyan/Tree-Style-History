@@ -683,19 +683,31 @@ function updatedTab(tab) {
 // Most visited init
 var mostVisitedInit = function () {
     var mv = [];
-    var infmv = 45;
+    var infmv = MOST_VISITED_MAX;
     var r = 0;
 
-    chrome.history.search({ 
-        text: '', 
-        maxResults: 0, 
-        startTime: (new Date()).getTime() - (28 * 24 * 3600 * 1000), 
-        endTime: (new Date()).getTime() 
-    }, function (hi) {
+    // maxResults is the number of candidates to rank, not 0 (all of history).
+    // This runs on every service-worker start, on the same task as
+    // initializeStorageState() — an unbounded search is the kind of query that
+    // keeps the worker busy for hundreds of milliseconds. 500 candidates is far
+    // more than the MOST_VISITED_MAX rows kept in `mv-cache`, and the
+    // RECENT_HISTORY_DAYS window is enforced in JS instead of in the query, so
+    // the ranking is unchanged.
+    //
+    // Note the search is *not* sorted by visitCount: chrome.history returns
+    // most-recent-first, so this ranks the 500 most recent pages rather than
+    // the 500 most visited overall. "Most visited" here has always meant
+    // "most visited among recent pages", and narrowing the window narrows that
+    // further — deliberately, in exchange for a worker that starts promptly.
+    chrome.history.search({ text: '', maxResults: 500 }, function (hi) {
         if (hi.length > 0) {
+            var cutoff = (new Date()).getTime() - (RECENT_HISTORY_DAYS * DAY);
+            // `lastVisitTime` is always present on a chrome.history result —
+            // a missing one there is not a case worth a branch.
+            hi = hi.filter(function (h) { return h.lastVisitTime >= cutoff; });
             hi.sort(function (a, b) { return b.visitCount - a.visitCount });
 
-            for (let i = 0; i < 99; i++) {
+            for (let i = 0; i < hi.length; i++) {
                 if (r == infmv) { break; }
 
                 if (hi[i] !== undefined) {
@@ -1192,6 +1204,14 @@ async function visitTab(tab) {
     let url = tab.url;
 
     if (url == undefined || url == "") return;
+
+    // Our own pages are not browsing. Opening the popup navigates a tab to
+    // chrome-extension://<id>/popup.html, which fires tabs.onUpdated and used
+    // to land here: a getVisits() round trip per popup open that also filed a
+    // "history" row for the extension's own UI. Worse, it is what wakes this
+    // worker after it has been recycled — and a wake re-runs the startup crawl.
+    // Bail out before doing any work.
+    if (url.indexOf('chrome-extension://' + chrome.runtime.id) === 0) return;
 
     console.debug("visitTab() tabId=" + tab.openerTabId + " -> " + tab.id + " url=" + url);
 

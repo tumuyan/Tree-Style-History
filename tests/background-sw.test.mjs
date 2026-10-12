@@ -605,3 +605,41 @@ test('a stale cursor is ignored rather than trusted', async () => {
 
     assert.equal(w.state.queried.length, 4, 'an expired cursor must not skip anything');
 });
+
+// ---------------------------------------------------------------------------
+// The extension's own pages
+//
+// Opening the popup navigates a tab, which fires tabs.onUpdated. That used to
+// reach visitTab(): a getVisits() round trip per popup open, a "history" row for
+// the extension's own UI, and — because it is an event — a worker wake-up whose
+// side effect is the whole startup crawl running again.
+// ---------------------------------------------------------------------------
+
+test('a tab navigating to the extension\'s own page is not crawled', async () => {
+    const w = loadWorker({ tabs: [] });
+    w.boot();
+    await w.settle();
+
+    const own = 'chrome-extension://test-extension-id/popup.html';
+    w.fire('tabs.onUpdated', 1, { status: 'complete' }, { id: 1, url: own, title: 'Popup | Recent History' });
+    await w.settle();
+
+    assert.deepEqual(w.state.queried, [], [
+        'our own URL must not reach chrome.history.getVisits(): opening the popup',
+        'would otherwise wake the worker and re-run the startup crawl.',
+    ].join(' '));
+    assert.deepEqual(w.state.visits, [], 'and must not be filed as a visited page');
+});
+
+test('a tab navigating to a real page is still crawled', async () => {
+    // The guard above must not swallow ordinary browsing.
+    const w = loadWorker({ tabs: [] });
+    w.boot();
+    await w.settle();
+
+    w.fire('tabs.onUpdated', 1, { status: 'complete' },
+        { id: 1, url: 'https://example.com/page', title: 'A real page' });
+    await w.settle();
+
+    assert.deepEqual(w.state.queried, ['https://example.com/page']);
+});
