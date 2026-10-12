@@ -683,15 +683,16 @@ function updatedTab(tab) {
 // Most visited init
 var mostVisitedInit = function () {
     var mv = [];
-    var infmv = 45;
+    var infmv = MOST_VISITED_MAX;
     var r = 0;
 
     // maxResults is the number of candidates to rank, not 0 (all of history).
     // This runs on every service-worker start, on the same task as
-    // initializeStorageState() — an unbounded search with a 28-day window is
-    // the kind of query that keeps the worker busy for hundreds of
-    // milliseconds. 500 recent candidates is far more than the 45 kept, and
-    // the window is enforced in JS so the ranking is unchanged.
+    // initializeStorageState() — an unbounded search is the kind of query that
+    // keeps the worker busy for hundreds of milliseconds. 500 candidates is far
+    // more than the MOST_VISITED_MAX rows kept in `mv-cache`, and the
+    // RECENT_HISTORY_DAYS window is enforced in JS instead of in the query, so
+    // the ranking is unchanged.
     //
     // Note the search is *not* sorted by visitCount: chrome.history returns
     // most-recent-first, so this ranks the 500 most recent pages rather than
@@ -700,8 +701,10 @@ var mostVisitedInit = function () {
     // further — deliberately, in exchange for a worker that starts promptly.
     chrome.history.search({ text: '', maxResults: 500 }, function (hi) {
         if (hi.length > 0) {
-            var cutoff = (new Date()).getTime() - (28 * 24 * 3600 * 1000);
-            hi = hi.filter(function (h) { return h.lastVisitTime === undefined || h.lastVisitTime >= cutoff; });
+            var cutoff = (new Date()).getTime() - (RECENT_HISTORY_DAYS * DAY);
+            // `lastVisitTime` is always present on a chrome.history result —
+            // a missing one there is not a case worth a branch.
+            hi = hi.filter(function (h) { return h.lastVisitTime >= cutoff; });
             hi.sort(function (a, b) { return b.visitCount - a.visitCount });
 
             for (let i = 0; i < hi.length; i++) {

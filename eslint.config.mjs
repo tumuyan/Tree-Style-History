@@ -37,6 +37,8 @@ const crossFileGlobals = {
     // --- declared in background-utils.js, reached from background-sw.js ---
     INTERNAL_URL: 'writable',
     DAY: 'writable', // background-sw.js re-assigns it at startup
+    RECENT_HISTORY_DAYS: 'readonly',
+    MOST_VISITED_MAX: 'readonly',
     getFaviconUrl: 'writable',
     getVersion: 'writable',
     returnLang: 'writable',

@@ -1,6 +1,6 @@
 import { $, $$, createElement } from '../dom-helper.js';
 import {
-    returnLang, escapeHtmlAttr, escapeHtmlText, timeNow, formatDate,
+    DAY, returnLang, escapeHtmlAttr, escapeHtmlText, timeNow, formatDate,
     getFaviconUrl, isBookmarkletUrl, executeBookmarklet,
     getFaviconOnerror, setupFaviconElement,
     Clipboard
@@ -9,6 +9,7 @@ import { filtUrl } from './config.js';
 // Straight from the shared layer, like config.js does: only module code uses
 // it, so it stays off `window` (tests/static.test.mjs keeps that surface honest).
 import { INTERNAL_URL } from './shared/url.js';
+import { RECENT_HISTORY_DAYS, MOST_VISITED_MAX } from './shared/format.js';
 import { modifierState } from './ui-state.js';
 
 // Left click
@@ -527,7 +528,6 @@ function uiDeleteItem(el, type) {
 // three kinds of row without spending a slot — internal URLs, filter-list hits,
 // and now entries older than the window — so it has to be able to look past
 // them or a filtered-down list would come back short.
-const RECENT_HISTORY_DAYS = 28;
 
 function recentHistory() {
 
@@ -538,7 +538,7 @@ function recentHistory() {
 
     if (rhin > 0) {
 
-        var cutoff = (new Date()).getTime() - (RECENT_HISTORY_DAYS * 24 * 3600 * 1000);
+        var cutoff = (new Date()).getTime() - (RECENT_HISTORY_DAYS * DAY);
 
         chrome.history.search({ text: '', maxResults: rhin }, function (hi) {
 
@@ -562,10 +562,8 @@ function recentHistory() {
 
                         // The same reasoning as above: an entry outside the
                         // window is not shown and must not count towards the
-                        // quota. `lastVisitTime` is absent from the stubbed
-                        // entries in tests, so a missing value is treated as
-                        // "now" rather than filtered out.
-                        if (hi[i].lastVisitTime !== undefined && hi[i].lastVisitTime < cutoff) {
+                        // quota.
+                        if (hi[i].lastVisitTime < cutoff) {
                             continue;
                         }
 
@@ -821,7 +819,9 @@ function mostVisited() {
         var mvrl = localStorage['mv-blocklist'];
         var r = 0;
 
-        for (var i = 0; i < 45; i++) {
+        // Bounded by the same constant the Service Worker filled `mv-cache`
+        // with, so the two cannot drift apart.
+        for (var i = 0; i < MOST_VISITED_MAX; i++) {
 
             if (r == itemsno) {
                 break;

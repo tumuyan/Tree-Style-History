@@ -10,7 +10,7 @@
 // concatenation is what the Service Worker loads via importScripts.
 // ============================================================================
 
-/* exported defaultValues, defaultConfig, DAY, _DATE, advanceDateToToday, getVersion, getVersionType, returnLang, timeNow, isBookmarkletUrl, INTERNAL_URL, get_host, getFaviconUrl, getFaviconOnerror, calendar_storage2, save_calendar_storage2 */
+/* exported defaultValues, defaultConfig, DAY, RECENT_HISTORY_DAYS, MOST_VISITED_MAX, _DATE, advanceDateToToday, getVersion, getVersionType, returnLang, timeNow, isBookmarkletUrl, INTERNAL_URL, get_host, getFaviconUrl, getFaviconOnerror, calendar_storage2, save_calendar_storage2 */
 
 // ---- begin modules/shared/config-defaults.js ----
 // Shared config defaults — single source of truth for background-utils.js.
@@ -79,6 +79,19 @@ function defaultConfig(clean) {
 // by `scripts/gen-sw-utils.mjs`. Do NOT edit the generated file by hand.
 
 var DAY = 24 * 3600 * 1000;
+
+// How far back "recent" reaches, in days. Shared because two runtimes ask the
+// same question with the same answer: the popup filters its recent-history list
+// by it, and the Service Worker filters the most-visited candidates by it.
+// Declared with `var`, not `const`: gen-sw-utils.mjs emits `/* exported ... */`
+// for the Service Worker's benefit, and that directive only covers `var`.
+var RECENT_HISTORY_DAYS = 28;
+
+// How many most-visited entries are kept in `mv-cache`. Shared for the same
+// reason: the Service Worker fills the cache up to this many rows and the popup
+// walks exactly this many of them, so the two must agree or the list silently
+// loses its tail.
+var MOST_VISITED_MAX = 45;
 
 // Midnight today. `TimeToStr()` rolls it forward when a page stays open past
 // midnight, so it is mutable state and must live in exactly one module.
