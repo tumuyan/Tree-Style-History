@@ -7,8 +7,7 @@
 //   * A normal `test()` asserts behaviour that is correct TODAY. It is a
 //     regression guard: if it breaks, a change broke something.
 //   * `test(name, { skip: reason }, fn)` documents a KNOWN DEFECT. The body
-//     asserts the *desired* behaviour. Un-skip it as part of the fix; until
-//     then it is tracked in TODO.md with the same reference.
+//     asserts the *desired* behaviour. Un-skip it as part of the fix.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -182,7 +181,7 @@ test('escapeHtmlAttr neutralises all five HTML-significant characters', () => {
 });
 
 test('escapeHtmlAttr is applied to attribute-injection payloads', () => {
-    // The shape of the XSS described in TODO P0: a URL carrying a double quote
+    // The shape of the historic URL-in-attribute XSS: a URL carrying a quote
     // would otherwise terminate a double-quoted HTML attribute.
     const payload = 'https://x.test/?a="onmouseover="alert(1)';
     const escaped = helpers.escapeHtmlAttr(payload);

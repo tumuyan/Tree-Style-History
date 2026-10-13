@@ -570,7 +570,7 @@ test('first-party scripts never compile code at runtime', () => {
         const hits = [...src.matchAll(/\beval\s*\(|new\s+Function\s*\(/g)].length;
         if (hits > (ALLOWED[file.replace(/\\/g, '/')] ?? 0)) offenders.push(`${file}: ${hits}`);
     });
-    assert.deepEqual(offenders, [], 'zTree still ships an eval() — see TODO.md P2');
+    assert.deepEqual(offenders, [], 'a first-party script ships eval()/new Function()');
 });
 
 test('config.js only references option-page ids that exist', () => {
@@ -584,7 +584,7 @@ test('config.js only references option-page ids that exist', () => {
         ...[...src.matchAll(/selectOptionByIdValue\('([\w-]+)'/g)].map((m) => m[1]),
     ]);
 
-    // Known gaps, each tracked in TODO.md — delete the entry as it is fixed.
+    // Known gaps — delete the entry as each is fixed.
     const KNOWN_GAPS = new Set([
         'rhshare', // no control in options.html: rh-share is neither shown nor saved
     ]);
