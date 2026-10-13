@@ -185,8 +185,17 @@ function treeHtml(nodes, opts) {
         const prefix = `${treeId}_${tid}`;
 
         // A custom icon (the favicon) replaces the folder/file glyph entirely.
+        //
+        // `background-size:cover` is not decoration: the box is 16x16, and
+        // favicons are served at 32x32 or 64x64. With the initial `auto` the
+        // image is painted at its natural size and clipped to the box, so the
+        // row shows the icon's top-left corner -- for a transparent-padded
+        // favicon that crop is often empty, and the icon "does not display"
+        // even though the URL resolves. zTree emitted exactly this declaration
+        // (makeNodeIcoStyle in jquery.ztree.core.js); dropping it is what broke
+        // the icons, so it is part of the markup contract, not a tweak.
         const icoStyle = node.icon
-            ? ` style="background:url('${cssUrl(node.icon)}') 0 0 no-repeat;"` : '';
+            ? ` style="background:url('${cssUrl(node.icon)}') 0 0 no-repeat;background-size:cover;"` : '';
 
         let html = `<li id="${prefix}" class="level${level}" data-tid="${tid}">`
             + `<span id="${prefix}_switch" class="button switch ${switchClass(level, isLast, hasChildren, open)}"></span>`

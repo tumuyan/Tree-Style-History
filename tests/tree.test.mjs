@@ -149,6 +149,26 @@ test('a custom icon replaces the folder glyph', () => {
     assert.match(html, /background:url\('https:\/\/a\/favicon\.ico'\)/);
 });
 
+test('a custom icon is scaled into the 16x16 box', () => {
+    // Without this the image is painted at its natural size: favicons are
+    // usually 32x32 or larger, so a 16x16 box shows only the top-left corner
+    // and the row looks like it has no icon at all. zTree emitted the same
+    // declaration (makeNodeIcoStyle), so its absence is a regression.
+    const html = treeHtml(
+        [{ id: 1, pId: 0, name: 'x', t: 'https://a/', icon: 'https://a/favicon.ico' }],
+        { treeId: 'tree' },
+    );
+    const style = /style="([^"]*)"/.exec(html)[1];
+    assert.match(style, /background-size:cover/, 'the icon must be scaled to the box');
+});
+
+test('a node without an icon carries no background style', () => {
+    // The placeholder rows ("no history found") have no icon, so they must not
+    // match the assertion above by accident.
+    const html = treeHtml([{ id: 1, pId: 0, name: 'x', t: 'https://a/' }], { treeId: 'tree' });
+    assert.ok(!html.includes('background:'), 'no icon field -> no inline background');
+});
+
 test('a quote in a favicon URL cannot close the url() string', () => {
     // The icon sits in a style attribute, so two parsers read it. Escaping for
     // HTML alone is not enough: the entity is decoded before the CSS tokenizer
