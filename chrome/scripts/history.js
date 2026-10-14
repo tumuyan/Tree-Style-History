@@ -266,7 +266,14 @@ document.addEventListener('DOMContentLoaded', function(){
     // Assign events
   
     $('master-check-all').addEventListener('click', function(){ selectHistoryItem(this, 'all'); });
-    $('delete-range-button').addEventListener('click', function(){ deleteHistoryItem('range'); });
+    // The calendar's heat map is redrawn here, not in history-core.js: the
+    // range delete spans whole days, so every day in the month can change
+    // colour, and calendar() is the only pass that paints them. history-core.js
+    // cannot import it (calendar.js imports history() — that would be a cycle),
+    // so the redraw comes back as this callback.
+    $('delete-range-button').addEventListener('click', function(){
+        deleteHistoryItem('range', function(){ calendar('yes', ''); });
+    });
     $('delete-button').addEventListener('click', function(){ deleteHistoryItem('selected'); });
 
 

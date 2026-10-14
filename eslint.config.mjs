@@ -27,7 +27,6 @@ const crossFileGlobals = {
     // --- injected by storage-adapter.js ---
     dbManager: 'writable',
     storageAdapter: 'writable',
-    messageAdapter: 'writable',
     onStorageReady: 'writable',
 
     // --- shared/module imports are statically checked; only the drilled-in
@@ -39,6 +38,8 @@ const crossFileGlobals = {
     DAY: 'writable', // background-sw.js re-assigns it at startup
     RECENT_HISTORY_DAYS: 'readonly',
     MOST_VISITED_MAX: 'readonly',
+    TAB_LIST_KEY: 'readonly',
+    TAB_LIST_VERSION: 'readonly',
     getFaviconUrl: 'writable',
     getVersion: 'writable',
     returnLang: 'writable',

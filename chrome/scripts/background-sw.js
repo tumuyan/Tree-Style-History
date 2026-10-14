@@ -77,8 +77,11 @@ const SESSION_SAVE_DELAY_MS = 1000;
 // A separate key rather than a read of `tab-state`: that snapshot carries up to
 // 2 * SESSION_ID_LIMIT URL->visitId pairs, and deserialising it on every popup
 // open would cost more than the round trip it saves.
-const TAB_LIST_KEY = 'tab-list';
-const TAB_LIST_VERSION = 1;
+//
+// Both names come from background-utils.js (i.e. modules/shared/format.js),
+// where the popup reads them too. They are NOT re-declared here: a top-level
+// `const` and the `var` the generated file declares collide at global scope,
+// which is a SyntaxError that kills the whole worker.
 // urlIdJson/idUrlJson gain an entry per visited URL and nothing prunes them,
 // so the snapshot has to be capped before it is written: session storage
 // allowed 1MB until Chrome 112 (10MB since), and a long URL is ~1KB on its
@@ -867,15 +870,21 @@ if (chrome && chrome.storage && chrome.storage.onChanged) {
 
 // Load date function — refactored from recursive callback to async/await
 async function loadDate(date, dateId) {
-    if (dateId > localStorage['load-range']) {
-        console.debug("loadDate done. dateId = " + dateId + ">" + localStorage['load-range']);
+    // Number() is not a bug fix here: `>` coerces its right operand anyway, so
+    // 11 > "10" was already true. It is written out because the value is a
+    // string and every arithmetic use below would otherwise rely on that
+    // coercion being remembered — and because the badge subtracts, where
+    // "120" - 3 happens to work for the same reason.
+    const loadRange = Number(localStorage['load-range']);
+    if (dateId > loadRange) {
+        console.debug("loadDate done. dateId = " + dateId + ">" + loadRange);
         localStorage['calendar-storage'] = JSON.stringify(calendar_r);
         chrome.action.setBadgeText({ text: "Url" });
         loadHistory();
         return;
     }
 
-    chrome.action.setBadgeText({ text: "D" + (localStorage['load-range'] - dateId) });
+    chrome.action.setBadgeText({ text: "D" + (loadRange - dateId) });
 
     let dday = "d" + (date + DAY).toString();
     let qday = "d" + date;
@@ -1017,7 +1026,7 @@ function setBadge(text, force) {
 function loadHistory() {
     dbManager.queryURLs({
         index: 'lastVisitTime',
-        range: IDBKeyRange.lowerBound((new Date()).getTime() - DAY * localStorage["load-range"]),
+        range: IDBKeyRange.lowerBound((new Date()).getTime() - DAY * Number(localStorage["load-range"])),
         direction: 'next'
     }).then(urls => {
         urls_wait_load = urls.filter(url => {
@@ -1102,7 +1111,7 @@ async function crawlUrlVisits(url_item) {
     }
 
     h.sort((a, b) => b.visitTime - a.visitTime);
-    const loadfrom = (new Date()).getTime() - DAY * localStorage["load-range"];
+    const loadfrom = (new Date()).getTime() - DAY * Number(localStorage["load-range"]);
 
     for (const v of h) {
         if (v.visitTime < loadfrom) {
@@ -1319,8 +1328,10 @@ function add_tab_history(visitItems, i, loadfrom, url_item) {
 // be `self[message.function](...)`, which made every global in this service
 // worker — internal helpers included — callable by name from any sender.
 const CALLABLE_FUNCTIONS = {
-    // The only name messageAdapter ever passes. Its MV3 route calls dbManager
-    // directly, so this just keeps the documented fallback working.
+    // Nothing in the extension sends it any more: options.js calls
+    // dbManager.deleteDB() in its own page, which is all this used to forward
+    // to. Kept so the dispatch table below is not empty — the table is the
+    // point, and `getData` still answers from it.
     deleteDb: () => dbManager.deleteDB(),
 };
 
@@ -1361,13 +1372,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     switch (message.action) {
         case 'getData':
-            if (message.key === 'recentTabs') {
-                sendResponse(recentTabs);
-            } else if (message.key === 'openedTabs') {
-                sendResponse(openedTabs);
-            } else {
-                sendResponse(undefined);
-            }
+            // The only two keys this ever answered were openedTabs and
+            // recentTabs, and both readers are gone: the popup reads the
+            // snapshot the worker mirrors into chrome.storage.session, which
+            // costs no wake. Answering them here would mean a page could still
+            // wake the worker for a list it can read for free.
+            sendResponse(undefined);
             break;
 
         case 'callFunction':

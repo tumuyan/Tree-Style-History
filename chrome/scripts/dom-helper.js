@@ -38,13 +38,6 @@ function createElement(tag, attrs) {
     return el;
 }
 
-// Empty all children from an element
-function emptyElement(el) {
-    while (el.firstChild) {
-        el.removeChild(el.firstChild);
-    }
-}
-
 // Get computed style (replaces MooTools getStyle)
 function getStyle(el, prop) {
     // Convert CSS property to camelCase for direct style access
@@ -53,4 +46,4 @@ function getStyle(el, prop) {
 }
 
 // --- Exports ---
-export { $, $$, createElement, emptyElement, getStyle };
+export { $, $$, createElement, getStyle };

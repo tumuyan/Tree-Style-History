@@ -258,7 +258,7 @@ document.addEventListener('DOMContentLoaded', function () {
             console.log("loadHistory time from " + loadfrom.toString() + " to " + loadto.toString());
             feach_History(loadfrom, loadto, 0);
         } else {
-            let time = (date).getTime() - DAY * (localStorage["load-range2"]);
+            let time = (date).getTime() - DAY * Number(localStorage["load-range2"]);
             console.log("loadHistory time from " + new Date(time).toString());
             feach_History(time, (date_e).getTime(), 0);
         }
@@ -411,7 +411,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
                 xNodes = [];
 
-                if (zNodes.length < localStorage['load-range4'] && loadfrom - DAY * t > date - localStorage['load-range3'] * DAY) {
+                if (zNodes.length < Number(localStorage['load-range4']) && loadfrom - DAY * t > date - Number(localStorage['load-range3']) * DAY) {
                     feach_History(loadfrom, loadto, t + 1);
                 } else {
                     // No "remove every node first" pass: zNodes is the whole

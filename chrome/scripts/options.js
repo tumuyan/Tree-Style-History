@@ -91,15 +91,18 @@ document.addEventListener('DOMContentLoaded', function () {
         // window.open('options.html');
     });
 
+    // Straight to dbManager: messageAdapter's MV3 route did exactly this, and
+    // its other route (the MV2 background page) cannot exist here. The file
+    // and its <script> tag are gone — see the note in options.html.
     $('deleteCache').addEventListener('click', function () {
-        if (typeof messageAdapter !== 'undefined') {
-            messageAdapter.deleteDB().then(() => {
+        if (typeof dbManager !== 'undefined') {
+            dbManager.deleteDB().then(() => {
                 console.log('Database deleted successfully');
             }).catch(err => {
                 console.error('Failed to delete database:', err);
             });
         } else {
-            console.warn('Message adapter not available');
+            console.warn('dbManager not available');
         }
     });
 

@@ -8,7 +8,7 @@ import { $, $$, createElement } from './dom-helper.js';
 import { returnLang, chromeURL, getVersion } from './modules/helpers.js';
 import {
     alertUser, recentHistory, recentlyClosedTabs, recentBookmarks,
-    mostVisited, showRecentTabs, popupSearch
+    mostVisited, showRecentTabs, popupSearch, pinned
 } from './modules/popup-core.js';
 import { modifierState } from './modules/ui-state.js';
 import { initPage } from './modules/page-init.js';
@@ -83,6 +83,15 @@ document.addEventListener('DOMContentLoaded', function () {
     // which would still be walked as a (harmless) unknown block.
     var rhporder = (localStorage['rh-list-order'] || '').split(',').filter(Boolean);
 
+    // Pinned first and unconditionally: there is no per-row pin button any
+    // more (see formatItem()), so `rh-pinned` can only ever shrink — from a
+    // profile that pinned something before the button was removed. Without a
+    // block here those entries are in storage and nowhere on screen.
+    if (localStorage['rh-pinned'] !== 'false' && localStorage['rh-pinned'] !== undefined) {
+        var pinnedEl = createElement('div', { id: 'pi-inject', html: '<div id="pi-inject-title" class="popup-title"><span>' + returnLang('pinned') + '</span></div>' });
+        $('popup-insert').appendChild(pinnedEl);
+    }
+
     for (var o in rhporder) {
         if (rhporder[o] == 'rh-order') {
             if (Number(localStorage['rh-itemsno']) > 0) {
@@ -151,6 +160,8 @@ document.addEventListener('DOMContentLoaded', function () {
     // Popup init
 
     // -- Insert - 按照rh-list-order的顺序填充数据
+    if ($('pi-inject')) { pinned(); }
+
     for (o in rhporder) {
         if (rhporder[o] == 'rh-order' && $('rh-inject')) { recentHistory(); }
         else if (rhporder[o] == 'rct-order' && $('rct-inject')) { recentlyClosedTabs(); }

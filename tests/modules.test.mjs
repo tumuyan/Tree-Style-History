@@ -132,10 +132,10 @@ function formDefaults() {
 // ---------------------------------------------------------------------------
 
 const EXPECTED_EXPORTS = {
-    'dom-helper.js': ['$', '$$', 'createElement', 'emptyElement', 'getStyle'],
+    'dom-helper.js': ['$', '$$', 'createElement', 'getStyle'],
     'modules/helpers.js': [
-        'TimeToStr', 'timeNow', 'formatDate', 'echoLang', 'returnLang', 'stripScripts',
-        'escapeHtmlAttr', 'escapeHtmlText', 'truncate', 'calcSize', 'getUrlVars',
+        'TimeToStr', 'timeNow', 'formatDate', 'returnLang',
+        'escapeHtmlAttr', 'escapeHtmlText', 'truncate', 'getUrlVars',
         'isBookmarkletUrl', 'extractBookmarkletCode', 'executeBookmarklet',
         'chromeURL', 'getVersion', 'getVersionType', 'get_host', 'getFaviconUrl',
         'getFaviconOnerror', 'setupFaviconElement',
@@ -149,16 +149,17 @@ const EXPECTED_EXPORTS = {
     'modules/popup-core.js': [
         'leftClick', 'rightClick', 'formatItem', 'popupSearch', 'recentHistory',
         'recentlyClosedTabs', 'recentBookmarks', 'mostVisited', 'showRecentTabs', 'pinned',
+        'alertUser',
     ],
     'modules/history-core.js': [
-        'history', 'toggleGroup', 'getActiveHistory', 'getMoreItems', 'resetColor',
+        'history', 'toggleGroup', 'getActiveHistory', 'getMoreItems',
         'selectHistoryItem', 'deleteHistoryItem', 'alertLoadingHistory',
     ],
     'modules/tree.js': ['treeHtml', 'createTree', 'bindTreeSearch'],
 };
 
 // Exports that are data rather than callables.
-const VALUE_EXPORTS = new Set(['defaultValues', 'calendar_storage2', 'flist', 'flist_r']);
+const VALUE_EXPORTS = new Set(['defaultValues', 'calendar_storage2']);
 
 for (const [file, names] of Object.entries(EXPECTED_EXPORTS)) {
     test(`module graph: ${file} imports and exports its public API`, async () => {
@@ -263,12 +264,6 @@ test('isBookmarkletUrl recognises javascript: URLs', () => {
 test('truncate caps long strings and leaves short ones alone', () => {
     assert.equal(helpers.truncate('abcdef', 0, 3), 'abc...');
     assert.equal(helpers.truncate('ab', 0, 3), 'ab');
-});
-
-test('calcSize formats byte sizes', () => {
-    assert.equal(helpers.calcSize(512), '512 b');
-    assert.equal(helpers.calcSize(2048), '2.00 kb');
-    assert.equal(helpers.calcSize('nope'), '--');
 });
 
 test('getFaviconUrl maps special protocols to bundled icons', () => {
@@ -826,9 +821,12 @@ test('config.js refreshes the filter when storage becomes ready', async () => {
     env.store.set('rh-filtered', 'ready.test|');
     env.fireStorageReady();
 
-    // Asserted on the exported list rather than via filtUrl(): filtUrl() has a
-    // lazy retry of its own, so only flist proves the *hook* ran.
-    assert.equal(fresh.flist, 'ready.test|');
+    // filtUrl() has a lazy retry of its own (it calls updateFilter() the first
+    // time it runs), so a plain call would pass even if the hook never fired.
+    // Removing the key first closes that door: a retry now reads `undefined`,
+    // bails out and leaves the filter at its "false" sentinel, while a filter
+    // the hook already loaded keeps working.
+    env.store.delete('rh-filtered');
     assert.equal(fresh.filtUrl('https://ready.test/x'), true);
     assert.equal(env.pendingReady(), 0);
 });
@@ -1330,6 +1328,70 @@ test('deleteHistoryItem("range") does nothing before storage has loaded', async 
     assert.equal(deleted, null);
 });
 
+test('deleteHistoryItem("range") runs the caller redraw once the delete lands', async (t) => {
+    // The deleted `window.calendar('yes','')` sat in this callback, and the
+    // redraw cannot move into this module: calendar.js imports history() from
+    // here, so importing it back would close a cycle. It is a parameter the
+    // caller fills in — history.js owns the calendar.
+    //
+    // Without the redraw the symptom is quiet: the delete happens, the list
+    // reloads, and the heat map of every day but the selected one keeps the
+    // counts from before the delete.
+    const historyCore = await importModule('modules/history-core.js');
+    seedRangeInputs(t, 'yyyy/mm/dd', '2026/09/01', '2026/09/10');
+    // history('yes','') runs inside the deleteRange() callback and reads the
+    // page's date dropdowns, so it needs the same fixture the render tests use.
+    dom.setOptions('rh-what', ['current', 'all'], 'current');
+    dom.el('rh-views-insert').style.display = 'block';
+    dom.el('rh-views-search-insert').style.display = 'none';
+    dom.setOptions('date-select-day', ['01', '02'], '01');
+    dom.setOptions('date-select-month', ['01', '09'], '09');
+    dom.setOptions('date-select-year', ['2026'], '2026');
+    dom.el('rh-search');
+    dom.el('calendar-total-value');
+    dom.el('master-check-all');
+
+    let redrawn = 0;
+    let deleted = null;
+    await withChromeApi({
+        history: {
+            deleteRange: (range, cb) => { deleted = range; cb(); },
+            search: (_q, cb) => cb([]),
+        },
+    }, async () => {
+        historyCore.deleteHistoryItem('range', function () { redrawn++; });
+    });
+
+    assert.ok(deleted, 'deleteRange() was never called');
+    assert.equal(redrawn, 1, 'the caller owns the calendar, so its redraw has to run');
+});
+
+test('deleteHistoryItem("range") completes when the caller passes no redraw', async (t) => {
+    const historyCore = await importModule('modules/history-core.js');
+    seedRangeInputs(t, 'yyyy/mm/dd', '2026/09/01', '2026/09/10');
+    // history('yes','') runs inside the deleteRange() callback and reads the
+    // page's date dropdowns, so it needs the same fixture the render tests use.
+    dom.setOptions('rh-what', ['current', 'all'], 'current');
+    dom.el('rh-views-insert').style.display = 'block';
+    dom.el('rh-views-search-insert').style.display = 'none';
+    dom.setOptions('date-select-day', ['01', '02'], '01');
+    dom.setOptions('date-select-month', ['01', '09'], '09');
+    dom.setOptions('date-select-year', ['2026'], '2026');
+    dom.el('rh-search');
+    dom.el('calendar-total-value');
+    dom.el('master-check-all');
+
+    // The delete itself must not depend on the page wiring a redraw.
+    await withChromeApi({
+        history: {
+            deleteRange: (_range, cb) => cb(),
+            search: (_q, cb) => cb([]),
+        },
+    }, async () => {
+        assert.doesNotThrow(() => historyCore.deleteHistoryItem('range'));
+    });
+});
+
 test('deleteHistoryItem("range") refuses a range parsed from the wrong field order', async (t) => {
     const historyCore = await importModule('modules/history-core.js');
     // rh-date says yyyy/mm/dd but the inputs were filled in as mm/dd/yyyy.
@@ -1577,4 +1639,128 @@ test('getMoreItems survives a group checkbox that is not inside a group title', 
 
     assert.equal(input.closest('div.group-title'), null);
     assert.doesNotThrow(() => historyCore.getMoreItems(input));
+});
+
+test('mostVisited stops at the end of the cache instead of throwing', async (t) => {
+    // The loop walked MOST_VISITED_MAX (45) rows, but the worker only writes
+    // as many as survive its own filters — internal URLs and the 28-day window
+    // — so `mvd[i]` was undefined for most `i` and `mvd[i].title` threw. It
+    // threw inside popup.js' block loop, so every block after this one never
+    // rendered: the popup stopped half way down with no error in the UI.
+    const popupCore = await importModule('modules/popup-core.js');
+    restoreStorage(t, ['mv-cache', 'mv-itemsno', 'mv-blocklist']);
+
+    const holder = dom.el('mv-inject');
+    holder.innerHTML = '';
+    // Three cached rows against a configured 8: the realistic case, not the
+    // 45 the loop assumed.
+    localStorage['mv-cache'] = JSON.stringify([
+        { url: 'https://a.test/1', title: 'A1', favicon: '', visitCount: 9 },
+        { url: 'https://b.test/1', title: 'B1', favicon: '', visitCount: 8 },
+        { url: 'https://c.test/1', title: 'C1', favicon: '', visitCount: 7 },
+    ]);
+    localStorage['mv-itemsno'] = '8';
+    localStorage['mv-blocklist'] = 'false';
+
+    assert.doesNotThrow(() => popupCore.mostVisited());
+    assert.equal(holder.children.length, 3, 'every cached row is rendered');
+    assert.match(holder.children[2].innerHTML, /https:\/\/c\.test\/1/);
+});
+
+test('mostVisited renders nothing on a cold start', async (t) => {
+    // `mv-cache` is absent until the worker has written it once, and the old
+    // guard only excluded the 'false' sentinel — so a brand-new profile threw
+    // in JSON.parse(undefined) on its very first popup.
+    const popupCore = await importModule('modules/popup-core.js');
+    restoreStorage(t, ['mv-cache', 'mv-itemsno', 'mv-blocklist']);
+
+    const holder = dom.el('mv-inject');
+    holder.innerHTML = '';
+    delete localStorage['mv-cache'];
+    localStorage['mv-itemsno'] = '8';
+    localStorage['mv-blocklist'] = 'false';
+
+    assert.doesNotThrow(() => popupCore.mostVisited());
+    assert.equal(holder.children.length, 0);
+});
+
+test('mostVisited honours the blocklist and the configured item count', async (t) => {
+    const popupCore = await importModule('modules/popup-core.js');
+    restoreStorage(t, ['mv-cache', 'mv-itemsno', 'mv-blocklist']);
+
+    const holder = dom.el('mv-inject');
+    holder.innerHTML = '';
+    localStorage['mv-cache'] = JSON.stringify([
+        { url: 'https://a.test/1', title: 'A1', favicon: '', visitCount: 9 },
+        { url: 'https://b.test/1', title: 'B1', favicon: '', visitCount: 8 },
+        { url: 'https://c.test/1', title: 'C1', favicon: '', visitCount: 7 },
+    ]);
+    localStorage['mv-itemsno'] = '1';
+    localStorage['mv-blocklist'] = 'https://a.test/1|';
+
+    popupCore.mostVisited();
+
+    // A blocked row must not consume a slot, same as the internal URLs in
+    // recentHistory(): it is skipped, and the next candidate takes its place.
+    assert.equal(holder.children.length, 1);
+    assert.doesNotMatch(holder.children[0].innerHTML, /a\.test/);
+    assert.match(holder.children[0].innerHTML, /https:\/\/b\.test\/1/);
+});
+
+test('pinned() renders every stored pinned item', async (t) => {
+    // The pin button is gone from the popup rows, but `rh-pinned` still holds
+    // entries pinned before it was removed. The block is what keeps them
+    // reachable — and it is the only caller of the 'pi' branch in formatItem().
+    const popupCore = await importModule('modules/popup-core.js');
+    restoreStorage(t, ['rh-pinned']);
+
+    const holder = dom.el('pi-inject');
+    holder.innerHTML = '';
+    localStorage['rh-pinned'] = JSON.stringify([
+        { url: 'https://a.test/1', title: 'A1', favicon: '', time: '10:00' },
+        { url: 'https://b.test/1', title: 'B1', favicon: '', time: '10:05' },
+    ]);
+
+    popupCore.pinned();
+
+    assert.equal(holder.children.length, 2, 'both pinned entries are listed');
+    assert.match(holder.children[0].innerHTML, /https:\/\/a\.test\/1/);
+    // The old code walked a hard-coded 99 slots; a longer list was cut there
+    // without saying so. This is still a bound, just an explicit one.
+    assert.doesNotThrow(() => popupCore.pinned());
+});
+
+test('pinned() renders nothing for the "false" sentinel', async (t) => {
+    const popupCore = await importModule('modules/popup-core.js');
+    restoreStorage(t, ['rh-pinned']);
+
+    const holder = dom.el('pi-inject');
+    holder.innerHTML = '';
+    localStorage['rh-pinned'] = 'false';
+
+    assert.doesNotThrow(() => popupCore.pinned());
+    assert.equal(holder.children.length, 0);
+});
+
+test('saveOptions leaves settings without an options-page control alone', async (t) => {
+    // rh-group / rh-orderby / rh-order are changed by the sort toolbar on
+    // history.html and bookmark.html, which writes them straight to storage.
+    // The options page has no control for them, so if saveOptions() wrote them
+    // it would write the *default* back and silently undo a choice the user
+    // just made. Same for rh-time / rh-share / rhs-showbg / rh-pinned, which
+    // nothing renders or edits any more.
+    const untouched = ['rh-time', 'rh-group', 'rh-orderby', 'rh-order', 'rh-share', 'rhs-showbg', 'rh-pinned'];
+
+    formDefaults();
+    restoreStorage(t, untouched);
+    // Deleted rather than set to a sentinel: a save that reads them back out of
+    // storage and writes the value straight through would look unchanged. What
+    // matters is whether saveOptions() touches the key at all.
+    for (const key of untouched) delete localStorage[key];
+
+    config.saveOptions(false);
+
+    for (const key of untouched) {
+        assert.equal(localStorage[key], undefined, `saveOptions wrote ${key}, which has no control here`);
+    }
 });

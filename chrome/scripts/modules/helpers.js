@@ -108,17 +108,7 @@ function formatDate(str) {
     return datestr;
 }
 
-// --- i18n ---
-
-function echoLang(str) {
-    document.write(chrome.i18n.getMessage(str));
-}
-
 // --- String utilities ---
-
-function stripScripts(text) {
-    return text.replace(/<script[^>]*>([\s\S]*?)<\/script>/gi, '');
-}
 
 function escapeHtmlAttr(text) {
     if (text === undefined || text === null) return '';
@@ -179,18 +169,6 @@ function truncate(str, ind, lng) {
     } else {
         return str.substring(ind, lng);
     }
-}
-
-function extractFileName(str) {
-    return str.substring(str.lastIndexOf('/') + 1);
-}
-
-function calcSize(size) {
-    if (isNaN(size)) { return '--'; }
-    if (size < 1024) { return size + ' b'; }
-    if (size < 1048576) { return (size / 1024).toFixed(2) + ' kb'; }
-    if (size < 1073741824) { return (size / 1048576).toFixed(2) + ' mb'; }
-    return (size / 1073741824).toFixed(2) + ' gb';
 }
 
 // --- URL utilities ---
@@ -342,8 +320,7 @@ function setupFaviconElement(imgEl, primaryUrl, fallbackUrl) {
 export {
     dateFormat,
     TimeToStr, formatDate,
-    echoLang,
-    stripScripts, escapeHtmlAttr, escapeHtmlText, escapeRegExp, truncate, extractFileName, calcSize,
+    escapeHtmlAttr, escapeHtmlText, escapeRegExp, truncate,
     getUrlVars, extractBookmarkletCode, decodeBookmarkletCode, executeBookmarklet,
     chromeURL,
     Clipboard,

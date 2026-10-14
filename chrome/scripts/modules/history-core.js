@@ -7,15 +7,7 @@ import { filtUrl } from './config.js';
 // Straight from the bottom layer, not via calendar.js: that module imports
 // `history` from here, and going through it closed an import cycle.
 import { save_calendar_storage2 } from './shared/calendar-storage.js';
-import { modifierState, ITEM_SELECTED_COLOR } from './ui-state.js';
-
-// How long one tick of the chunked render loop may run before yielding.
-//
-// The loop drew exactly one item per tick, which for a 1000-item list took
-// about five seconds — the browser clamps setInterval() to ~4ms, so the tick
-// rate was the limit, not the work. A budget lets one tick draw as many items
-// as fit while staying short enough not to freeze the page.
-const RENDER_BUDGET_MS = 8;
+import { modifierState, ITEM_SELECTED_COLOR, RENDER_BUDGET_MS } from './ui-state.js';
 
 // Module-level variables
 var selectedItem;
@@ -485,27 +477,6 @@ function getMoreItems(el) {
     }
 }
 
-// --- Reset color ---
-
-function resetColor() {
-    if (getActiveHistory() == 'history') {
-        var into = '#rh-views-insert';
-    } else if (getActiveHistory() == 'search') {
-        into = '#rh-views-search-insert';
-    }
-    Array.from($$(into + ' .item-holder')).forEach(function (el) {
-        if (el.getAttribute('rel') == 'grey') {
-            el.style.backgroundColor = '#f1f1f1';
-        } else if (el.getAttribute('rel') == 'white') {
-            el.style.backgroundColor = '#fff';
-        }
-        var chkInput = el.querySelector('input.chkbx');
-        if (chkInput && chkInput.checked == true) {
-            el.style.backgroundColor = ITEM_SELECTED_COLOR;
-        }
-    });
-}
-
 // --- Select history item ---
 
 function selectHistoryItem(el, w) {
@@ -637,7 +608,16 @@ function selectHistoryItem(el, w) {
 
 // --- Delete history item ---
 
-function deleteHistoryItem(w) {
+/**
+ * Delete history entries.
+ *
+ * `redraw` runs after a range delete has gone through, for the caller to
+ * repaint whatever else shows per-day counts. It is a parameter rather than an
+ * import because the one thing that needs repainting — the calendar — imports
+ * history() from this file, and importing it back would make the module graph
+ * cyclic (static.test.mjs asserts it is not).
+ */
+function deleteHistoryItem(w, redraw) {
     if (w == 'selected') {
         var grp = localStorage['rh-group'];
         if (getActiveHistory() == 'history') {
@@ -705,7 +685,17 @@ function deleteHistoryItem(w) {
             document.title = 'Deleting...';
             alertUserHistory(true);
             chrome.history.deleteRange({ startTime: startRange, endTime: endRange }, function () {
-                window.calendar('yes', '');
+                // `redraw` stands where `window.calendar('yes','')` used to be.
+                // That call was always a TypeError — `calendar` is an ES module
+                // export and nothing mounts it on `window` — and it cannot be
+                // imported either: calendar.js imports history() from this file,
+                // so importing it back would close a cycle.
+                //
+                // It runs before history() because history() only recolours the
+                // selected day and refreshes the total; the heat map of every
+                // other day in the month is calendar()'s, and a range delete can
+                // change all of them.
+                if (typeof redraw === 'function') redraw();
                 history('yes', '');
                 document.title = 'History | Recent History';
                 alertUserHistory(true);
@@ -719,7 +709,6 @@ export {
     toggleGroup,
     getActiveHistory,
     getMoreItems,
-    resetColor,
     selectHistoryItem,
     deleteHistoryItem,
     alertUserHistory,

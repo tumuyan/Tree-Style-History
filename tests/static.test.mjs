@@ -207,15 +207,15 @@ test('every local src/href in HTML points at an existing file', () => {
     assert.deepEqual(missing, []);
 });
 
-test('popup.html loads neither message-adapter.js nor db-manager.js', () => {
+test('popup.html loads neither a message channel nor db-manager.js', () => {
     // Both were dead there: the popup lists come from chrome.history /
     // sessions / bookmarks and from the tab list the worker mirrors into
     // chrome.storage.session, so it never touches IndexedDB. The tags were
     // misleading — a message channel to the worker wakes it into re-running its
     // startup crawl — so the removal is asserted, not just commented.
     //
-    // The other pages still load them; this guard is deliberately about the
-    // popup alone.
+    // The other pages still load db-manager.js; this guard is deliberately
+    // about the popup alone.
     const scripts = collectTags(fs.readFileSync(path.join(CHROME_DIR, 'popup.html'), 'utf8'))
         .filter((tag) => tag.name === 'script')
         .map((tag) => tag.attrs.src || '');
@@ -229,6 +229,29 @@ test('popup.html loads neither message-adapter.js nor db-manager.js', () => {
     // in popup.html explains an absence, so it has to still be an absence.
     assert.ok(scripts.some((s) => /storage-adapter\.js/.test(s)),
         'storage-adapter.js is still required; did the script list change?');
+});
+
+test('no page loads message-adapter.js any more', () => {
+    // It wrapped the MV2/MV3 difference behind one API, but `useServiceWorker`
+    // was derived from manifest_version and is therefore always true: every
+    // MV2 branch (chrome.extension.getBackgroundPage()) was unreachable. The
+    // one call site left — options.js's deleteDB() — went straight to
+    // dbManager, which is all its MV3 route did anyway.
+    const offenders = [];
+    for (const file of htmlFiles()) {
+        const html = fs.readFileSync(path.join(CHROME_DIR, file), 'utf8');
+        for (const tag of collectTags(html)) {
+            if (tag.name === 'script' && /message-adapter\.js/.test(tag.attrs.src || '')) {
+                offenders.push(file);
+            }
+        }
+    }
+    assert.deepEqual(offenders, [], 'message-adapter.js is back — call dbManager directly');
+    assert.equal(
+        fs.existsSync(path.join(CHROME_DIR, 'scripts/message-adapter.js')),
+        false,
+        'scripts/message-adapter.js was deleted; do not re-add it',
+    );
 });
 
 test('no page loads jQuery, zTree or fuzzysearch any more', () => {
@@ -324,10 +347,10 @@ test('every .help-tip element id resolves in both locales', () => {
     }
 });
 
-test('every returnLang()/echoLang() key used in JS exists in both locales', () => {
+test('every returnLang() key used in JS exists in both locales', () => {
     const keys = new Set();
     walkScripts((_file, src) => {
-        for (const m of src.matchAll(/(?:returnLang|echoLang)\(\s*'([^']+)'\s*\)/g)) keys.add(m[1]);
+        for (const m of src.matchAll(/returnLang\(\s*'([^']+)'\s*\)/g)) keys.add(m[1]);
     });
 
     assert.ok(keys.size > 0, 'expected at least one i18n lookup in JS');
@@ -427,6 +450,37 @@ function scopeOf(rel) {
     return names;
 }
 
+test('no module calls a function through window.* any more', () => {
+    // Same family as the mount guard below, but for the read side: a `window.x()`
+    // call in a module is a TypeError whenever x is an ES module export, and
+    // nothing between here and the browser says so. `window.calendar('yes','')`
+    // in history-core.js was exactly that — it threw in the deleteRange
+    // callback, where the only symptom was "the calendar does not refresh".
+    //
+    // window.close()/open()/location/event/getComputedStyle are the real
+    // browser API. onStorageReady is installed by storage-adapter.js, a
+    // classic script, which is the one way a global can legitimately appear
+    // here at all.
+    const ALLOWED = new Set([
+        'close', 'open', 'location', 'event', 'getComputedStyle', 'scrollY', 'pageYOffset',
+        'getSelection', 'matchMedia', 'print', 'focus', 'blur', 'alert',
+        'onStorageReady',
+    ]);
+
+    const offenders = [];
+    walkScripts((file, src) => {
+        const rel = file.replace(/\\/g, '/');
+        if (!MODULES.some((m) => rel.endsWith(m.replace('scripts/', '')))) return;
+        // Comments stripped, as in the dispatch guard above: this file
+        // documents the removed call by writing it out.
+        const code = stripJsComments(src);
+        for (const m of code.matchAll(/\bwindow\.([\w$]+)\s*\(/g)) {
+            if (!ALLOWED.has(m[1])) offenders.push(`${file}: window.${m[1]}()`);
+        }
+    });
+    assert.deepEqual(offenders, [], 'a module calls a function through window — import it, or drop the call');
+});
+
 test('no first-party script mounts anything onto window any more', () => {
     // The window layer is what made dependencies invisible: a page script
     // called `filtUrl()`, nothing said where it came from, and a rename or a
@@ -435,12 +489,11 @@ test('no first-party script mounts anything onto window any more', () => {
     // Two exemptions, both genuine cross-file boundaries rather than a
     // compatibility layer:
     //   - storage-adapter.js replaces the `localStorage` global itself;
-    //   - db-manager.js / message-adapter.js expose singletons to classic
-    //     scripts, including the service worker's importScripts().
+    //   - db-manager.js exposes a singleton to classic scripts, including the
+    //     service worker's importScripts().
     const EXEMPT = new Set([
         'scripts/storage-adapter.js',
         'scripts/db-manager.js',
-        'scripts/message-adapter.js',
     ]);
 
     const offenders = [];
@@ -529,7 +582,7 @@ test('every page script imports what it calls', () => {
     // the platform. Not imports, and not something these guards should force
     // into one.
     const PROVIDED = new Set([
-        'onStorageReady', 'dbManager', 'messageAdapter', 'storageAdapter', 'localStorage',
+        'onStorageReady', 'dbManager', 'storageAdapter', 'localStorage',
         'window', 'document', 'chrome', 'console', 'location', 'navigator', 'performance',
         'Array', 'Date', 'JSON', 'Math', 'Number', 'Object', 'String', 'Set', 'Map',
         'RegExp', 'Promise', 'URL', 'CSS', 'IDBKeyRange', 'setTimeout', 'clearTimeout',
@@ -584,13 +637,12 @@ test('config.js only references option-page ids that exist', () => {
         ...[...src.matchAll(/selectOptionByIdValue\('([\w-]+)'/g)].map((m) => m[1]),
     ]);
 
-    // Known gaps — delete the entry as each is fixed.
-    const KNOWN_GAPS = new Set([
-        'rhshare', // no control in options.html: rh-share is neither shown nor saved
-    ]);
-
-    const missing = [...referenced].filter((id) => !optionsIds.has(id) && !KNOWN_GAPS.has(id)).sort();
+    const missing = [...referenced].filter((id) => !optionsIds.has(id)).sort();
     assert.deepEqual(missing, [], 'config.js references an element options.html does not define');
+    // The last gap was `rhshare`: options.html has no control for rh-share, so
+    // loadOptions() was looking up an element that cannot exist on every load.
+    // Both halves are gone now (see also "saveOptions leaves settings without
+    // an options-page control alone" in modules.test.mjs).
 });
 
 /**
@@ -1044,4 +1096,39 @@ test('the manifest declares no permission the code never uses', () => {
         return !api || !used.has(api);
     });
     assert.deepEqual(unused, []);
+});
+
+test('history.js hands the calendar redraw to the range delete', () => {
+    // deleteHistoryItem('range') cannot import calendar(): calendar.js imports
+    // history() from history-core.js, which would close a cycle. So the redraw
+    // has to come from the page — and nothing but this file notices if the page
+    // stops passing it. Without it the delete still happens, the list still
+    // reloads, and the heat map of every day but the selected one keeps the
+    // counts from before the delete.
+    const src = fs.readFileSync(path.join(CHROME_DIR, 'scripts/history.js'), 'utf8');
+    assert.match(
+        src,
+        /deleteHistoryItem\(\s*'range'\s*,\s*[\s\S]{0,200}?calendar\(/,
+        'deleteHistoryItem(\'range\') needs the calendar redraw as its second argument',
+    );
+});
+
+test('popup rows carry no dead per-row controls', () => {
+    // The popup used to draw a `.ui-pin` / `.ui-delete` span on every row while
+    // the functions that would have handled them (uiPinItem / uiDeleteItem)
+    // had no callers at all: visible, hoverable, and completely inert. Nothing
+    // between here and the browser noticed — not the module tests, which never
+    // fed the popup data, and not the e2e suite, which only checks that the
+    // page does not throw.
+    //
+    // A class name the stylesheet still styles but no script renders is
+    // harmless; the reverse is what hurts. So assert both directions: the
+    // markup is gone, and the CSS that only ever served it is gone with it.
+    const popupCore = fs.readFileSync(path.join(CHROME_DIR, 'scripts/modules/popup-core.js'), 'utf8');
+    const popupCss = fs.readFileSync(path.join(CHROME_DIR, 'css/popup.css'), 'utf8');
+
+    for (const cls of ['ui-pin', 'ui-delete', 'ui-share', 'edit-items-ui']) {
+        assert.doesNotMatch(popupCore, new RegExp(`class="${cls}"`), `popup-core.js renders .${cls} again`);
+        assert.doesNotMatch(popupCss, new RegExp(`\\.${cls}\\b`), `css/popup.css still styles .${cls}`);
+    }
 });

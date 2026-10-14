@@ -144,7 +144,6 @@ function loadOptions(full) {
     selectOptionByIdValue('rhdate', localStorage['rh-date']);
     selectOptionByIdValue('rhtime', localStorage['rh-timeformat']);
     selectOptionByIdValue('rhsearch', localStorage['rh-search']);
-    selectOptionByIdValue('rhshare', localStorage['rh-share']);
     selectOptionByIdValue('rmpath', localStorage['rm-path']);
     selectOptionByIdValue('contextmenu', localStorage['use-contextmenu']);
     selectOptionByIdValue('rhsshowurl', localStorage['rhs-showurl']);
@@ -744,8 +743,11 @@ function mergeList() {
 
 // Filter variables and functions
 
-// 'false' rather than '': it is the sentinel filtUrl() and mostVisited() check
-// for, so nothing is filtered until updateFilter() has read a real list.
+// 'false' rather than '': it is the sentinel filtUrl() checks for, so nothing
+// is filtered until updateFilter() has read a real list.
+//
+// Module state, not exports: nothing outside this file reads either name. They
+// used to be exported, which invited exactly the coupling they warn against.
 var flist = 'false';
 var flist_r = /^false$/;
 // The configured domains, split into whole entries — see domainsToSet().
@@ -864,7 +866,5 @@ export {
     addList,
     mergeList,
     updateFilter,
-    filtUrl,
-    flist,
-    flist_r
+    filtUrl
 };

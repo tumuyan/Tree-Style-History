@@ -347,23 +347,8 @@
     "pink": {
         "message": "Pink"
     },
-    "ui1": {
-        "message": "Pin item?"
-    },
-    "ui2": {
-        "message": "Delete item from history?"
-    },
-    "ui3": {
-        "message": "Delete item from recently closed tabs?"
-    },
     "ui4": {
         "message": "Delete bookmark?"
-    },
-    "ui5": {
-        "message": "Delete item from the most visited list?"
-    },
-    "ui6": {
-        "message": "Unpin?"
     },
     "tips": {
         "message": "Helpful Tips"

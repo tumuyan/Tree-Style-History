@@ -49,7 +49,7 @@ https://chrome.google.com/webstore/detail/tree-style-history/khcenbpnhbeplojhaol
 Or download - unzip - load the folder in developer mode.  
 https://github.com/tumuyan/Tree-Style-History/issues/1  
 
-**Both Chrome and Edge require extensions adapt to Manifest V3, but I couldn't update this extension to Manifest V3, so this extension will soon become unusable.**
+This extension has been migrated to Manifest V3 since 3.2.0.
 
 已经上传到Edge外接程序商店
 https://microsoftedge.microsoft.com/addons/detail/gfmkhnaldbgcpoddmapciblllofekbpn  
@@ -66,15 +66,17 @@ https://github.com/tumuyan/Tree-Style-History/issues/1
 
 
 ## Prompt
-这是一个Chrome浏览器扩展，chrome/scripts/目录下的如下js文件可以忽略:  
-chrome/scripts/目录下 background-utils.js 文件是被 background-sw.js 引用的文件，它由 chrome/scripts/modules/shared/ 自动生成（npm run gen），不要手改。
-chrome/scripts/modules/tree.js 是树状显示的渲染器，两个树状页面（history2.html、closed.html）都由它渲染；它沿用 zTree 的 class 命名，因此 css/zTreeStyle.css 仍然负责图标、连接线与缩进。
-过去本目录曾包含 MooTools、jQuery、zTree（jquery.ztree.core.js / jquery.ztree.exhide.js）与 fuzzysearch.js，这些第三方库已全部移除，不要再引入。
+这是一个Chrome浏览器扩展。两条约定：  
+chrome/scripts/background-utils.js 由 chrome/scripts/modules/shared/ 自动生成（npm run gen），不要手改。  
+第三方库（MooTools、jQuery、zTree、fuzzysearch.js）已全部移除，不要再引入。
 
 ## Changlog
 3.3.2 (未发布)  
-Bug 修复: 自定义页面缩放偶尔不生效。缩放配置的读取早于存储就绪，读到空值就被静默跳过  
-Bug 修复: 在存储初始化完成之前写入或删除的配置，会被随后到达的快照覆盖回去  
+Bug 修复: 自定义页面缩放偶尔不生效；存储就绪之前写入的配置会被随后的快照覆盖回去  
+Bug 修复: "最常访问"的数据少于上限时，弹窗抛异常，后面的区块不再渲染  
+Bug 修复: 按范围删除历史后，日历不刷新  
+清理: 删除 MV2 遗留的 `message-adapter.js`、弹窗每行右侧点不动的「钉住/删除」按钮，以及一批零调用的函数  
+行为变更: 弹窗每行不再显示「钉住/删除」按钮（它们从未绑定过事件）；此前钉住过的条目仍然显示  
 破坏性变更: 最低支持的 Chrome 版本提升到 102（此前声明为 88）。低版本能安装但一运行就崩，因为需要 MV3 起才有的 `chrome.storage.session` 等 API（`manifest.json` 已于 #4 提升至 102，此处补记）  
 
 3.3.1 (2026/06/19)  

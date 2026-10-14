@@ -10,7 +10,7 @@
 // concatenation is what the Service Worker loads via importScripts.
 // ============================================================================
 
-/* exported defaultValues, defaultConfig, DAY, RECENT_HISTORY_DAYS, MOST_VISITED_MAX, _DATE, advanceDateToToday, getVersion, getVersionType, returnLang, timeNow, isBookmarkletUrl, INTERNAL_URL, get_host, getFaviconUrl, getFaviconOnerror, calendar_storage2, save_calendar_storage2 */
+/* exported defaultValues, defaultConfig, DAY, RECENT_HISTORY_DAYS, MOST_VISITED_MAX, TAB_LIST_KEY, TAB_LIST_VERSION, _DATE, advanceDateToToday, getVersion, getVersionType, returnLang, timeNow, isBookmarkletUrl, INTERNAL_URL, get_host, getFaviconUrl, getFaviconOnerror, calendar_storage2, save_calendar_storage2 */
 
 // ---- begin modules/shared/config-defaults.js ----
 // Shared config defaults — single source of truth for background-utils.js.
@@ -92,6 +92,13 @@ var RECENT_HISTORY_DAYS = 28;
 // walks exactly this many of them, so the two must agree or the list silently
 // loses its tail.
 var MOST_VISITED_MAX = 45;
+
+// chrome.storage.session key the worker mirrors the live tab list into, and
+// the shape version recorded alongside it. The worker writes it and the popup
+// reads it, so — like the two constants above — they must not disagree, and
+// both read the same declaration instead of a comment saying "keep in sync".
+var TAB_LIST_KEY = 'tab-list';
+var TAB_LIST_VERSION = 1;
 
 // Midnight today. `TimeToStr()` rolls it forward when a page stays open past
 // midnight, so it is mutable state and must live in exactly one module.

@@ -354,3 +354,66 @@ test('a page still applies its saved zoom when storage answers late', { skip: SK
         await seed.close();
     }
 });
+
+test('popup.html renders the most-visited block from a short cache', { skip: SKIP }, async () => {
+    // The six "opens without JavaScript errors" cases all load the popup with
+    // an EMPTY `mv-cache`, so mostVisited() never enters its loop. The bug it
+    // used to hide — walking MOST_VISITED_MAX rows of a cache that is usually
+    // much shorter, and throwing on `mvd[i].title` — is therefore invisible to
+    // them, and it throws inside the block loop, so every block after it is
+    // silently lost.
+    //
+    // Seeded through a real page and the real adapter, like the bookmark case:
+    // three rows against a configured 8 is the shape that used to throw.
+    const seed = await context.newPage();
+    const { jsErrors: seedErrors } = collectErrors(seed);
+    await seed.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: 'load' });
+    await settle(seed);
+
+    try {
+        await seed.evaluate(async () => {
+            localStorage['mv-itemsno'] = '8';
+            localStorage['mv-blocklist'] = 'false';
+            // Written explicitly rather than left to the worker's defaultConfig():
+            // the popup only creates #rb-inject when this is > 0, and the
+            // assertion below would otherwise depend on when the worker got
+            // round to seeding defaults. 3 is the default.
+            localStorage['rb-itemsno'] = '3';
+            localStorage['mv-cache'] = JSON.stringify([
+                { url: 'https://mv-a.test/1', title: 'MV A', favicon: '', visitCount: 9 },
+                { url: 'https://mv-b.test/1', title: 'MV B', favicon: '', visitCount: 8 },
+                { url: 'https://mv-c.test/1', title: 'MV C', favicon: '', visitCount: 7 },
+            ]);
+            await window.storageAdapter.ready();
+        });
+        assert.deepEqual(seedErrors, [], 'seeding the most-visited cache threw');
+
+        const page = await context.newPage();
+        const { jsErrors, netErrors } = collectErrors(page);
+        await page.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil: 'load' });
+        await settle(page);
+
+        const shape = await page.evaluate(() => ({
+            rows: document.querySelectorAll('#mv-inject .item').length,
+            // The block after "most visited" in the default rh-list-order:
+            // this is what used to be swallowed by the throw. The container, not
+            // its rows: a fresh profile has no bookmarks, but popup.js creates
+            // it from rb-itemsno before any query returns.
+            bookmarks: document.querySelectorAll('#rb-inject').length,
+            text: document.body.textContent,
+        }));
+        await page.close();
+
+        assert.deepEqual(jsErrors, [], `popup threw (${netErrors.length} network error(s) ignored)`);
+        assert.equal(shape.rows, 3, 'every cached row must be rendered');
+        assert.match(shape.text, /MV C/, 'the last cached row must survive');
+        assert.equal(shape.bookmarks, 1, 'the block after "most visited" must still be there');
+    } finally {
+        await seed.evaluate(async () => {
+            localStorage.removeItem('mv-cache');
+            localStorage['mv-itemsno'] = '0';
+            await window.storageAdapter.ready();
+        });
+        await seed.close();
+    }
+});

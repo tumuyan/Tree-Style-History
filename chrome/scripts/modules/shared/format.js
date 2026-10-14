@@ -19,6 +19,13 @@ export var RECENT_HISTORY_DAYS = 28;
 // loses its tail.
 export var MOST_VISITED_MAX = 45;
 
+// chrome.storage.session key the worker mirrors the live tab list into, and
+// the shape version recorded alongside it. The worker writes it and the popup
+// reads it, so — like the two constants above — they must not disagree, and
+// both read the same declaration instead of a comment saying "keep in sync".
+export var TAB_LIST_KEY = 'tab-list';
+export var TAB_LIST_VERSION = 1;
+
 // Midnight today. `TimeToStr()` rolls it forward when a page stays open past
 // midnight, so it is mutable state and must live in exactly one module.
 export var _DATE = new Date();

@@ -17,3 +17,15 @@ export const modifierState = {
 // Marks a row as selected. history-core.js and bookmark.js each carried their
 // own literal, which is how they drifted into different shades.
 export const ITEM_SELECTED_COLOR = '#ffcbd3';
+
+// How long one tick of the chunked render loop may run before yielding.
+//
+// Both long lists (linear history, bookmarks) render this way: one item per
+// tick ran at the browser's ~4ms timer floor rather than at the speed the work
+// actually takes, so a 1000-item list took about five seconds. A budget lets
+// one tick draw as many items as fit while staying short enough to paint.
+//
+// It lived in history-core.js and bookmark.js as the same literal `8` with a
+// "keep in sync" comment, which is exactly the kind of duplication a comment
+// cannot hold together.
+export const RENDER_BUDGET_MS = 8;

@@ -10,16 +10,10 @@ import {
 } from './modules/helpers.js';
 import { filtUrl } from './modules/config.js';
 import { getActiveHistory, toggleGroup, getMoreItems, alertLoadingHistory } from './modules/history-core.js';
-import { modifierState, ITEM_SELECTED_COLOR } from './modules/ui-state.js';
+import { modifierState, ITEM_SELECTED_COLOR, RENDER_BUDGET_MS } from './modules/ui-state.js';
 import { initPage } from './modules/page-init.js';
 
 initPage();
-
-// How long one tick of the chunked render loop may run before yielding. One
-// item per tick rendered a long bookmark list at the browser's ~4ms timer
-// floor, not at the speed the work actually takes. Keep in sync with the same
-// constant in modules/history-core.js.
-const RENDER_BUDGET_MS = 8;
 
 document.addEventListener('DOMContentLoaded', function () {
     onStorageReady(function () {
@@ -557,7 +551,6 @@ document.addEventListener('DOMContentLoaded', function () {
                     }
                     if (thisc.counter >= rha.length) {
                         clearInterval(prh);
-                        //isBookmarked('#rh-views .item .link');
                         alertLoadingHistory(true);
                         var uioneInput = document.body.querySelector('#rh-bar-uione input');
                         if (uioneInput) uioneInput.checked = false;
@@ -660,7 +653,6 @@ document.addEventListener('DOMContentLoaded', function () {
                     }
                     if (thisc.counter >= rha.length) {
                         clearInterval(prh);
-                        //isBookmarked('#rh-views .item .link');
                         alertLoadingHistory(true);
                         var uioneInput = document.body.querySelector('#rh-bar-uione input');
                         if (uioneInput) uioneInput.checked = false;

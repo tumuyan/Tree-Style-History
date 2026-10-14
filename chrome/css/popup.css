@@ -135,34 +135,6 @@ input[type="text"] {
   color: #888;
 }
 
-.item .ui-pin, .item .ui-delete, .item .ui-share {
-  display: inline-block;
-  vertical-align: top;
-  margin-right: 5px;
-  height: 16px;
-  width: 17px;
-}
-
-.item .ui-pin {
-  background: url('../images/ui-pin.png') no-repeat left center;
-}
-
-.item .ui-delete {
-  background: url('../images/ui-delete.png') no-repeat left center;
-}
-
-.item .ui-share {
-  background: url('../images/ui-share.png') no-repeat left center;
-}
-
-.item .ui-pin:hover, .item .ui-delete:hover, .item .ui-share:hover {
-  background-position: right center;
-}
-
-.edit-items-ui {
-  display: none;
-}
-
 .no-results {
   display: block;
   padding: 5px 0 5px 5px;
@@ -186,18 +158,6 @@ input[type="text"] {
   padding-right: 5px;
   color: #5C6166;
 }
-/* 
-.popup-title a {
-  background: url('../images/edit-items.gif') no-repeat left center;
-  position: absolute;
-  display: block;
-  height: 21px;
-  width: 21px;
-  right: -5px;
-  top: 5px;
-}
- */
-
  .popup-title a {
      color:chocolate;
     text-decoration: none;

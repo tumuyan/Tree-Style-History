@@ -359,23 +359,8 @@
     "pink": {
         "message": "粉红"
     },
-    "ui1": {
-        "message": "钉住项目？"
-    },
-    "ui2": {
-        "message": "从历史中删除？"
-    },
-    "ui3": {
-        "message": "从最近关闭的标签中删除？"
-    },
     "ui4": {
         "message": "删除书签？"
-    },
-    "ui5": {
-        "message": "从最常访问列表中删除？"
-    },
-    "ui6": {
-        "message": "解除钉住?"
     },
     "tips": {
         "message": "使用提示"

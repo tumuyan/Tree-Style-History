@@ -9,7 +9,7 @@ import { filtUrl } from './config.js';
 // Straight from the shared layer, like config.js does: only module code uses
 // it, so it stays off `window` (tests/static.test.mjs keeps that surface honest).
 import { INTERNAL_URL } from './shared/url.js';
-import { RECENT_HISTORY_DAYS, MOST_VISITED_MAX } from './shared/format.js';
+import { RECENT_HISTORY_DAYS, MOST_VISITED_MAX, TAB_LIST_KEY, TAB_LIST_VERSION } from './shared/format.js';
 import { modifierState } from './ui-state.js';
 
 // Left click
@@ -146,12 +146,13 @@ function formatItem(data) {
         tip = isBookmarkletUrl(url) ? '[Bookmarklet]' : (url || '');
     }
 
-    if (type !== 'pi') {
-        var ui = '<span class="ui-pin" data-function="' + type + '">&nbsp;</span><span class="ui-delete" data-function="' + type + '">&nbsp;</span>';
-    } else {
-        ui = '<span class="ui-delete" data-function="' + type + '">&nbsp;</span>';
-    }
-
+    // A per-row "delete from history" button used to be drawn here (two spans,
+    // `.ui-pin` / `.ui-delete`), but nothing ever bound a handler to them: the
+    // functions that would have (uiPinItem/uiDeleteItem) had no callers, and
+    // popup.html has no #alert-yes / #alert-no for their confirmation. So the
+    // buttons were visible, hoverable and completely inert — worse than not
+    // being drawn. Deleting is still available in the linear views, which do
+    // wire it up.
     var faviconSrc = favicon;
     // 为不同类型的页面设置不同的图标
     if (isBookmarkletUrl(url)) {
@@ -200,7 +201,7 @@ function formatItem(data) {
     // content and takes escapeHtmlText. It was interpolated raw here, relying
     // on title_fix() having deleted the angle brackets upstream — which the
     // storage side no longer does.
-    item += '<span class="title" title="' + escapeHtmlAttr(tip) + '"><span class="edit-items-ui" data-url="' + escapeHtmlAttr(url) + '" data-title="' + escapeHtmlAttr(tip) + '">' + ui + '</span>' + escapeHtmlText(title) + '</span>';
+    item += '<span class="title" title="' + escapeHtmlAttr(tip) + '">' + escapeHtmlText(title) + '</span>';
 
     // For bookmarklets, show simplified URL in the extra-url section
     var urlDisplay = isBookmarkletUrl(url) ? 'javascript:...' : url.replace(/^(.*?)\:\/\//, '').replace(/\/$/, '');
@@ -273,74 +274,6 @@ function popupSearch(q) {
 }
 
 
-// Is bookmarked
-function isBookmarked(w) {
-    Array.from($$(w)).forEach(function (el) {
-        chrome.bookmarks.search(el.href, function (bms) {
-            if (bms.length > 0) {
-                for (var i in bms) {
-                    if (bms[i].url == el.href) {
-                        if (w == '#rh-views .item .link') {
-                            var bookmarkSpan = el.closest('div.item').querySelector('span.bookmark');
-                            if (bookmarkSpan) {
-                                bookmarkSpan.style.backgroundImage = 'url("images/star.png")';
-                            }
-                        } else {
-                            if (el.style.backgroundColor !== '#ffffbd') {
-                                el.style.backgroundColor = '#ffffbd';
-                            }
-                        }
-                    }
-                }
-            }
-        });
-    });
-}
-
-
-// Is pinned
-function isPinned(w) {
-    Array.from($$(w)).forEach(function (el) {
-        var pi = JSON.parse(localStorage['rh-pinned']);
-        if (pi.length > 0) {
-            for (var i in pi) {
-                if (pi[i] !== undefined) {
-                    if (pi[i].url == el.href) {
-                        if (w == '#rh-views .item .link') {
-                            var pinSpan = el.closest('div.item').querySelector('span.pin');
-                            if (pinSpan) {
-                                pinSpan.style.backgroundImage = 'url("images/pin.png")';
-                            }
-                        } else {
-                            if (el.style.backgroundColor !== '#f0fff1') {
-                                el.style.backgroundColor = '#f0fff1';
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    });
-}
-
-
-// UI Edit items
-function uiEditItems(type) {
-    var editItems = $$('#' + type + '-inject .edit-items-ui');
-    if (editItems.length > 0) {
-        if (editItems[0].style.display == 'none') {
-            Array.from(editItems).forEach(function (el) {
-                el.style.display = 'inline';
-            });
-        } else if (editItems[0].style.display == 'inline') {
-            Array.from(editItems).forEach(function (el) {
-                el.style.display = 'none';
-            });
-        }
-    }
-}
-
-
 // Alert user popup
 function alertUser(msg, action) {
     if (action == 'close') {
@@ -356,162 +289,6 @@ function alertUser(msg, action) {
             $('alert-holder').style.display = 'none';
         }, 3000);
     }
-}
-
-
-// UI Pin item
-function uiPinItem(el, type) {
-    alertUser(returnLang('ui1'), 'open');
-    $('alert-no').addEventListener('click', function () {
-        alertUser('', 'close');
-    });
-    $('alert-yes').addEventListener('click', function () {
-        var url = el.closest('a').href;
-        var title = Array.from(el.closest('a').querySelectorAll(':scope > span.title'))[0].textContent.trim();
-        var furl = el.closest('a').querySelectorAll('img')[0].src;
-        var time = timeNow(0);
-        var pi = localStorage['rh-pinned'];
-        if (pi.indexOf('"' + url + '"') == -1) {
-            if (pi == 'false') {
-                localStorage['rh-pinned'] = JSON.stringify([{ url: url, title: title, favicon: furl, time: time }]);
-                $('pi-inject').style.display = 'inline';
-                if (type == 'rh') {
-                    Array.from($$('#rh-inject .item')).forEach(function (item) { item.remove(); });
-                    recentHistory();
-                } else if (type == 'rct') {
-                    Array.from($$('#rct-inject .item')).forEach(function (item) { item.remove(); });
-                    recentlyClosedTabs();
-                } else if (type == 'rt') {
-                    Array.from($$('#rt-inject .item')).forEach(function (item) { item.remove(); });
-                    showRecentTabs();
-                } else if (type == 'rb') {
-                    Array.from($$('#rb-inject .item')).forEach(function (item) { item.remove(); });
-                    recentBookmarks();
-                } else if (type == 'mv') {
-                    Array.from($$('#mv-inject .item')).forEach(function (item) { item.remove(); });
-                    mostVisited();
-                }
-                pinned();
-                alertUser('', 'close');
-            } else {
-                pi = JSON.parse(pi);
-                pi.unshift({ url: url, title: title, favicon: furl, time: time });
-                localStorage['rh-pinned'] = JSON.stringify(pi);
-                if (type == 'rh') {
-                    Array.from($$('#rh-inject .item')).forEach(function (item) { item.remove(); });
-                    recentHistory();
-                } else if (type == 'rct') {
-                    Array.from($$('#rct-inject .item')).forEach(function (item) { item.remove(); });
-                    recentlyClosedTabs();
-                } else if (type == 'rt') {
-                    Array.from($$('#rt-inject .item')).forEach(function (item) { item.remove(); });
-                    showRecentTabs();
-                } else if (type == 'rb') {
-                    Array.from($$('#rb-inject .item')).forEach(function (item) { item.remove(); });
-                    recentBookmarks();
-                } else if (type == 'mv') {
-                    Array.from($$('#mv-inject .item')).forEach(function (item) { item.remove(); });
-                    mostVisited();
-                }
-                Array.from($$('#pi-inject .item')).forEach(function (item) { item.remove(); });
-                pinned();
-                alertUser('', 'close');
-            }
-        }
-    });
-}
-
-
-// UI Delete item
-function uiDeleteItem(el, type) {
-    if (type == 'rh') {
-        alertUser(returnLang('ui2'), 'open');
-    } else if (type == 'rct') {
-        alertUser(returnLang('ui3'), 'open');
-    } else if (type == 'rb') {
-        alertUser(returnLang('ui4'), 'open');
-    } else if (type == 'mv') {
-        alertUser(returnLang('ui5'), 'open');
-    } else if (type == 'pi') {
-        alertUser(returnLang('ui6'), 'open');
-    }
-    $('alert-yes').addEventListener('click', function () {
-        var url = el.closest('a').href;
-        if (type == 'rh') {
-            chrome.history.deleteUrl({ url: url });
-            Array.from($$('#rh-inject .item')).forEach(function (item) { item.remove(); });
-            recentHistory();
-            alertUser('', 'close');
-        } else if (type == 'rct') {
-            console.warn('Removing recently closed entries is not supported.');
-            alertUser('', 'close');
-        } else if (type == 'rt') {
-            console.log("//todo uiDeleteItem");
-        } else if (type == 'rb') {
-            chrome.bookmarks.search(url, function (bms) {
-                if (bms.length > 0) {
-                    for (var i in bms) {
-                        if (bms[i].url == url) {
-                            chrome.bookmarks.remove(bms[i].id, function () {
-                                Array.from($$('#rb-inject .item')).forEach(function (item) { item.remove(); });
-                                recentBookmarks();
-                                Array.from($$('#popup-insert .item')).forEach(function (item) { item.style.backgroundColor = 'transparent'; });
-                                //isBookmarked('#rh-inject .item');
-                                isPinned('#rh-inject .item');
-                                //isBookmarked('#rct-inject .item');
-                                isPinned('#rct-inject .item');
-                                if ($$('#rb-inject .item').length == 0) {
-                                    $('rb-inject').style.display = 'none';
-                                }
-                                alertUser('', 'close');
-                            });
-                        }
-                    }
-                }
-            });
-        } else if (type == 'mv') {
-            var mv = localStorage['mv-blocklist'];
-            if (mv == 'false') {
-                localStorage['mv-blocklist'] = url + '|';
-            } else {
-                localStorage['mv-blocklist'] = localStorage['mv-blocklist'] + url + '|';
-            }
-            Array.from($$('#mv-inject .item')).forEach(function (item) { item.remove(); });
-            mostVisited();
-            alertUser('', 'close');
-        } else if (type == 'pi') {
-            var pi = JSON.parse(localStorage['rh-pinned']);
-            var pl = pi.length;
-            if (pl > 0) {
-                for (var i in pi) {
-                    if (pi[i] !== undefined) {
-                        if (pi[i].url == url) {
-                            pi.splice(i, 1);
-                            if (pl == 1) {
-                                localStorage['rh-pinned'] = 'false';
-                            } else {
-                                localStorage['rh-pinned'] = JSON.stringify(pi);
-                            }
-                            Array.from($$('#pi-inject .item')).forEach(function (item) { item.remove(); });
-                            pinned();
-                            if ($$('#pi-inject .item').length == 0) {
-                                $('pi-inject').style.display = 'none';
-                            }
-                            Array.from($$('#popup-insert .item')).forEach(function (item) { item.style.backgroundColor = 'transparent'; });
-                            //isBookmarked('#rh-inject .item');
-                            isPinned('#rh-inject .item');
-                            //isBookmarked('#rct-inject .item');
-                            isPinned('#rct-inject .item');
-                            alertUser('', 'close');
-                        }
-                    }
-                }
-            }
-        }
-    });
-    $('alert-no').addEventListener('click', function () {
-        alertUser('', 'close');
-    });
 }
 
 
@@ -670,13 +447,11 @@ function openTab(id) {
 // `getData` from module scope, which is empty until the live-tab query finishes,
 // so the popup woke the worker to receive nothing.
 //
-// The worker now mirrors both fields into chrome.storage.session (TAB_LIST_KEY
-// in background-sw.js). Session storage lives in the browser process: reading it
-// wakes nothing, touches no disk, and — unlike the worker's module scope — it
-// survives the worker being recycled.
-const TAB_LIST_KEY = 'tab-list';
-const TAB_LIST_VERSION = 1;
-
+// The worker now mirrors both fields into chrome.storage.session under
+// TAB_LIST_KEY. Session storage lives in the browser process: reading it wakes
+// nothing, touches no disk, and — unlike the worker's module scope — it
+// survives the worker being recycled. The key and its version are imported
+// from the shared bottom layer, which is where the worker reads them too.
 function tabListArea() {
     return (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.session)
         ? chrome.storage.session
@@ -812,16 +587,22 @@ function mostVisited() {
 
     var mvc = localStorage['mv-cache'];
 
-    if (mvc !== 'false') {
+    // `undefined` is a cold start: the worker has not written the cache yet.
+    // It used to fall through to JSON.parse(undefined) and throw.
+    if (mvc !== 'false' && mvc !== undefined) {
 
         var mvd = JSON.parse(mvc);
         var itemsno = Number(localStorage['mv-itemsno']);
         var mvrl = localStorage['mv-blocklist'];
         var r = 0;
 
-        // Bounded by the same constant the Service Worker filled `mv-cache`
-        // with, so the two cannot drift apart.
-        for (var i = 0; i < MOST_VISITED_MAX; i++) {
+        // Two bounds, not one. MOST_VISITED_MAX is what the worker fills the
+        // cache up to; the cache is *shorter* whenever its filters (internal
+        // URLs, the 28-day window) dropped entries, and walking past its end
+        // used to throw on `mvd[i].title` and abandon the rest of the popup.
+        var limit = Math.min(MOST_VISITED_MAX, mvd.length);
+
+        for (var i = 0; i < limit; i++) {
 
             if (r == itemsno) {
                 break;
@@ -880,18 +661,28 @@ function recentBookmarks() {
 
 
 // Pinned
+//
+// Read-only now: the pin button that used to sit on every row is gone, so
+// `rh-pinned` holds nothing but entries pinned before that, and nothing in the
+// extension can add to it. The block still renders them — otherwise they would
+// be in storage and nowhere on screen.
 function pinned() {
 
     var pc = localStorage['rh-pinned'];
 
-    if (pc !== 'false') {
+    // Popup.js only creates #pi-inject when there is something to show, but
+    // the block can also be re-rendered from code paths that run before that.
+    var holder = $('pi-inject');
+    if (!holder) { return; }
+
+    if (pc !== 'false' && pc !== undefined) {
 
         var pd = JSON.parse(pc);
 
-        for (var i = 0; i < 99; i++) {
+        for (var i = 0; i < pd.length; i++) {
 
             if (pd[i] !== undefined) {
-                $('pi-inject').appendChild(formatItem({ type: 'pi', url: pd[i].url, favicon: pd[i].favicon, title: pd[i].title, time: pd[i].time }));
+                holder.appendChild(formatItem({ type: 'pi', url: pd[i].url, favicon: pd[i].favicon, title: pd[i].title, time: pd[i].time }));
             }
 
         }
@@ -907,12 +698,7 @@ export {
     rightClick,
     formatItem,
     popupSearch,
-    isBookmarked,
-    isPinned,
-    uiEditItems,
     alertUser,
-    uiPinItem,
-    uiDeleteItem,
     recentHistory,
     recentlyClosedTabs,
     openTab,

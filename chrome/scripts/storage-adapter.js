@@ -244,7 +244,7 @@
 
     function fetchFromStorage() {
         const fallbackToStorage = () => {
-            console.info('[StorageAdapter] Path: COLD START (fallback to chrome.storage.local)');
+            console.info('[StorageAdapter] Reading chrome.storage.local');
             const now = (typeof performance !== 'undefined' && performance.now) ? performance.now.bind(performance) : Date.now;
             const t0 = now();
             chrome.storage.local.get(null, (items) => {
@@ -254,42 +254,12 @@
             });
         };
 
-        if (typeof chrome !== 'undefined' && chrome.runtime && typeof chrome.runtime.getBackgroundPage === 'function') {
-            try {
-                chrome.runtime.getBackgroundPage((bg) => {
-                    const reasons = [];
-                    if (chrome.runtime.lastError) reasons.push('lastError: ' + chrome.runtime.lastError.message);
-                    if (!bg) reasons.push('bg is falsy');
-                    if (bg && bg === globalObj) reasons.push('bg === globalObj (SW not available)');
-                    if (bg && !bg.storageAdapter) reasons.push('bg.storageAdapter missing');
-                    if (bg && bg.storageAdapter && !bg.storageAdapter._initialized) reasons.push('bg.storageAdapter not initialized');
-
-                    if (reasons.length > 0) {
-                        console.info('[StorageAdapter] Path: COLD START (getBackgroundPage rejected)');
-                        console.info('[StorageAdapter]   Reasons:', reasons.join('; '));
-                        fallbackToStorage();
-                        return;
-                    }
-
-                    console.info('[StorageAdapter] Path: HOT START (background cache)');
-                    try {
-                        const cloned = JSON.parse(JSON.stringify(bg.storageAdapter._cache || {}));
-                        const keyCount = Object.keys(cloned).length;
-                        console.info(`[StorageAdapter]   Retrieved ${keyCount} keys from background page cache`);
-                        completeInitialization(cloned);
-                    } catch (error) {
-                        console.warn('[StorageAdapter] Failed to clone background cache, falling back', error);
-                        fallbackToStorage();
-                    }
-                });
-                return;
-            } catch (error) {
-                console.warn('[StorageAdapter] getBackgroundPage threw exception', error);
-            }
-        } else {
-            console.info('[StorageAdapter] chrome.runtime.getBackgroundPage not available');
-        }
-
+        // There used to be a "hot start" branch here: it asked
+        // chrome.runtime.getBackgroundPage() for the background page's cache
+        // and cloned it instead of reading chrome.storage.local. That API is
+        // MV2-only and does not exist in a Manifest V3 service worker, so the
+        // branch could only ever log a reason and take this same path — on
+        // every start, in every context.
         fallbackToStorage();
     }
 

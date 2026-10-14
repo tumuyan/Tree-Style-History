@@ -140,11 +140,11 @@ Service Worker 侧（`background-sw.js`、`background-utils.js`、`db-manager.js
 MV3 取消了后台页面，因此代码分成两套互不相通的运行时：
 
 - **Service Worker**（`scripts/background-sw.js`，通过 `importScripts` 加载 `storage-adapter.js`、`background-utils.js`、`db-manager.js`）。它负责**采集与持久化**：监听 `tabs.onCreated/onUpdated/onActivated/onRemoved`，调用 `chrome.history.getVisits` 取访问项，把 `visitId → referringVisitId` 的父子关系写入 IndexedDB；周期性（`chrome.alarms`，3 分钟）刷新「最常访问」缓存；管理右键菜单与 4 个快捷键。
-- **页面**（popup 与 5 个功能页）。它们负责**查询与渲染**，数据源按页面分三类：树状页（`history2.html` / `closed.html`）通过 `dbManager` 直连同一个 IndexedDB；线性页（`history.html` / `bookmark.html`）走 `chrome.history` / `chrome.bookmarks`；**popup 两者都不碰**——它读 `chrome.history` / `chrome.sessions` / `chrome.bookmarks`，加上 SW 镜像到 `chrome.storage.session` 的 tab 列表（详见下面「前端模块结构」里 `popup-core.js` 的 `showRecentTabs`），`popup.html` 因此既不加载 `db-manager.js` 也不加载 `message-adapter.js`。**不要给 popup 加回消息通道**：一次 `sendMessage` 就会唤醒 SW 并重跑启动爬库。
+- **页面**（popup 与 5 个功能页）。它们负责**查询与渲染**，数据源按页面分三类：树状页（`history2.html` / `closed.html`）通过 `dbManager` 直连同一个 IndexedDB；线性页（`history.html` / `bookmark.html`）走 `chrome.history` / `chrome.bookmarks`；**popup 两者都不碰**——它读 `chrome.history` / `chrome.sessions` / `chrome.bookmarks`，加上 SW 镜像到 `chrome.storage.session` 的 tab 列表（详见下面「前端模块结构」里 `popup-core.js` 的 `showRecentTabs`），`popup.html` 因此既不加载 `db-manager.js` 也不加载任何消息通道。**不要给 popup 加回消息通道**：一次 `sendMessage` 就会唤醒 SW 并重跑启动爬库。
 
 两者唯一的共享状态是 IndexedDB 和被 `storage-adapter.js` 劫持后的 `localStorage`。
 
-### 2. 存储三件套（理解本仓库的关键）
+### 2. 存储两件套（理解本仓库的关键）
 
 **`scripts/storage-adapter.js`** —— 它用 `Object.defineProperty` 把全局 `localStorage` 替换成一个 Proxy（挂在页面的 `window` **和** Service Worker 的 `self` 上），后端是 `chrome.storage.local` 的内存缓存（`localStorage` 在 MV3 Service Worker 中不可用）。所有业务代码仍然照常写 `localStorage['xxx']`，无需改动。
 **重要**：读取前必须等缓存就绪，即把初始化代码包进 `onStorageReady(function () { ... })`（等价于 `storageAdapter.ready()`）。所有页面的入口脚本都是这个模式。`chrome.storage.onChanged` 会自动同步缓存，所以选项页改配置后其他页面能看到。
@@ -161,7 +161,7 @@ MV3 取消了后台页面，因此代码分成两套互不相通的运行时：
 
 改 `DB_VERSION` 才会触发 `onupgradeneeded`，新增索引必须同时改版本号。
 
-**`scripts/message-adapter.js`** —— 统一封装 MV2/MV3 差异。`getBackgroundData('openedTabs'|'recentTabs')`、`callBackgroundFunction(name, ...args)`、`deleteDB()`。MV3 下走 `chrome.runtime.sendMessage`，SW 端在 `background-sw.js` 末尾的 `onMessage` 里按 `action` 分发（`getData` / `callFunction` / `refreshContextMenu` / `clearFaviconCache`）。目前只有 `options.js` 的 `deleteDB()` 还在用它，其余页面只是**仍保留 `<script>` 标签**（历史遗留，无害）；`getBackgroundData()` 已无调用方。
+**消息通道**（`chrome.runtime.sendMessage`）只剩两处真正在用：选项页的「清除图标缓存」与 `config.js` 保存后的「刷新右键菜单」，SW 端在 `background-sw.js` 末尾的 `onMessage` 里按 `action` 分发（`refreshContextMenu` / `clearFaviconCache`）。曾经封装这套差异的 `scripts/message-adapter.js` 已删除：它的 `useServiceWorker` 由 `manifest_version >= 3` 推出、恒为 true，MV2 那半边永远不可达，而它唯一剩下的 `deleteDB()` 走的本来就是 `dbManager.deleteDB()`——选项页现在直接调后者。`getData` 分支留着但不再应答具体字段：popup 读的是 `chrome.storage.session` 里的 `tab-list` 快照，一次 `sendMessage` 就会唤醒 SW 并重跑启动爬库。
 
 ### 3. 前端模块结构（3.3.0 重构后的新分层）
 
@@ -170,15 +170,15 @@ MV3 取消了后台页面，因此代码分成两套互不相通的运行时：
 `scripts/modules/page-init.js` 承担每页都要做的三件事（由页面脚本 `initPage()` 调用）：填充 `.lang`（按 `data-lang-string`）、应用 `popup-zoom` / `page-zoom`、吞掉 `href="#"` 的点击。**别把它挪到模块顶层执行**：模块先于 `storage-adapter.js` 灌好缓存求值，那时读 `localStorage` 全是 `undefined`，且会被记成一次 unready read。
 其中只有 `applyZoom()` 读存储，所以它挂在 `onStorageReady()` 而不是 `DOMContentLoaded` 上——后者**早于** 缓存就绪，缩放会静默失效（不抛错、不告警，页面按 100% 渲染）。
 
-`scripts/modules/ui-state.js` 放跨文件的页面状态：`modifierState.{shift,ctrl}`（由各页的 keydown/keyup 写、由 `popup-core.js` / `history-core.js` 读）与 `ITEM_SELECTED_COLOR`（选中行底色）。
+`scripts/modules/ui-state.js` 放跨文件的页面状态：`modifierState.{shift,ctrl}`（由各页的 keydown/keyup 写、由 `popup-core.js` / `history-core.js` 读）、`ITEM_SELECTED_COLOR`（选中行底色）与 `RENDER_BUDGET_MS`（分片渲染每片的时长预算，`history-core.js` 与 `bookmark.js` 共用——两个文件各写一份 `8` 加一句「保持同步」注释，注释管不住漂移）。
 
 `scripts/modules/` 下的领域模块（`page-init.js` 与 `ui-state.js` 是其中两个，职责如上），依赖关系：
 
-- `helpers.js` —— 纯工具，无副作用：时间格式化（`TimeToStr`/`timeNow`/`formatDate`，受 `rh-date`、`rh-timeformat` 配置控制）、i18n（`returnLang`/`echoLang`）、字符串转义（`escapeHtmlAttr` 用于属性 / `escapeHtmlText` 用于文本，`title_fix` 已删除）/ `escapeRegExp`、URL 处理、bookmarklet 识别与执行、**favicon URL 生成体系**。
-- `config.js` —— 配置中心。`defaultValues` 是全部配置项的默认值表，`defaultConfig(clean)` 写入、`loadOptions(full)` 回填表单、`saveOptions(sync)` 收集保存。过滤域名由 `updateFilter()` 从 `rh-filtered` 编译成正则 `flist_r`，`filtUrl(url)` 供所有列表渲染前过滤。同步到 `chrome.storage.sync` 时把 key 的 `-` 换成 `_`，且过滤列表按每 100 条切片存成 `filterlist0..N`（绕过 sync 单 key 8KB 限制）。
+- `helpers.js` —— 纯工具，无副作用：时间格式化（`TimeToStr`/`timeNow`/`formatDate`，受 `rh-date`、`rh-timeformat` 配置控制）、i18n（`returnLang`）、字符串转义（`escapeHtmlAttr` 用于属性 / `escapeHtmlText` 用于文本，`title_fix` 已删除）/ `escapeRegExp`/`truncate`、URL 处理、bookmarklet 识别与执行、**favicon URL 生成体系**。
+- `config.js` —— 配置中心。`defaultValues` 是全部配置项的默认值表，`defaultConfig(clean)` 写入、`loadOptions(full)` 回填表单、`saveOptions(sync)` 收集保存。过滤域名由 `updateFilter()` 从 `rh-filtered` 编译成正则 `flist_r`（模块内部变量，不导出），`filtUrl(url)` 供所有列表渲染前过滤。同步到 `chrome.storage.sync` 时把 key 的 `-` 换成 `_`，且过滤列表按每 100 条切片存成 `filterlist0..N`（绕过 sync 单 key 8KB 限制）。**`saveOptions()` 只写选项页有控件的键**：`rh-group` / `rh-orderby` / `rh-order` 由页面上的排序按钮实时改、`rh-pinned` 等已无界面，把它们写回去会用默认/旧值覆盖用户刚做的选择（`tests/modules.test.mjs` 有断言）。
 - `calendar.js` —— 侧边日历。`calendar_storage2` 是 `{startTime: 条数}` 映射，由 `history-core.js` 写入、本模块读取绘制热力色块，二者**循环依赖**，改动时需注意。
-- `popup-core.js` —— popup 各区块的渲染：`recentHistory` / `recentlyClosedTabs`（用 `chrome.sessions`）/ `recentBookmarks` / `mostVisited`（读 SW 写的 `mv-cache`）/ `showRecentTabs`（读 SW 镜像到 `chrome.storage.session` 的 `tab-list`；取不到才退回 `chrome.tabs.query`，**不再**走 `messageAdapter`——一次 `sendMessage` 就会唤醒 SW 并重跑启动爬库）/ `pinned`。统一由 `formatItem()` 生成条目，`leftClick`/`rightClick` 决定行为。
-- `history-core.js` —— 线性历史页渲染、分组（按 host）、排序（`rh-orderby` / `rh-order`）、`deleteHistoryItem('selected'|'range')`。**大列表用 `setInterval(..., 5)` 分片渲染**以免卡死，这是本项目反复出现的模式，新增长列表时应沿用。
+- `popup-core.js` —— popup 各区块的渲染：`recentHistory` / `recentlyClosedTabs`（用 `chrome.sessions`）/ `recentBookmarks` / `mostVisited`（读 SW 写的 `mv-cache`；**必须同时用 `MOST_VISITED_MAX` 和 `mvd.length` 界**，缓存通常比上限短，越界读会把后面所有区块一起吃掉）/ `showRecentTabs`（读 SW 镜像到 `chrome.storage.session` 的 `tab-list`；取不到才退回 `chrome.tabs.query`，**不再**走消息通道——一次 `sendMessage` 就会唤醒 SW 并重跑启动爬库）/ `pinned`（只读：`rh-pinned` 里只剩历史遗留的条目）。统一由 `formatItem()` 生成条目，`leftClick`/`rightClick` 决定行为。**每行右侧曾经画着「钉住/删除」两个按钮，但没有任何代码给它们绑事件**（`uiPinItem`/`uiDeleteItem`/`uiEditItems` 已删除，`tests/static.test.mjs` 有守卫）——删 UI 就要连带删 CSS 与图片，别只删函数留按钮。`isPinned()` / `isBookmarked()` 是同类：它们给行加星标/图钉底色，唯一调用点就在被删的 `uiPinItem()` 里，随之同删（`css/history.css` 的 `.item .bookmark` / `.item .pin` 因此也没有渲染方了）。
+- `history-core.js` —— 线性历史页渲染、分组（按 host）、排序（`rh-orderby` / `rh-order`）、`deleteHistoryItem('selected'|'range', redraw)`。`redraw` 是范围删除完成后的回调，由 **history.js 传入 `calendar('yes','')`**：整月的热力块只有 `calendar()` 会重画（`history()` 只重涂选中日与总数），而本文件 import 不了它（`calendar.js` 反过来 import `history()`，会成环），所以走参数而不是 import——`tests/static.test.mjs` 有一条守卫盯着 history.js 传了它。**大列表用 `setInterval(..., 5)` 分片渲染**以免卡死，这是本项目反复出现的模式，新增长列表时应沿用。
 - `tree.js` —— 两个树状页的原生渲染器（已完全取代 jQuery + zTree）。`treeHtml(nodes, opts)` 是纯函数（扁平 `{id, pId}` → 嵌套 `<li>/<ul>` 字符串，可按关键字过滤并保留命中项的祖先链）；`createTree(container, opts)` 是有状态包装，负责渲染进元素、`toggle` 折叠与点击回调；`bindTreeSearch(tree, opts)` 接筛选框与 transition 标签（取代 `fuzzysearch.js`）。它**沿用 zTree 的 class 词汇**（`root_/center_/bottom_ × open/close/docu`、`ico_*`），所以 `css/zTreeStyle.css` 仍然负责图标、连接线与缩进——只丢库，不丢样式。节点 `name` 是**纯文本**（原始页面标题），转义在这里做：先按原文定位高亮、再分段 `escapeHtmlText()`，否则关键字会把 `&amp;` 之类的实体切成两半。
 
 `scripts/dom-helper.js` 是 ES module 版的 `$`/`$$`/`createElement`，用来取代 3.3.0 中移除的 MooTools。
@@ -227,7 +227,7 @@ MV3 取消了后台页面，因此代码分成两套互不相通的运行时：
 
 ### 6. 约定与陷阱
 
-- `localStorage` 里所有值都是**字符串**，`storageAdapter` 强制 `String(value)`。比较数量时务必 `Number(localStorage['rh-itemsno'])`，比较开关时用 `=== 'yes'` / `!== 'no'`（注意 `share-favicon-cache` 是反向的 `!== 'no'`）。
+- `localStorage` 里所有值都是**字符串**，`storageAdapter` 强制 `String(value)`。比较数量时先 `Number(localStorage['rh-itemsno'])`，比较开关时用 `=== 'yes'` / `!== 'no'`（注意 `share-favicon-cache` 是反向的 `!== 'no'`）。**数字比较先 `Number()`，但别把它当 bug 修**：`localStorage` 里存的是字符串，而 `>` 与 `-` 会先把操作数转成数字，所以 `11 > "10"` 本来就是 true、`"120" - 3` 本来就是 117——漏写 `Number()` 在这里不会改变结果。真正会出错的是 `+`（拼串）与 `===`（严格相等不转换）。`Number()` 该写，它是把隐式转换显式化，不是修 bug。
 - 配置键用连字符（如 `load-range`），同步到 `chrome.storage.sync` 时转下划线。新增开关类配置需同时加进 `modules/config.js` 的 `defaultValues`、`loadOptions`、`saveOptions` 与 `options.html` 的表单，以及 `_locales/*/messages.json`。
 - i18n 文案写在 `chrome/_locales/en/messages.json` 与 `chrome/_locales/zh_CN/messages.json`，两边都要补。`.lang` 元素由 `page-init.js` 自动填充，无需手写。
 - 渲染用户可控的标题/URL 时一律经过 `escapeHtmlAttr`（属性位置）或 `escapeHtmlText`（文本位置），本项目多处直接拼 HTML 字符串。`title_fix` 已删除（`tests/static.test.mjs` 有断言禁止它重新出现）。
