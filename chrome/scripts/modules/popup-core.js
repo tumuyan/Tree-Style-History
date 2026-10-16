@@ -531,8 +531,20 @@ function showRecentTabs(rhhistory, rt) {
     });
 }
 
+// Not exported. showRecentTabs() is the one that normalises, and the whole point
+// of this pair is that an odd-shaped snapshot cannot reach the renderer — an
+// export would leave the next caller a way around that. tests/popup-core.test.mjs
+// goes through showRecentTabs() for the same reason.
 function showRecentTabsImpl(rhhistory, rt) {
-    rhhistory = rhhistory || {};
+    // A stored object is JSON round-tripped, so the fields can come back as
+    // anything: a truncated write leaves `recentTabs` an object rather than an
+    // array, and `rhhistory` missing entirely. Both are coerced here rather than
+    // at the call site, because every caller is a `then()` over a storage read.
+    rhhistory = (rhhistory && typeof rhhistory === 'object') ? rhhistory : {};
+    // An array or nothing. Deliberately NOT coerced from an object: an object
+    // has no `.length`, so the walk would end immediately and the block would
+    // render empty without saying why — see "hides the block" in
+    // tests/popup-core.test.mjs.
     rt = Array.isArray(rt) ? rt : [];
     console.log("showRecentTabs() count = " + rt.length);
 
@@ -703,7 +715,6 @@ export {
     recentlyClosedTabs,
     openTab,
     showRecentTabs,
-    showRecentTabsImpl,
     mostVisited,
     recentBookmarks,
     pinned

@@ -1747,9 +1747,10 @@ test('saveOptions leaves settings without an options-page control alone', async 
     // history.html and bookmark.html, which writes them straight to storage.
     // The options page has no control for them, so if saveOptions() wrote them
     // it would write the *default* back and silently undo a choice the user
-    // just made. Same for rh-time / rh-share / rhs-showbg / rh-pinned, which
-    // nothing renders or edits any more.
-    const untouched = ['rh-time', 'rh-group', 'rh-orderby', 'rh-order', 'rh-share', 'rhs-showbg', 'rh-pinned'];
+    // just made. `rh-pinned` is the same shape: it holds entries the user
+    // pinned before the per-row pin button was removed, the block still renders
+    // them, and nothing in the extension can add to the list any more.
+    const untouched = ['rh-group', 'rh-orderby', 'rh-order', 'rh-pinned'];
 
     formDefaults();
     restoreStorage(t, untouched);

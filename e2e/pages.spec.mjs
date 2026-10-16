@@ -25,6 +25,13 @@
 //     through third-party services and `chrome://favicon/`; in a sandbox with
 //     no egress every one of them fails, which is a degraded icon, not a
 //     broken page.
+//
+// Favicon requests to the five third-party services are aborted up front
+// (FAVICON_SERVICE_HOSTS below). Offline they do not "fail" — the connection
+// hangs, and an `<img>` request that is still pending keeps the document's
+// `load` event from firing. That made `goto(waitUntil: 'load')` time out at
+// random on whichever case rendered the first external favicon. Aborting turns
+// the hang into the immediate `img` error the frontend already degrades on.
 
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -57,6 +64,18 @@ try {
 
 const SKIP = chromium ? false : 'playwright is not installed — run: npm i -D playwright && npx playwright install chromium';
 
+// Mirrors FAVICON_SERVICE_PATTERNS in scripts/background-sw.js — the hostnames
+// getFaviconUrl() can produce. Keep the two lists in step.
+const FAVICON_SERVICE_HOSTS = [
+    'icons.duckduckgo.com',
+    'www.google.com/s2/favicons',
+    'favicon.im/',
+    'ico.faviconkit.net/',
+    'faviconsnap.com/api/favicon',
+];
+
+const isFaviconServiceUrl = (url) => FAVICON_SERVICE_HOSTS.some((host) => url.href.includes(host));
+
 /** How long to let async rendering run after `load` fires. */
 const SETTLE_MS = 1500;
 
@@ -73,6 +92,11 @@ before(async () => {
             `--load-extension=${CHROME_DIR}`,
         ],
     });
+
+    // Registered on the context so it covers every page opened below, including
+    // the ones a later case adds. A per-case `page.route()` would miss the
+    // requests issued between navigation start and the route being installed.
+    await context.route((url) => url.protocol !== 'chrome-extension:' && isFaviconServiceUrl(url), (route) => route.abort());
 
     let [serviceWorker] = context.serviceWorkers();
     if (!serviceWorker) serviceWorker = await context.waitForEvent('serviceworker');
@@ -349,6 +373,65 @@ test('a page still applies its saved zoom when storage answers late', { skip: SK
         await seed.evaluate(async () => {
             localStorage['page-zoom'] = '100';
             localStorage['popup-zoom'] = '100';
+            await window.storageAdapter.ready();
+        });
+        await seed.close();
+    }
+});
+
+test('popup.html renders its tab block from a seeded snapshot', { skip: SKIP }, async () => {
+    // The six "opens without JavaScript errors" cases all load the popup in a
+    // fresh profile, where there is one about:blank tab and no history: the
+    // "recent tabs" block hides itself and its render loop never runs.
+    //
+    // Seeded through chrome.storage.session rather than localStorage because
+    // that is where the worker mirrors the list, and the popup reads it from
+    // there — a write to localStorage would be invisible to this block. The
+    // version field is what makes the snapshot acceptable at all.
+    const seed = await context.newPage();
+    const { jsErrors: seedErrors } = collectErrors(seed);
+    await seed.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: 'load' });
+    await settle(seed);
+
+    try {
+        await seed.evaluate(async () => {
+            localStorage['rt-itemsno'] = '6';
+            await window.storageAdapter.ready();
+            await chrome.storage.session.set({
+                'tab-list': {
+                    v: 1,
+                    openedTabs: {
+                        11: { id: 11, url: 'https://tab-a.test/1', title: 'Tab A' },
+                        12: { id: 12, url: 'https://tab-b.test/1', title: 'Tab B' },
+                    },
+                    recentTabs: [12, 11],
+                },
+            });
+        });
+        assert.deepEqual(seedErrors, [], 'seeding the tab list threw');
+
+        const page = await context.newPage();
+        const { jsErrors, netErrors } = collectErrors(page);
+        await page.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil: 'load' });
+        await settle(page);
+
+        const shape = await page.evaluate(() => ({
+            rows: document.querySelectorAll('#rt-inject .item').length,
+            // Activation order is the whole reason the list is mirrored at all:
+            // a live `chrome.tabs.query()` cannot reconstruct it.
+            first: document.querySelector('#rt-inject .item .url')?.textContent ?? '',
+            visible: document.getElementById('rt-inject')?.style.display ?? 'gone',
+        }));
+        await page.close();
+
+        assert.deepEqual(jsErrors, [], `popup threw (${netErrors.length} network error(s) ignored)`);
+        assert.equal(shape.rows, 2, 'both tabs from the snapshot are listed');
+        assert.match(shape.first, /tab-b\.test/, 'the most recently activated tab comes first');
+        assert.notEqual(shape.visible, 'none', 'a block with rows must not hide itself');
+    } finally {
+        await seed.evaluate(async () => {
+            await chrome.storage.session.remove('tab-list');
+            localStorage['rt-itemsno'] = '0';
             await window.storageAdapter.ready();
         });
         await seed.close();

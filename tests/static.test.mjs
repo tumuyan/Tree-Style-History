@@ -646,6 +646,99 @@ test('config.js only references option-page ids that exist', () => {
 });
 
 /**
+ * Every key `defaultConfig()` writes, and every page script that mentions each.
+ *
+ * A key nobody reads is not neutral: `defaultConfig()` writes it into
+ * chrome.storage.local on every service-worker start, `saveOptions(true)` uploads
+ * it (or not) to chrome.storage.sync, and `downloadOptions()` writes it back —
+ * so it occupies a slot in a 100KB quota and shows up in every diff of the
+ * settings, all while doing nothing. Three of them (`rh-time`, `rh-share`,
+ * `rhs-showbg`) survived years that way.
+ */
+function configKeyUsage() {
+    const defaults = fs.readFileSync(path.join(CHROME_DIR, 'scripts/modules/shared/config-defaults.js'), 'utf8');
+    const keys = [...defaults.matchAll(/^\s*["']([^"']+)["']\s*:/gm)].map((m) => m[1]);
+
+    // Matched as a quoted key, not as a substring: `rh-time` is a prefix of
+    // `rh-timeformat`, so `src.includes(key)` would report the retired key as
+    // read by every site that reads the live one.
+    const usage = new Map(keys.map((k) => [k, []]));
+    walkScripts((file, src) => {
+        const rel = file.replace(/\\/g, '/');
+        // The table itself is not a reader: every key appears in it by
+        // definition, so counting this file would make the check say all 38
+        // keys are read no matter what the rest of the extension does.
+        //
+        // background-utils.js is that same table again: `npm run gen` copies
+        // config-defaults.js into it line for line, so excluding only the
+        // source would leave the generated duplicate voting for every key —
+        // and it is a file that always exists and is always regenerated, so
+        // the guard went green for a key nothing reads. It only ever caught a
+        // dead key by accident, when gen had not been run yet and
+        // verify:sw-sync failed first.
+        if (rel.endsWith('modules/shared/config-defaults.js') || rel === 'scripts/background-utils.js') return;
+        for (const key of keys) {
+            // A key is a WHOLE string literal or it is not this key: `rh-time`
+            // is a prefix of `rh-timeformat`, so a prefix match reports the
+            // retired key as read by every site that reads the live one.
+            const quoted = new RegExp('([\'"])' + escapeRe(key) + '\\1', 'g');
+            if (quoted.test(src)) usage.get(key).push(rel);
+        }
+    });
+    return { keys, usage };
+}
+
+test('every default config key is read somewhere outside the defaults table', () => {
+    // `defaultValues` is the single source of truth, which makes it the natural
+    // place for a retired setting to rot: removing a feature deletes its readers,
+    // and nothing then complains that the key itself is still being written,
+    // uploaded and restored on every start.
+    const { usage } = configKeyUsage();
+    const dead = [...usage].filter(([, files]) => files.length === 0).map(([key]) => key).sort();
+
+    assert.deepEqual(dead, [], 'a default is written, synced and restored but never read — drop it');
+});
+
+test('a key saveOptions writes is also one the options page reads back', () => {
+    // The direction of issue #5 that a user actually feels. rh-group /
+    // rh-orderby / rh-order are written by the sort toolbar on the history and
+    // bookmark pages, which has no control on the options page; if saveOptions()
+    // collected them it would write whatever the form happens to hold — the
+    // default — and undo a choice the user made ten seconds ago.
+    //
+    // "Reads back" rather than "has an element with a matching id": the ids are
+    // camelCase spellings of some keys and unrelated to others (`rhtime` reads
+    // `rh-timeformat`), so a name-matching guard needs a hand-maintained map —
+    // the very thing that drifts. What holds without one is that a value can
+    // only leave this page if the page put it on screen first.
+    const cfg = fs.readFileSync(path.join(CHROME_DIR, 'scripts/modules/config.js'), 'utf8');
+    const written = new Set([...cfg.matchAll(/^\s*so\['([\w-]+)'\]\s*=/gm)].map((m) => m[1]));
+
+    const read = new Set([...cfg.matchAll(/localStorage\['([\w-]+)'\]/g)].map((m) => m[1]));
+    // loadSlider() takes the key as its last argument, so those reads are named
+    // in options.js rather than in config.js.
+    const options = fs.readFileSync(path.join(CHROME_DIR, 'scripts/options.js'), 'utf8');
+    for (const m of options.matchAll(/loadSlider\(\s*'[^']*'\s*,\s*[^,]+\s*,\s*[^,]+\s*,\s*'([\w-]+)'\s*\)/g)) {
+        read.add(m[1]);
+    }
+
+    const unread = [...written].filter((key) => !read.has(key)).sort();
+    assert.deepEqual(unread, [], 'saveOptions() writes a value the options page never shows');
+});
+
+test('the saveOptions key guard matches the shapes it claims to catch', () => {
+    // Both directions, or it proves nothing: a guard that accepts everything
+    // reports an empty list and looks like the rule holds.
+    const keyOf = (line) => /^\s*so\['([\w-]+)'\]/.exec(line)[1];
+    assert.equal(keyOf("    so['rh-itemsno'] = $('rhitemsno').value;"), 'rh-itemsno');
+    assert.equal(keyOf("    so['favicon-service-fallback'] = $('x').value;"), 'favicon-service-fallback');
+    // A key with a dashes-stripped and a camelCase spelling both resolve, which
+    // is why the guard tries every form rather than one.
+    assert.equal('rh-itemsno'.replace(/-/g, ''), 'rhitemsno');
+    assert.equal('favicon-service-fallback'.replace(/-([a-z])/g, (_m, c) => c.toUpperCase()), 'faviconServiceFallback');
+});
+
+/**
  * Locals already escaped by `escaper`, e.g. `var titleText = escapeHtmlText(t)`.
  * A render site may escape either inline or through such a variable, and the
  * guards below have to accept both.
@@ -755,10 +848,21 @@ function stripJsComments(src) {
             quote = ch;
             out += ch;
         } else if (ch === '/' && src[i + 1] === '/') {
-            while (i < src.length && src[i] !== '\n') i++;
+            // Stop *before* the newline, so the loop's i++ lands on it and the
+            // `else` below copies it through. Skipping past it deletes the line
+            // boundary and every reported line number drifts — which is the only
+            // locator this rule gives.
+            while (i + 1 < src.length && src[i + 1] !== '\n') i++;
         } else if (ch === '/' && src[i + 1] === '*') {
+            // A block comment can span lines, and it is copied through as
+            // newlines only: dropping them would move every line after it.
+            let nl = '';
             i += 2;
-            while (i < src.length && !(src[i] === '*' && src[i + 1] === '/')) i++;
+            while (i < src.length && !(src[i] === '*' && src[i + 1] === '/')) {
+                if (src[i] === '\n') nl += '\n';
+                i++;
+            }
+            out += nl;
             i++;
         } else if (ch === '/' && BEFORE_REGEX.test(out)) {
             // Regex literal, but only if one actually closes on this line;
@@ -1046,6 +1150,421 @@ test('page titles are escaped at the point they become text content', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Stored values
+// ---------------------------------------------------------------------------
+
+// Every value read out of `localStorage` in this project is a string:
+// storage-adapter.js coerces with String(value) on the way in, which is what
+// chrome.storage.local hands back. Using one as a number therefore depends on
+// implicit coercion — `>` and `-` convert for you, `+` concatenates, and `===`
+// never converts. The conversion is invisible at the read site, which is why
+// these reads are wrapped; see the note above loadDate() in background-sw.js.
+//
+// Deliberately NOT reported:
+//   * `+` — string building ("D" + n) is far more common here than addition, so
+//     flagging it would train everyone to ignore the output.
+//   * equality against a string literal (`=== 'yes'`, `!= 'no'`) — that is how
+//     config switches are read, and Number() would break it.
+//   * a member access or a call on the value (`mvbl.length`, `rl.indexOf(u)`):
+//     the operator belongs to the member, which is a number already.
+//   * `++` / `--` / `+=` — `oid++` on a string yields a number, `s += read`
+//     is concatenation. Neither has ever been the bug.
+//
+// A value handed to a variable first is followed: `n = localStorage['x']` and
+// `dateId > n` three lines later is exactly the shape that ended the history
+// crawl a day early, and it is invisible to a check that only looks at the read.
+//
+// That follow is scoped to ONE top-level function at a time — a single table for
+// the whole file exempts a name everywhere as soon as it is wrapped once.
+// popup-core.js declares `var itemsno` three times (rct-itemsno / rt-itemsno /
+// mv-itemsno); wrapping one of them used to clear the other two. Kept a copy of
+// the shape rather than of the code: this file and the script must agree, and
+// they cannot agree by sharing, because the script's copy is what `verify` runs
+// on its own.
+
+// The operator that can sit to the RIGHT of an operand: `n > read`, `read - n`.
+const RIGHT_OPERATOR = /^\s*(<=|>=|===|!==|==|!=|<|>|\*|\/|%|-)/;
+// ...and the one that can sit to its LEFT: `read > n`, `DAY * read`. The
+// optional `=` covers `x -= read`; plain `x = read` does not match, because `=`
+// alone is not in the alternation.
+const LEFT_OPERATOR = /(<=|>=|<|>|\*|\/|%|-)=?\s*$/;
+// A read already made numeric — or parsed as JSON — where it is read.
+const NUMERIC_WRAPPER = /\b(?:Number|parseInt|parseFloat|JSON\.\w+)\s*\(\s*$/;
+// Equality only coerces when the other side is a number, so `=== 'yes'` (the
+// switch idiom) is fine. `=== 1` is not: strict equality never converts, so a
+// stored value compared to a number is never equal.
+const NUMBER_LITERAL = /^-?\d+(?:\.\d+)?\b/;
+
+/** The characters immediately before `index`, on the same line. */
+function beforeAt(src, index) {
+    return src.slice(src.lastIndexOf('\n', index - 1) + 1, index);
+}
+
+/** The operator an operand sits next to, or null when it is not an operand. */
+function operatorNear(before, after) {
+    if (/=>\s*$/.test(before)) return null; // `() => localStorage['x']`: an arrow
+
+    const right = RIGHT_OPERATOR.exec(after);
+    if (right) {
+        if (/^(?:===|!==|==|!=)$/.test(right[1])) {
+            return NUMBER_LITERAL.test(after.slice(right[0].length).trimStart()) ? right[1] : null;
+        }
+        return right[1];
+    }
+    const left = LEFT_OPERATOR.exec(before);
+    return left ? left[1] : null;
+}
+
+/**
+ * Split `src` at its top-level `function` declarations.
+ *
+ * Each slice carries its own `at` (its offset in `src`) so a report can name the
+ * line the reader sees; positions inside a slice are slice-relative and only
+ * make sense added back to it.
+ */
+function functionSlices(src) {
+    const starts = [];
+    // Column zero, so a nested function or a method is not a boundary, and an
+    // IIFE or an arrow — neither of which is written `function name(` at the
+    // margin in this codebase — is not one either.
+    for (const m of src.matchAll(/^function[\s\S]*?\s([\w$]+)\s*\(/gm)) starts.push(m.index);
+    starts.push(src.length);
+    return starts.slice(0, -1).map((at, i) => ({ at, code: src.slice(at, starts[i + 1]) }));
+}
+
+/**
+ * Locals that still hold a raw stored string: `var n = localStorage['x']`, per
+ * slice — `var n = Number(localStorage['x'])` is the fix being enforced, not a
+ * violation of it.
+ *
+ * Keyed by slice, not merged into one set: the point of slicing is that
+ * `itemsno` wrapped in one function says nothing about the `itemsno` in the
+ * next, and a flat set of names throws that distinction away again the moment
+ * two slices declare the same name. Callers get back the slices with their own
+ * name sets attached.
+ */
+function slicesWithStringVars(src) {
+    return functionSlices(src).map(({ at, code }) => {
+        const numeric = new Set(
+            [...code.matchAll(/(?:var|let|const)\s+([\w$]+)\s*=\s*(?:Number|parseInt|parseFloat)\s*\(\s*localStorage\b/g)]
+                .map((m) => m[1]),
+        );
+        const names = new Set();
+        // Anchored at the start of a statement so that `style.width = localStorage[…]`
+        // is not read as a variable named `width`. `var`/`let`/`const` is optional
+        // because `oid = localStorage['oid']` reassigns one too.
+        //
+        // `\n` belongs in that "start of statement" set, and dropping it is not a
+        // cosmetic difference: the most common real shape is a name on the line
+        // after a closing brace — `popup-core.js`'s `var ca`, `background-sw.js`'s
+        // `_shareFaviconCache` — and the assignment there is preceded by a newline,
+        // not by `;` or `{`. This copy had `(?:^|[;{])` while
+        // scripts/check-storage-numbers.mjs had `(?:^|[;{]|\n)`, so the two checks
+        // disagreed about whether a violation below one of those lines existed.
+        // Kept identical to the script by the parity guard below.
+        for (const m of code.matchAll(/(?:^|[;{]|\n)\s*(?:(?:var|let|const)\s+)?([\w$]+)\s*=\s*localStorage\b/g)) {
+            if (!numeric.has(m[1])) names.add(m[1]);
+        }
+        return { at, code, names };
+    });
+}
+
+/**
+ * The whole rule as shipped in scripts/check-storage-numbers.mjs — the comment
+ * stripper and `unwrappedNumericReads` together, from its operator constants to
+ * the driver loop.
+ *
+ * Loaded by evaluating the source, not by importing it: the script runs its
+ * driver loop at module scope, so importing it would scan the tree a second
+ * time as a side effect of a test.
+ *
+ * The whole rule, not just the stripper: comparing stripped text is only half
+ * of "the two agree". The other half is the rule that reads the stripped text,
+ * and the two copies of the "a local that still holds a string" pattern lived
+ * on that side — the suite's had `(?:^|[;{])` where the script's had
+ * `(?:^|[;{]|\\n)`, and a parity check that ran *this* file's rule over the
+ * script's output could not see it.
+ */
+function scriptRule() {
+    const file = path.join(CHROME_DIR, '..', 'scripts', 'check-storage-numbers.mjs');
+    const src = fs.readFileSync(file, 'utf8');
+    const from = src.indexOf('const RIGHT_OPERATOR');
+    const to = src.indexOf('const offenders = [];');
+    assert.ok(from > 0 && to > from, 'the rule moved — update scriptRule()');
+    return new Function(`${src.slice(from, to)}\nreturn { stripComments, unwrappedNumericReads };`)();
+}
+
+/**
+ * Wrap a fragment in a top-level function.
+ *
+ * The rule scans one top-level function at a time, so a probe written as a bare
+ * statement is inside no slice and is never read — a "violation" that both
+ * implementations agree is clean. Every probe below goes through here, and the
+ * one probe that does not is asserted to be the exception.
+ */
+function fn(body) {
+    return `function probe() {\n${body}\n}\n`;
+}
+
+/** Every bare `localStorage['x']` / `getItem('x')` read that feeds an operator. */
+function unwrappedNumericReads(src) {
+    const out = [];
+    // Each slice answers two questions on its own: "is this read wrapped", and
+    // "is this followed variable wrapped". Pairs of (slice offset, position in
+    // slice) are added back together so a report names a line of `src`.
+    for (const { at, code } of functionSlices(src)) {
+        const re = /localStorage\s*(?:\[\s*(['"])(.*?)\1\s*\]|\.\s*getItem\s*\([^)]*\))/g;
+        let m;
+        while ((m = re.exec(code))) {
+            const before = beforeAt(code, m.index);
+            if (NUMERIC_WRAPPER.test(before.replace(/\s+$/, ''))) continue;
+            const op = operatorNear(before, code.slice(m.index + m[0].length));
+            if (op) out.push({ what: m[0], op, at: m.index + at });
+        }
+    }
+
+    // The same rule, applied where the value is used rather than read. Each
+    // slice is searched for the names it declared itself.
+    for (const { at, code, names } of slicesWithStringVars(src)) {
+        for (const name of names) {
+            const re = new RegExp(`(?<![.\\w$])${name.replace(/\$/g, '\\$')}(?![\\w$])`, 'g');
+            let hit;
+            while ((hit = re.exec(code))) {
+                const after = code.slice(hit.index + hit[0].length);
+                if (/^\s*[.[(]/.test(after)) continue; // `.length`, `.indexOf()`, `[i]`
+                const op = operatorNear(beforeAt(code, hit.index), after);
+                if (op) out.push({ what: name, op, at: hit.index + at });
+            }
+        }
+    }
+    return out;
+}
+
+test('a stored value used as a number is wrapped in Number() or parseInt()', () => {
+    // `11 > "10"` is true and `"120" - 3` is 117, so most of these sites have
+    // always behaved. The ones that do not are why the rule exists: comparing
+    // `load-range3` as strings puts "9" above "120", which ends the crawl early,
+    // and `"7" + 1` is "71". Both look right until the value leaves the range
+    // where the two orderings happen to agree.
+    //
+    // Number() on these sites is not a bug fix — it is the implicit conversion
+    // written down, so nobody has to remember which operator coerces. This guard
+    // is what stops the next read from being written the other way.
+    const offenders = [];
+    walkScripts((file, src) => {
+        for (const hit of unwrappedNumericReads(stripJsComments(src))) {
+            offenders.push(`${file.replace(/\\/g, '/')}: ${hit.what} ${hit.op}`);
+        }
+    });
+    assert.deepEqual(offenders, [], 'wrap the read in Number() — every stored value is a string');
+});
+
+test('the numeric-wrapper guard matches the shapes it claims to catch', () => {
+    // Pinned from both sides. A guard that only matches one spelling of "read a
+    // stored value" goes green by matching nothing, which is worse than no
+    // guard: it looks like the rule is being enforced.
+    //
+    // Fragments, not whole files: every probe below is a statement or two, and
+    // the rule scans one top-level function at a time — a bare statement is not
+    // inside one. `fn()` wraps each probe so it is still a shape the rule has to
+    // judge, exactly as it would see it in a real file, and the two assertions
+    // at the end pin that the wrapper is what makes the probes visible: without
+    // it every probe would silently report nothing.
+    const shapes = (src) => unwrappedNumericReads(functionSlices(fn(src))[0].code).length;
+    assert.equal(
+        unwrappedNumericReads(fn("if (dateId > localStorage['load-range']) { }")).length, 1,
+        'an unwrapped probe must be scanned',
+    );
+    assert.equal(
+        unwrappedNumericReads("if (dateId > localStorage['load-range']) { }").length, 0,
+        'a bare statement is not inside a function, so it is not scanned',
+    );
+
+    assert.equal(shapes("if (dateId > localStorage['load-range']) { }"), 1,
+        'the comparison that ends loadDate() early must be reported');
+    assert.equal(shapes("if (zNodes.length < localStorage['load-range4']) { }"), 1,
+        'a string comparison on the day count must be reported');
+    assert.equal(shapes("DAY * localStorage['load-range']"), 1,
+        'an operator to the left of the read counts too');
+    assert.equal(shapes("var n = localStorage['load-range'];\nif (dateId > n) { }"), 1,
+        'a value handed to a variable first is still a string when compared');
+    assert.equal(shapes("if (n > localStorage.getItem('load-range')) { }"), 1,
+        'getItem() reads the same storage');
+
+    // Not arithmetic: wrapped, the switch idiom, an assignment, a member access.
+    assert.equal(shapes("var n = Number(localStorage['load-range']);\nif (dateId > n) { }"), 0,
+        'the fix itself must pass');
+    assert.equal(shapes("if (localStorage['share-favicon-cache'] !== 'no') { }"), 0,
+        'comparing a switch to its literal is not numeric');
+    assert.equal(shapes("var grp = localStorage['rh-group'];\nif (grp == 'yes') { }"), 0);
+    assert.equal(shapes("var fbl = localStorage['rh-filtered'];\nif (fbl.length > 0) { }"), 0,
+        'the length of a string is a number already');
+    assert.equal(shapes("var rl = localStorage['mv-blocklist'];\nif (rl.indexOf(u) < 0) { }"), 0);
+    assert.equal(shapes("document.body.style.width = localStorage['rh-width'];"), 0,
+        'an assignment is not an operator on the value');
+    assert.equal(shapes("const load = (k) => localStorage[k];"), 0,
+        'an arrow returning the value is not a comparison');
+    assert.equal(shapes('oid++;'), 0, '`oid++` on a string yields a number');
+});
+
+test('the numeric-read rule agrees with scripts/check-storage-numbers.mjs', () => {
+    // Two implementations of one rule: this file's `unwrappedNumericReads` +
+    // `stringVarsFromStorage` + `stripJsComments`, and the standalone
+    // `npm run verify:storage-numbers`. They exist separately on purpose — one
+    // runs inside the suite, the other is a `verify` step anyone can point at a
+    // file — but they must not disagree about what the code says.
+    //
+    // They did, twice, and both times the probe was the reason this test exists
+    // rather than a reason to trust it:
+    //
+    //   * the stripper's `//` handling turned the `//` inside a regex literal
+    //     such as `/^(http|https)\:\/\//` into a comment that ran to the end of
+    //     the file, so everything after the first such regex was dropped;
+    //   * the two copies of the "a local that still holds a string" rule had
+    //     `(?:^|[;{])` and `(?:^|[;{]|\n)`. The most common real shape is a
+    //     name on the line after a closing brace — `popup-core.js`'s `var ca`,
+    //     `background-sw.js`'s `_shareFaviconCache` — so the suite stayed green
+    //     on code the script rejected.
+    //
+    // The probe list below is the fix: each entry is a shape that made the two
+    // implementations disagree, or that a naive rewrite would let them diverge
+    // on again. Three things are compared per probe — the stripped text
+    // character for character, the verdict, and the line count — because a
+    // report carrying the wrong line number is a report nobody can act on.
+    const probes = [
+        // A read below a regex literal: the stripper must not swallow it.
+        [
+            'a read after a regex literal',
+            fn('for (var i = 0; i < n; i++) {\n'
+            + 'if ((/^(http|https)\\:\\/\\//).test(u)) {\n'
+            + "var bad = localStorage['rh-itemsno']; if (bad > 3) { }\n"
+            + '}\n'),
+        ],
+        // A local assigned after a closing brace, then compared: the shape the
+        // suite's narrower anchoring used to miss.
+        ['a local followed across a newline', fn("}\nvar ca = localStorage['rh-click'];\nif (ca > 3) { }\n")],
+        ['a bare reassignment after a newline', fn("}\n_shareFaviconCache = localStorage['share-favicon-cache'];\n")],
+        // Line-comment runs: the newline must survive, or every later report
+        // carries a line number from the wrong line.
+        ['two line comments before a read', fn("// one\n// two\nvar bad = localStorage['rh-itemsno'];\nif (bad > 3) { }\n")],
+        // A block comment that spans lines.
+        ['a multi-line block comment', fn("/*\n  two\n  lines\n*/\nvar bad = localStorage['rh-itemsno'];\nif (bad > 3) { }\n")],
+        // Wrapped at the read: both must stay silent.
+        ['a wrapped read', fn("var n = Number(localStorage['load-range']);\nif (dateId > n) { }\n")],
+        // Equality only coerces against a number literal, so this is a violation
+        // while `=== 'yes'` is not. A rule that drops that distinction reports
+        // the switch idiom, which is how a check trains people to ignore it.
+        ['equality against a number literal', fn("if (localStorage['rh-itemsno'] === 3) { }\n")],
+        ['the switch idiom, which must stay silent', fn("if (localStorage['share-favicon-cache'] !== 'no') { }\n")],
+        // The operator on the left of the read, and a compound assignment.
+        // Each is a separate piece of the rule, and a piece that silently
+        // matches nothing is how a check goes green while enforcing nothing.
+        ['an operator to the left of the read', fn("DAY * localStorage['load-range']\n")],
+        ['a read on the right of a compound assignment', fn("x -= localStorage['rh-itemsno']\n")],
+        // A division, not a regex: both must still see the comment after it.
+        ['a division that looks like a regex', fn("var r = total / count; // note\nvar bad = localStorage['rh-itemsno'];\nif (bad > 3) { }\n")],
+        // A `/` in regex position with no closing `/` on its line, followed by a
+        // line comment. A stripper that lets a literal run past the newline
+        // swallows the `// comment` line as if it were part of the pattern —
+        // and a comment is exactly where a violation likes to hide.
+        ['a slash that must not reach the next line', fn("var r = 1 / 2\n// comment\nvar bad = localStorage['x'];\nif (bad > 3) { }\n")],
+        // The same local name in two top-level functions, wrapped in one of them
+        // only. A file-wide symbol table exempts both — which is what this rule
+        // did, on popup-core.js, where `itemsno` is declared three times.
+        // Everything below is wrapped in a function because the rule scans one
+        // function at a time; see the note on functionSlices().
+        [
+            'a name wrapped in one function and not the next',
+            'function a() {\n'
+            + "var itemsno = Number(localStorage['rt-itemsno']);\n"
+            + 'if (itemsno > 0) { }\n'
+            + '}\n'
+            + 'function b() {\n'
+            + "var itemsno = localStorage['mv-itemsno'];\n"
+            + 'if (itemsno > 0) { }\n'
+            + '}\n'
+            + 'function c() {\n'
+            + "var other = localStorage['mv-itemsno'];\n"
+            + 'if (other > 0) { }\n'
+            + '}\n',
+        ],
+        // Statements outside every function: the slice is the file up to the
+        // first `function`, so a violation there must still be reported.
+        // Not wrapped, on purpose: statements outside every function are their
+        // own slice, and a read there has to be judged like any other. This is
+        // the only probe `fn()` does not wrap, and the assertion after the loop
+        // checks that it is the only one.
+        ['statements outside every function', "var bad = localStorage['rh-itemsno'];\nif (bad > 3) { }\nfunction a() { }\n"],
+    ];
+
+    // The script's side is loaded by slicing its source, because its driver loop
+    // runs at module scope and importing it would scan the tree a second time.
+    const shipped = scriptRule();
+
+    for (const [what, probe] of probes) {
+        const suiteStripped = stripJsComments(probe);
+        // Compared as text, not as two derived numbers. Asserting only "same
+        // verdict, same line count" leaves a stripper free to mangle the code it
+        // copies through — dropping the closing slash of a regex literal keeps
+        // both counts identical while the rule is now reading a different file.
+        // The stripped sources being equal is the invariant that makes the two
+        // verdicts comparable in the first place.
+        assert.equal(
+            shipped.stripComments(probe),
+            suiteStripped,
+            `the two strippers must agree character for character on: ${what}`,
+        );
+        // Each side's rule runs over its own stripped text. Running one rule
+        // over the other's output was how the mismatched `stringVarsFromStorage`
+        // patterns stayed invisible.
+        const suiteVerdict = unwrappedNumericReads(suiteStripped);
+        const shippedVerdict = shipped.unwrappedNumericReads(shipped.stripComments(probe));
+        assert.equal(
+            suiteVerdict.length,
+            shippedVerdict.length,
+            `the two checks must reach the same verdict on: ${what}`,
+        );
+        // ...and report it at the same place. `unwrappedNumericReads` walks one
+        // top-level function at a time and adds the slice offset back to reach a
+        // line of the file; a copy that skipped that addition would agree on the
+        // count and disagree on where the code is.
+        assert.deepEqual(
+            suiteVerdict.map((hit) => suiteStripped.slice(0, hit.at).split('\n').length),
+            shippedVerdict.map((hit) => shipped.stripComments(probe).slice(0, hit.at).split('\n').length),
+            `the two checks must count lines the same way on: ${what}`,
+        );
+        assert.equal(
+            suiteStripped.split('\n').length,
+            probe.split('\n').length,
+            `the line count must survive the strip on: ${what}`,
+        );
+    }
+
+    // And the verdicts have to be the interesting ones, not a column of silent
+    // zeros: a parity guard that compares "no violations" against "no
+    // violations" is green by matching nothing, which is the failure this whole
+    // pair of checks was written about.
+    const offenders = probes.filter(([, p]) => unwrappedNumericReads(stripJsComments(p)).length > 0);
+    assert.ok(offenders.length >= 5,
+        `the probe list needs violations to disagree about, not just agreements (found ${offenders.length})`);
+
+    // Every probe with a violation has to be inside a top-level function, or the
+    // rule never reads it — see functionSlices(). A probe written as a bare
+    // statement is a "violation" that both implementations agree is clean, which
+    // is exactly the column of silent zeros the assertion above prevents. So the
+    // two counts have to match: the probes that report something are the probes
+    // that are wrapped, with the single exception of the one about statements
+    // outside every function.
+    const wrapped = probes.filter(([, p]) => /^function\s/.test(stripJsComments(p).trimStart()));
+    assert.equal(
+        probes.filter(([, p]) => /localStorage/.test(stripJsComments(p))).length,
+        wrapped.length + 1,
+        `${offenders.length} probes report a violation but only ${wrapped.length}`
+        + ' are inside a function — wrap the rest in fn(), or the rule never reads them',
+    );
+});
+
+// ---------------------------------------------------------------------------
 // Permissions
 // ---------------------------------------------------------------------------
 
@@ -1131,4 +1650,57 @@ test('popup rows carry no dead per-row controls', () => {
         assert.doesNotMatch(popupCore, new RegExp(`class="${cls}"`), `popup-core.js renders .${cls} again`);
         assert.doesNotMatch(popupCss, new RegExp(`\\.${cls}\\b`), `css/popup.css still styles .${cls}`);
     }
+});
+
+test('popup-core.js does not export its renderer internals', () => {
+    // `showRecentTabs` normalises an odd-shaped snapshot and then hands the
+    // result to `showRecentTabsImpl`. Exporting the implementation alongside it
+    // gives the next caller a way past the normalising — which is the one thing
+    // this pair exists to prevent, and the reason a PR that added the export was
+    // sent back. The only consumer outside the module was the test file, and it
+    // goes through `showRecentTabs` now.
+    //
+    // Asserted by name rather than by counting call sites: a second caller inside
+    // the module is fine, a second name in the export block is not.
+    const src = fs.readFileSync(path.join(CHROME_DIR, 'scripts/modules/popup-core.js'), 'utf8');
+    const block = /export \{([\s\S]*?)\};/.exec(src);
+    assert.ok(block, 'popup-core.js no longer has an export block');
+    const exported = block[1].split(',').map((name) => name.trim()).filter(Boolean);
+
+    assert.ok(exported.includes('showRecentTabs'), 'showRecentTabs is the entry point and must stay exported');
+    for (const internal of ['showRecentTabsImpl', 'readTabList', 'readTabListFromTabs', 'tabListArea']) {
+        assert.ok(
+            !exported.includes(internal),
+            `${internal} is an internal of showRecentTabs() and must not be exported`,
+        );
+    }
+});
+
+test('the e2e favicon blocklist matches the service worker patterns', () => {
+    // e2e/pages.spec.mjs aborts every favicon request before it leaves the
+    // browser: offline these hosts do not fail, they hang, and a pending <img>
+    // holds the document's `load` event open — which made goto(waitUntil:'load')
+    // time out at random. The blocklist is a copy of
+    // FAVICON_SERVICE_PATTERNS, so the two can drift: add a service to the
+    // worker and the e2e suite quietly goes back to hanging on it.
+    //
+    // Compared as a set, not by order — the worker's list is scanned with
+    // indexOf() and order carries no meaning there.
+    const sw = fs.readFileSync(path.join(CHROME_DIR, 'scripts/background-sw.js'), 'utf8');
+    const spec = fs.readFileSync(path.resolve(CHROME_DIR, '../e2e/pages.spec.mjs'), 'utf8');
+
+    const block = /const FAVICON_SERVICE_PATTERNS = \[([\s\S]*?)\];/.exec(sw);
+    assert.ok(block, 'background-sw.js no longer declares FAVICON_SERVICE_PATTERNS');
+    const fromSw = [...block[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
+
+    const specBlock = /const FAVICON_SERVICE_HOSTS = \[([\s\S]*?)\];/.exec(spec);
+    assert.ok(specBlock, 'e2e/pages.spec.mjs no longer declares FAVICON_SERVICE_HOSTS');
+    const fromSpec = [...specBlock[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
+
+    assert.ok(fromSw.length > 0, 'expected at least one favicon service pattern');
+    assert.deepEqual(
+        [...fromSw].sort(),
+        [...fromSpec].sort(),
+        'e2e/pages.spec.mjs must abort every favicon host the worker can produce',
+    );
 });
