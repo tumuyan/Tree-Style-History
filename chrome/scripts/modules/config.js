@@ -197,25 +197,121 @@ function loadOptions(full) {
 
 
 
+// Which keys in this store belong to the config subsystem at all.
+//
+// chrome.storage.local is shared with the SW's runtime state (calendar-storage2
+// / calendar-storage / oid / favicon-negative-cache / mv-cache). "Not a config
+// key" is therefore not the same as "a retired config key" — treating it that
+// way deleted the heat map, the crawl cursor and the negative favicon cache on
+// every restore. The namespace is named instead, so a key is only swept when it
+// is spelled like one of ours: the two prefixes every config key already uses
+// (`rh-` / `rhs-`), plus the handful of keys that live under another name. The
+// zoom pair is the current example of that second kind; retired keys that were
+// never renamed land in the first kind for free, which is the common case.
+const CONFIG_KEY = /^(?:rhs?-|popup-zoom$|page-zoom$)/;
+
+// ...except `rh-version-<version>`, which matches the `rh-` prefix, has no
+// entry in `defaultValues` (the version *is* the key, so the table cannot list
+// them), and is not a setting at all: popup.js writes it to show the "installed"
+// banner once per version. Swept as a retired key, it re-arms the banner on
+// every restore. Written by the extension, never by the user, which is why the
+// carve-out sits here rather than in the defaults table.
+const VERSION_FLAG_KEY = /^rh-version-/;
+
+
+
 function downloadOptions() {
+
+    // A restored key has to be one the extension still has a default for.
+    // chrome.storage.sync is the one store whose contents are not in this
+    // repository: it still holds whatever earlier versions uploaded, so
+    // enumerating it and writing every key back resurrects settings that were
+    // deleted from the code years ago (rh-time / rh-share / rhs-showbg), and
+    // they come back to stay — nothing reads them, so nothing ever removes them.
+    //
+    // The whitelist is `defaultValues`, not a hand-kept list of retired keys: a
+    // list like that is one more artefact with entries and no exits, which is
+    // exactly what was being deleted. Deleting a key from the defaults table is
+    // the whole instruction — from then on it stops being restored, the local
+    // copy is dropped below, and the cloud copy is swept. The keys that live in
+    // defaultValues without an options-page control (rh-pinned, rh-group,
+    // rh-orderby, rh-order) are written by the history/bookmark pages, so they
+    // round-trip like any other key.
+    //
+    // Filter slices are storage buckets rather than config keys, and the count
+    // of slices is not a setting either.
+    const FILTERLIST_ANY = /^filterlist/;
 
     chrome.storage.sync.get(null, function (result) {
         $('downloadConfig').value = returnLang('saving');
 
+        // The upload spells every '-' as '_' (see saveOptions), so the name a
+        // slice/key arrives under is the underscored one. The two spellings are
+        // kept apart on purpose: `i` is the cloud key, `j` the local one, and
+        // each sweep uses its own side's spelling. Deriving one from the other
+        // is what put `rh_share` back into the cloud — deleting a local
+        // `rh-share` is a write, chrome.storage.onChanged carries it to the SW,
+        // and the SW writes storage back up with its own dash-to-underscore
+        // mapping. The key this PR exists to remove would be re-uploaded.
+        const retired = [];
+        const cloud = [];
         for (const i in result) {
-            if (i.indexOf('filterlist') < 0) {
-                // Every underscore, not just the first: saveOptions() turns every
-                // '-' into '_' on the way up, so 'favicon-service-fallback' used
-                // to come back as 'favicon-service_fallback' — a key nobody reads.
-                let j = i.replace(/_/g, '-');
-                if (result != undefined)
-                    localStorage[j] = result[i];
-            }
+            if (FILTERLIST_ANY.test(i)) continue;
 
-            // console.log(i);
+            // Every underscore, not just the first: saveOptions() turns every
+            // '-' into '_' on the way up, so 'favicon-service-fallback' used
+            // to come back as 'favicon-service_fallback' — a key nobody reads.
+            let j = i.replace(/_/g, '-');
+
+            // Judged by the local name, compared against the defaults table as
+            // spelled there — never against a pre-underscored copy of it. The
+            // cloud spelling of a key is not one thing: 3.3.0 and earlier
+            // uploaded with `replace('-', '_')` (first dash only), so a
+            // live key with two dashes sits in the cloud as
+            // 'rh_list-order'. Matched on `_`-spelled names, every such key
+            // looked retired: its current local value was deleted and its
+            // cloud copy swept, resetting rh-list-order,
+            // share-favicon-cache and favicon-service-fallback for anyone who
+            // had ever synced. `j` has every underscore back to a dash, so the
+            // two sides line up whichever spelling the cloud arrived in.
+            if (j in defaultValues) {
+                localStorage[j] = result[i];
+            } else {
+                retired.push(j);
+                cloud.push(i);
+            }
         }
 
-        location.reload();
+        // Keys that left the defaults table are swept here rather than left to
+        // rot — two-sided, because a retired key now typically lives in both
+        // places: the sync copy arrives on every restore, and the local copy is
+        // already sitting there from the version that wrote it. The local copy
+        // of a key that is no longer uploaded anywhere has no other visitor, so
+        // leaving it is the same as leaving it forever.
+        //
+        // The local side is "spelled like one of ours and absent from the
+        // defaults table", never "everything in localStorage": that store also
+        // holds the SW's runtime state (calendar-storage2, calendar-storage,
+        // oid, favicon-negative-cache, mv-cache), and deleting those zeroed the
+        // heat map, threw away the crawl cursor and the negative favicon cache.
+        const local = Object.keys(localStorage).filter(function (key) {
+            return CONFIG_KEY.test(key)
+                && !VERSION_FLAG_KEY.test(key)
+                && !(key in defaultValues);
+        });
+        for (const j of retired.concat(local)) delete localStorage[j];
+
+        const done = function () { location.reload(); };
+        if (cloud.length == 0) {
+            done();
+        } else {
+            // A restore that reports success while the sweep failed would leave
+            // the key to come back on the next click, so the failure is logged
+            // rather than silently swallowed.
+            syncRemove(cloud).catch(function (err) {
+                console.error('Failed to drop retired config keys:', err);
+            }).then(done);
+        }
 
         // loadOptions(false);
         // $('downloadConfig').value = returnLang('downloadConfig');

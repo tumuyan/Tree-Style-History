@@ -635,6 +635,219 @@ test('downloadOptions restores the values that saveOptions(true) uploaded', asyn
     }
 });
 
+test('downloadOptions only restores keys the extension still has a default for', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    formDefaults();
+    env.syncStore.clear();
+    try {
+        await config.saveOptions(true);
+
+        // What an upgrade from 3.3.0 looks like: the cloud still carries the
+        // three keys that were deleted from the defaults table, along with a
+        // copy of a live key to prove the restore still works.
+        env.syncStore.set('rh_time', 'yes');
+        env.syncStore.set('rh_share', 'no');
+        env.syncStore.set('rhs_showbg', 'yes');
+        env.syncStore.set('rh_itemsno', '9');
+
+        env.store.clear();
+        config.downloadOptions();
+
+        assert.equal(env.store.get('rh-itemsno'), '9', 'a live key is still restored');
+        assert.equal(env.store.has('rh-time'), false, 'a key with no default is not restored');
+        assert.equal(env.store.has('rh-share'), false);
+        assert.equal(env.store.has('rhs-showbg'), false);
+    } finally {
+        t.mock.timers.reset();
+    }
+});
+
+test('downloadOptions sweeps retired keys out of sync instead of leaving them behind', async (t) => {
+    // Without the sweep the whitelist only hides the problem: the key stays in
+    // the cloud and is skipped again on every subsequent restore. Nothing else
+    // ever removes it — that is how the three keys outlived their readers.
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    formDefaults();
+    env.syncStore.clear();
+    try {
+        await config.saveOptions(true);
+        env.syncStore.set('rh_time', 'yes');
+        env.syncStore.set('filterlist0', 'a.com|');
+        env.syncStore.set('filterlist_slices', '1');
+
+        const kept = new Map(env.syncStore);
+        env.store.clear();
+        config.downloadOptions();
+
+        assert.equal(env.syncStore.has('rh_time'), false, 'the retired key is gone from chrome.storage.sync');
+        assert.equal(env.syncStore.get('rh_itemsno'), kept.get('rh_itemsno'), 'live keys stay in the cloud');
+        assert.equal(env.syncStore.get('filterlist0'), 'a.com|', 'filter slices are not config keys and must survive');
+        assert.equal(env.syncStore.get('filterlist_slices'), '1');
+    } finally {
+        t.mock.timers.reset();
+    }
+});
+
+test('downloadOptions drops a retired key that only exists locally', async (t) => {
+    // The sync copy is not the only corpse: the version that wrote the key left
+    // it in chrome.storage.local, and a restore that only swept the cloud would
+    // keep showing it in devtools forever on a profile that never synced again.
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    formDefaults();
+    env.syncStore.clear();
+    try {
+        await config.saveOptions(true);
+        env.store.set('rh-share', 'yes');
+        env.store.set('rh-pinned', 'false');
+
+        config.downloadOptions();
+
+        assert.equal(env.store.has('rh-share'), false, 'a local copy of a retired key is swept too');
+        assert.equal(env.store.get('rh-pinned'), 'false', 'rh-pinned has a default, so it round-trips');
+    } finally {
+        t.mock.timers.reset();
+    }
+});
+
+test('downloadOptions leaves the SW runtime state alone', async (t) => {
+    // localStorage under this adapter is not the config file — it is the whole
+    // of chrome.storage.local. Treating every key that is not a config key as a
+    // retired one zeroed the heat map (calendar-storage2 is hydrated once, at
+    // startup, so the page cannot put it back), threw away the crawl cursor
+    // (calendar-storage), the closed-tab group ordinal (oid), the negative
+    // favicon cache and the most-visited cache.
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    formDefaults();
+    env.syncStore.clear();
+    try {
+        await config.saveOptions(true);
+
+        const runtime = {
+            'calendar-storage2': '{"1700000000000":7}',
+            'calendar-storage': '{"cursor":1}',
+            'oid': '4',
+            'favicon-negative-cache': '{"https://x/favicon.ico":1700000000000}',
+            'mv-cache': '[{"url":"a.com"}]',
+        };
+        for (const [key, value] of Object.entries(runtime)) env.store.set(key, value);
+
+        config.downloadOptions();
+
+        for (const [key, value] of Object.entries(runtime)) {
+            assert.equal(env.store.get(key), value, `${key} is runtime state, not a retired config key`);
+        }
+    } finally {
+        t.mock.timers.reset();
+    }
+});
+
+test('the sweep names cloud keys the cloud itself spelled', async (t) => {
+    // The two spellings have to be kept apart, so the keys handed to
+    // chrome.storage.sync.remove() are asserted directly rather than inferred
+    // from what the cloud looks like afterwards (a stub whose remove() is a
+    // no-op makes that inference vacuous).
+    //
+    // Deriving the cloud name from the local one re-uploads a key: removing a
+    // local `rh-share` is a write, chrome.storage.onChanged hands it to the SW,
+    // and the SW's upload maps '-' to '_'. 'rh_share' is exactly the corpse
+    // this change is meant to bury, so the sweep may only name the keys it
+    // actually found in the cloud.
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    formDefaults();
+    env.syncStore.clear();
+    const removed = [];
+    let stop;
+    try {
+        await config.saveOptions(true);
+        env.syncStore.set('rh_time', 'yes');
+        // Local-only leftovers: no cloud copy exists to be removed.
+        env.store.set('rh-share', 'yes');
+        env.store.set('rh-width-old', '1px');
+
+        stop = withChromeApi({
+            storage: {
+                ...globalThis.chrome.storage,
+                sync: {
+                    ...globalThis.chrome.storage.sync,
+                    remove: (keys, cb) => {
+                        removed.push(...(Array.isArray(keys) ? keys : [keys]));
+                        if (cb) cb();
+                        return Promise.resolve();
+                    },
+                },
+            },
+        }, () => config.downloadOptions());
+        await stop;
+
+        assert.deepEqual(removed, ['rh_time'], 'only the key the cloud carried is removed from the cloud');
+        assert.equal(env.store.has('rh-share'), false, 'the local copy is swept all the same');
+        assert.equal(env.store.has('rh-width-old'), false);
+    } finally {
+        t.mock.timers.reset();
+    }
+});
+
+test('downloadOptions restores live keys however many dashes the cloud spelled away', async (t) => {
+    // The whitelist is `defaultValues`, and the comparison must happen on the
+    // local dash-spelled name — never on an underscored copy of the defaults
+    // table. chrome.storage.sync holds what earlier versions uploaded, and
+    // 3.3.0 and earlier used `replace('-', '_')`, which underscores only the
+    // first dash. So a live key with two dashes lives in the cloud as
+    // 'rh_list-order', not 'rh_list_order'. Judged against the underscored
+    // spelling, every such key looked retired: its local value was deleted and
+    // its cloud copy swept, resetting the setting on both sides.
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    formDefaults();
+    env.syncStore.clear();
+    try {
+        await config.saveOptions(true);
+        env.store.clear();
+
+        // 'rh-list-order' arrives in the old (first-dash-only) spelling;
+        // 'share-favicon-cache' and 'favicon-service-fallback' in the current
+        // one. Both must survive, in either direction.
+        env.syncStore.set('rh_list-order', 'rt,rh,rct,rcb,rb,mv');
+        env.syncStore.set('share_favicon_cache', 'no');
+        env.syncStore.set('favicon_service_fallback', 'duckduckgo');
+
+        config.downloadOptions();
+
+        assert.equal(env.store.get('rh-list-order'), 'rt,rh,rct,rcb,rb,mv',
+            'a key whose cloud spelling lost only the first dash is still a live key');
+        assert.equal(env.store.get('share-favicon-cache'), 'no');
+        assert.equal(env.store.get('favicon-service-fallback'), 'duckduckgo');
+        assert.equal(env.syncStore.get('rh_list-order'), 'rt,rh,rct,rcb,rb,mv',
+            'the cloud copy of a live key is not swept either');
+        assert.equal(env.syncStore.has('share_favicon_cache'), true);
+        assert.equal(env.syncStore.has('favicon_service_fallback'), true);
+    } finally {
+        t.mock.timers.reset();
+    }
+});
+
+test('the per-version install flag is not mistaken for a retired key', async (t) => {
+    // popup.js writes 'rh-version-<version>' so the "installed" banner shows
+    // once. It is not in `defaultValues` (the version is the key, so the table
+    // cannot list them), yet it is not retired either — sweeping it re-arms the
+    // banner on every restore. Asserted through the public entry point because
+    // the carve-out lives in downloadOptions(), not in the table.
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    formDefaults();
+    env.syncStore.clear();
+    try {
+        await config.saveOptions(true);
+        env.store.clear();
+        env.store.set('rh-version-3.3.1', 'true');
+
+        config.downloadOptions();
+
+        assert.equal(env.store.get('rh-version-3.3.1'), 'true',
+            'the install flag outlives a restore');
+    } finally {
+        t.mock.timers.reset();
+    }
+});
+
 test('no config key contains an underscore', () => {
     // The sync layer renames keys: saveOptions() replaces every '-' with '_' on
     // the way into chrome.storage.sync, and downloadOptions() replaces every '_'
