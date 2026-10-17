@@ -32,6 +32,10 @@ var calendar_r = {};
 
 var urls_wait_load = new Array();
 
+// `{ <dayKey>: <visit count> }` gathered by the crawl as it walks;
+// flushed into `calendar_storage2` by saveCrawledHeat() when it finishes.
+var heatDays = {};
+
 // Tab tracking data
 var openerJson = {};
 var tabUrlJson = {};
@@ -900,14 +904,21 @@ async function loadDate(date, dateId) {
         await add_urls([], date, dateId);
     } else {
         console.debug("load dday=" + dday + ":" + calendar[dday] + " qday=" + qday + ":" + calendar[qday]);
-        let obj = { text: '', maxResults: 0, startTime: date - (24 * 3600 * 1000), endTime: date };
-        
+        let obj = { text: '', maxResults: 0, startTime: date - DAY, endTime: date };
+
         try {
             let hi = await new Promise(resolve => chrome.history.search(obj, resolve));
             if (hi.length > 0) {
                 hi.sort(function (a, b) { return b.visitCount - a.visitCount });
-                save_calendar_storage2(obj, hi.length, false);
             }
+            // No heat-map write here. This loop reads the last `load-range`
+            // days on *every* start only to prime the tab/tree data, and doing
+            // that work is the option's own documented cost ("consumes
+            // resources to cache"). The map is filled once by the crawl in
+            // processVisits(), which walks visits (not row summaries) and can
+            // reach days older than this window; the one day neither of them
+            // writes is today, which belongs to the page (see
+            // saveCrawledHeat()).
             await add_urls(hi, date, dateId);
         } catch (error) {
             console.error("loadDate search error:", error);
@@ -1038,6 +1049,14 @@ function loadHistory() {
     });
 }
 
+// --- Crawl tuning ---------------------------------------------------------
+//
+// All of the crawl's constants are declared before any function reaches for
+// them, `loadHistory()` included — it calls `processVisits()` and is defined
+// further down this file. `const` is in the temporal dead zone until execution
+// reaches it, so a declaration placed after a caller is not merely untidy: it
+// throws on the path that caller starts, and only there.
+//
 // How many URLs to ask chrome.history.getVisits() about at once. Six keeps
 // the crawl moving without tripping the history API's own throttling.
 const VISIT_CONCURRENCY = 6;
@@ -1062,6 +1081,17 @@ async function processVisits() {
     const start = await restoreCrawlCursor();
     console.debug("getVisits() start=" + start + "/" + urls_wait_load.length);
 
+    // The crawl is also where the heat map's back-fill comes from: it is
+    // already walking every visit of every URL in the window, so counting them
+    // per day costs no extra history API calls (a per-day `chrome.history.search`
+    // would be one full scan per day, which is what this crawl exists to avoid).
+    // What lands in the map is decided by saveCrawledHeat() once the walk is
+    // over; today's bucket is gathered here like any other and dropped there.
+    //
+    // On the module, not a local: crawlUrlVisits() runs concurrent chunks and
+    // cannot borrow the loop's variables, and this is the same shape as the
+    // other crawl accumulators (visitBatch / urlBatch).
+    heatDays = {};
     let sinceCheckpoint = 0;
     for (let urls_p = start; urls_p < urls_wait_load.length; urls_p += VISIT_CONCURRENCY) {
         setBadge((urls_wait_load.length - urls_p).toString());
@@ -1090,8 +1120,75 @@ async function processVisits() {
 
     await flushCrawlBatch();
     await clearCrawlCursor();
+    saveCrawledHeat(heatDays);
     setBadge('', true); // forced: the badge must end up cleared
     console.debug("getVisits() done.");
+}
+
+/**
+ * Fill in the heat map for the days the crawl just walked.
+ *
+ * `days` is `{ <dayKey>: <count> }` gathered by countHeatVisit(). The rule is
+ * per day, and it needs no extra state: write a day that holds nothing usable,
+ * leave every other day exactly as it is. A day the map already has a count for
+ * is one the crawl is *not* authoritative about — it was counted by an earlier
+ * crawl over the same window, or by the page while the user looked at it, and
+ * neither number is a recomputation of the other. So an existing count stays
+ * until the retention cleanup deletes the day (`load-range3`, off by default),
+ * at which point the day is empty again and refills on the next start.
+ *
+ * That is also why today is never written here. Today is the one day that keeps
+ * moving, and the page is its authority: it counts the day it is displaying
+ * (history() -> save_calendar_storage2(..., overwrite: true)) and it is the only
+ * surface that sees browsing which happened after this crawl ran. A count taken
+ * here would be the state of the day at crawl time, and — being non-zero — would
+ * then hide today from the crawl forever, outliving the page that wrote a fresher
+ * one. Today is simply not this function's business.
+ *
+ * Note this records *visits*, while the page counts *rows* (one per URL). The
+ * two only agree for a day browsed one page at a time; the counters live on
+ * either side of the SW/page split. The alternative — `chrome.history.search`
+ * per day, which is what produced the page's row counts — costs one full history
+ * scan per day of the window on *every* service worker start, which is what the
+ * crawl exists to avoid.
+ */
+function saveCrawledHeat(days) {
+    // The key of the day in progress, computed once. Comparing the numeric keys
+    // (not the strings they are stored as) is what makes the skip exact: a
+    // millisecond off is a different day.
+    const todayKey = dayKey(Date.now());
+    let stored = false;
+    for (const key of Object.keys(days)) {
+        const n = days[key];
+        if (n < 1) continue;
+        if (Number(key) === todayKey) continue;
+        if (calendar_storage2[key] != undefined) continue;
+        calendar_storage2[key] = n;
+        stored = true;
+    }
+    if (stored) localStorage['calendar-storage2'] = JSON.stringify(calendar_storage2);
+}
+
+/**
+ * Count one visit towards its day in `days`, skipping nothing.
+ *
+ * Counts every visit whose `title`/`url` pair is not itself a browser-internal
+ * page — the same rule add_urls() uses to decide what goes into the database —
+ * so the square says what the tree below it can show. It does not apply
+ * `filtUrl()` (user-configured host filtering): that lives page-side in
+ * config.js and is not available to the worker, so a filtered day's square can
+ * count rows the list hides. That is one level of slop looser than the row
+ * count the page produces — which, together with "today keeps moving", is why
+ * today is left to the page rather than counted here (see saveCrawledHeat()).
+ */
+function countHeatVisit(days, v, url_item) {
+    const title = url_item.title;
+    const url = url_item.url;
+    if ((/^(http|https|ftp|ftps|file|chrome|chrome-extension|chrome-devtools)\:\/\/(.*)/).test(title)) return;
+    if ((/^(ftp|ftps|file|chrome|chrome-extension)\:\/\/(.*)/).test(url)) return;
+
+    const key = dayKey(v.visitTime);
+    days[key] = (days[key] || 0) + 1;
 }
 
 async function crawlUrlVisits(url_item) {
@@ -1129,6 +1226,8 @@ async function crawlUrlVisits(url_item) {
         }
 
         if (refer == undefined) refer = 0;
+
+        countHeatVisit(heatDays, v, url_item);
 
         visitBatch.push({
             visitId: v.visitId,

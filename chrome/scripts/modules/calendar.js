@@ -10,7 +10,10 @@
 
 import { $, $$, createElement } from '../dom-helper.js';
 import { history } from './history-core.js';
-import { calendar_storage2, save_calendar_storage2 } from './shared/calendar-storage.js';
+import { calendar_storage2, save_calendar_storage2, dayKey } from './shared/calendar-storage.js';
+// The heat-map colours live in their own module: history-core.js needs them
+// too, and this file imports `history` from there, so they cannot live here.
+import { paintDay } from './calendar-colors.js';
 
 // --- Calendar storage ---
 
@@ -139,6 +142,9 @@ function calendar(w, e, clickCallback) {
                 text: (ii + 1),
                 'class': 'day'
             });
+            // Same key as the cells below: the selected day is not special,
+            // it just also carries id="selected".
+            paintDay(dayLink, calendar_storage2[dayKey(new Date(ydatec, mdatec, ii + 1, 23, 59, 59, 999).getTime())]);
             dayLink.addEventListener('click', function () {
                 var cel = this;
                 var di;
@@ -157,29 +163,21 @@ function calendar(w, e, clickCallback) {
             });
             $('calendar-days').appendChild(dayLink);
         } else {
-            let _time = new Date(ydatec, mdatec, ii, 23, 59, 59, 999).getTime();
-            // -86400000
+            // `ii` is the loop's 0-based counter; the cell is labelled and the
+            // day is selected as `ii + 1`. Building the key from `ii` looked
+            // up the *previous* day's count, so every square was painted one
+            // day late. It went unnoticed because the writer used the same
+            // off-by-one expression in the other direction (startTime minus a
+            // day) and the two cancelled out.
+            let _time = dayKey(new Date(ydatec, mdatec, ii + 1, 23, 59, 59, 999).getTime());
             let rhat = calendar_storage2[_time];
-            let style = '';
-
-            // An unknown day count simply has no style: every range test below
-            // is false for undefined, so it falls through untouched.
-            if (rhat > 0 && rhat < 50) {
-                style = ('background-color:#daf3cb');
-            } else if (rhat > 49 && rhat < 100) {
-                style = ('background-color:#aade8a');
-            } else if (rhat > 99 && rhat < 150) {
-                style = ('background-color:#6dc738');
-            } else if (rhat >= 150) {
-                style = ('background-color:#4e991f');
-            }
 
             dayLink = createElement('a', {
                 href: '#',
                 text: (ii + 1),
-                'class': 'day',
-                'style': style
+                'class': 'day'
             });
+            paintDay(dayLink, rhat);
             dayLink.addEventListener('click', function () {
                 var cel = this;
                 var di;

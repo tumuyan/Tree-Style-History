@@ -311,6 +311,9 @@
     "totalHistoryItems": {
         "message": "总计历史条数："
     },
+    "totalTabsInTree": {
+        "message": "树节点条数："
+    },
     "deleteItems": {
         "message": "删除项目"
     },

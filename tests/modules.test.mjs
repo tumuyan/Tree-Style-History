@@ -146,6 +146,7 @@ const EXPECTED_EXPORTS = {
         'filtUrl', 'addList', 'mergeList',
     ],
     'modules/calendar.js': ['calendar_storage2', 'isLeapYear', 'calendar', 'showCalendar', 'save_calendar_storage2'],
+    'modules/calendar-colors.js': ['paintDay', 'paintSelectedDay'],
     'modules/popup-core.js': [
         'leftClick', 'rightClick', 'formatItem', 'popupSearch', 'recentHistory',
         'recentlyClosedTabs', 'recentBookmarks', 'mostVisited', 'showRecentTabs', 'pinned',
@@ -1764,4 +1765,367 @@ test('saveOptions leaves settings without an options-page control alone', async 
     for (const key of untouched) {
         assert.equal(localStorage[key], undefined, `saveOptions wrote ${key}, which has no control here`);
     }
+});
+
+// ---------------------------------------------------------------------------
+// Heat map aggregation (calendar-storage.js)
+//
+// The map is `{ dayKey: rowCount }` and it is written by two runtimes. These
+// tests pin the contract both rely on: which day a query window belongs to,
+// and whether a write is allowed to replace what is already there.
+// ---------------------------------------------------------------------------
+
+const DAY_MS = 86400000;
+
+/**
+ * The map's key for the day `t` falls on: `t`'s date at 23:59:59.999.
+ *
+ * Written out here rather than imported so that a change to the module's own
+ * `dayKey()` cannot silently redefine what these tests consider correct.
+ * Note it is the day's *end*, not its midnight — a day's window is
+ * `[dayEnd - DAY, dayEnd]`, so the key has to be the inclusive end or every
+ * entry shifts back by one day.
+ */
+function dayKeyOf(t) {
+    const d = new Date(t);
+    d.setHours(23);
+    d.setMinutes(59);
+    d.setSeconds(59);
+    d.setMilliseconds(999);
+    return d.getTime();
+}
+
+/** A `[dayEnd - DAY, dayEnd]` window covering the day `offsetDays` from today. */
+function dayWindow(offsetDays) {
+    const end = dayKeyOf(Date.now() + offsetDays * DAY_MS);
+    return { text: '', maxResults: 0, startTime: end - DAY_MS, endTime: end };
+}
+
+/**
+ * Empty the map before a test asserts on it.
+ *
+ * `calendar_storage2` is live module state, not storage: it is read once when
+ * the module is first imported and every later write mutates that same object.
+ * `restoreStorage()` only puts `localStorage` back, so without this the days a
+ * previous test recorded are still in the map and "was this day written?"
+ * answers yes for reasons that have nothing to do with the test asking.
+ */
+function clearCalendarMap(calendar_storage2) {
+    for (const key of Object.keys(calendar_storage2)) delete calendar_storage2[key];
+}
+
+test('save_calendar_storage2 accepts the Service Worker\'s maxResults: 0 query', async (t) => {
+    // Regression guard for the bug that made the heat map click-only: the
+    // recorder used to require `maxResults >= 9999` as a stand-in for "this is
+    // a full-day sample". The Service Worker asks with `maxResults: 0`, which
+    // means the same thing ("unlimited") but is numerically less than 9999 — so
+    // *every* Service Worker write was dropped and no square ever got painted
+    // without being clicked first.
+    const { save_calendar_storage2, calendar_storage2 } = await importModule('modules/shared/calendar-storage.js');
+    restoreStorage(t, ['calendar-storage2']);
+    clearCalendarMap(calendar_storage2);
+
+    const win = dayWindow(-1);
+    save_calendar_storage2(win, 7, false);
+
+    // Keyed by the window's END: that is the day the window covers, and the
+    // day calendar.js builds its cells from.
+    assert.equal(calendar_storage2[dayKeyOf(win.endTime)], 7);
+});
+
+test('save_calendar_storage2 keys the map by the queried day, not by today', async (t) => {
+    // The old guard was `(startTime - _DATE + 1) % DAY == 0`, and this case was
+    // originally written as if that guard had rejected anything but today. It
+    // did not: both ends of any day's window are the same 23:59:59.999, so the
+    // expression is 0 for every offset — the guard never rejected anything.
+    // The only thing that actually blocked a non-today write was the
+    // `maxResults >= 9999` field check above, and that is covered by the
+    // `maxResults: 0` case.
+    //
+    // So what this case is for is the *window* check that replaced it
+    // (`endTime - startTime == DAY`), from the caller's side: a day that is not
+    // today still goes in, keyed by its own end. The offsets are what make it
+    // different from the case above rather than a re-run of it.
+    const { save_calendar_storage2, calendar_storage2 } = await importModule('modules/shared/calendar-storage.js');
+    restoreStorage(t, ['calendar-storage2']);
+    clearCalendarMap(calendar_storage2);
+
+    for (const offset of [-1, -5, -40]) {
+        const win = dayWindow(offset);
+        save_calendar_storage2(win, 3, false);
+        assert.equal(calendar_storage2[dayKeyOf(win.endTime)], 3, `day ${offset} was not recorded`);
+    }
+});
+
+test('save_calendar_storage2 only fills gaps unless told to overwrite', async (t) => {
+    const { save_calendar_storage2, calendar_storage2 } = await importModule('modules/shared/calendar-storage.js');
+    restoreStorage(t, ['calendar-storage2']);
+    clearCalendarMap(calendar_storage2);
+
+    const win = dayWindow(-2);
+    const key = dayKeyOf(win.endTime);
+
+    save_calendar_storage2(win, 10, false);
+    save_calendar_storage2(win, 99, false);
+    assert.equal(calendar_storage2[key], 10, 'a non-overwriting write must not replace a real value');
+
+    save_calendar_storage2(win, 99, true);
+    assert.equal(calendar_storage2[key], 99, 'an overwriting write must replace it');
+});
+
+test('save_calendar_storage2 ignores windows that are not exactly one day', async (t) => {
+    const { save_calendar_storage2, calendar_storage2 } = await importModule('modules/shared/calendar-storage.js');
+    restoreStorage(t, ['calendar-storage2']);
+    clearCalendarMap(calendar_storage2);
+
+    const win = dayWindow(-1);
+    const key = dayKeyOf(win.endTime);
+
+    save_calendar_storage2({ ...win, endTime: win.endTime + DAY_MS }, 5, true);
+    assert.equal(calendar_storage2[key], undefined, 'a multi-day window has no single day to belong to');
+
+    save_calendar_storage2({ ...win, text: 'keyword' }, 5, true);
+    assert.equal(calendar_storage2[key], undefined, 'a filtered search is not a whole-day total');
+});
+
+test('calendarLevel puts a count in the same tier the calendar paints', async () => {
+    const { calendarLevel } = await importModule('modules/shared/calendar-storage.js');
+
+    // Boundaries are pinned on both sides: the tiers are what the user sees,
+    // and they used to be written out three separate times.
+    assert.equal(calendarLevel(undefined), 0);
+    assert.equal(calendarLevel(0), 0);
+    assert.equal(calendarLevel(1), 1);
+    assert.equal(calendarLevel(49), 1);
+    assert.equal(calendarLevel(50), 2);
+    assert.equal(calendarLevel(99), 2);
+    assert.equal(calendarLevel(100), 3);
+    assert.equal(calendarLevel(149), 3);
+    assert.equal(calendarLevel(150), 4);
+    assert.equal(calendarLevel(100000), 4);
+});
+
+// ---------------------------------------------------------------------------
+// Who may overwrite a heat-map day, and what a day of 0 means
+//
+// `history()` is the map's only page-side writer. Two things about it decide
+// whether the tiers mean anything, and neither is visible from the shared
+// helper's own tests: which day counts as "today" (only today may overwrite),
+// and that an empty list still gets written (a count of 0 is a *deletion*).
+// ---------------------------------------------------------------------------
+
+/**
+ * Put the fixture `history()` needs on the page.
+ *
+ * The date dropdowns are what `history('yes', '')` reads its query window
+ * from, so the day under test is chosen by writing them — the same path a
+ * calendar click takes. Everything else is the shape the render tests use.
+ */
+function seedHistoryPage() {
+    // `formatDate()` reads `rh-date` at *call* time and returns `undefined`
+    // without it, which then reaches `.replace()` inside history(). Storage is
+    // shared by this whole file, and several fixtures start with `env.reset()`
+    // — so this is set here rather than assumed from an earlier test.
+    if (localStorage['rh-date'] === undefined) localStorage['rh-date'] = 'yyyy/mm/dd';
+    dom.setOptions('rh-what', ['current', 'all'], 'current');
+    dom.el('rh-views-insert').style.display = 'block';
+    dom.el('rh-views-search-insert').style.display = 'none';
+    dom.el('rh-search');
+    dom.el('delete-range-one');
+    dom.el('delete-range-two');
+    dom.el('master-check-all');
+    dom.el('calendar-total-value');
+    dom.el('alert-holder').style.display = 'block';
+    dom.el('alert-holder-loading');
+}
+
+/**
+ * Drive `history('yes', '')` for the day `daysAgo` days back and report that
+ * day's key.
+ *
+ * `entries` is what `chrome.history.search` answers with. The render loop is a
+ * `setInterval`, but nothing here asserts on the DOM, so it is left to run out
+ * on its own.
+ */
+async function showDay(daysAgo, entries) {
+    const historyCore = await importModule('modules/history-core.js');
+    seedHistoryPage();
+
+    const target = new Date();
+    target.setDate(target.getDate() - daysAgo);
+    dom.setOptions('date-select-year', [String(target.getFullYear())], String(target.getFullYear()));
+    dom.setOptions('date-select-month', [String(target.getMonth() + 1).padStart(2, '0')], String(target.getMonth() + 1).padStart(2, '0'));
+    dom.setOptions('date-select-day', [String(target.getDate()).padStart(2, '0')], String(target.getDate()).padStart(2, '0'));
+
+    withChromeApi({ history: { search: (_q, cb) => cb(entries) } }, () => {
+        historyCore.history('yes', '');
+    });
+    return dayKeyOf(target.getTime());
+}
+
+/** A history row `hours` before `end`, on the day ending at `end`. */
+function rowOn(end, hours, i) {
+    return {
+        id: 'row' + i,
+        url: `https://day.test/${i}`,
+        title: `Day ${i}`,
+        visitCount: 1,
+        lastVisitTime: end - hours * 3600000,
+    };
+}
+
+test('the page may only overwrite today, never a day it merely happens to display', async (t) => {
+    // The dropdown is not necessarily on today: clicking a calendar cell
+    // rewrites it. With `overwrite: true` hardcoded, a click on the 3rd would
+    // replace the crawl's *visit* count for the 3rd with the page's *row*
+    // count — one column of the map quietly switching measures, which is the
+    // exact race this PR set out to remove.
+    const { calendar_storage2 } = await importModule('modules/shared/calendar-storage.js');
+    restoreStorage(t, ['calendar-storage2', 'rh-group', 'rh-orderby', 'rh-order', 'rh-date', 'rh-timeformat']);
+    clearCalendarMap(calendar_storage2);
+    localStorage['rh-group'] = 'no';
+    localStorage['rh-orderby'] = 'time';
+    localStorage['rh-order'] = 'desc';
+    localStorage['rh-date'] = 'yyyy/mm/dd';
+    localStorage['rh-timeformat'] = '24';
+
+    const key = dayKeyOf(Date.now() - 3 * DAY_MS);
+    const shown = await showDay(3, [rowOn(key, 1, 1), rowOn(key, 2, 2)]);
+    assert.equal(shown, key, 'the fixture must drive the day three days back');
+
+    assert.equal(calendar_storage2[key], 2, 'an empty older day still gets filled in');
+});
+
+test('a day the crawl already counted survives a visit to that day in the page', async (t) => {
+    // The observable form of the rule above: the crawl's count for an older
+    // day is not replaced just because the user looked at that day. The two
+    // writers measure different things there (visits vs rows), so replacing
+    // one with the other changes what the square means.
+    const { calendar_storage2 } = await importModule('modules/shared/calendar-storage.js');
+    restoreStorage(t, ['calendar-storage2', 'rh-group', 'rh-orderby', 'rh-order', 'rh-date', 'rh-timeformat']);
+    clearCalendarMap(calendar_storage2);
+    localStorage['rh-group'] = 'no';
+    localStorage['rh-orderby'] = 'time';
+    localStorage['rh-order'] = 'desc';
+    localStorage['rh-date'] = 'yyyy/mm/dd';
+    localStorage['rh-timeformat'] = '24';
+
+    const key = dayKeyOf(Date.now() - 3 * DAY_MS);
+    calendar_storage2[key] = 4242; // what the crawl wrote
+
+    await showDay(3, [rowOn(key, 1, 1), rowOn(key, 2, 2)]);
+
+    assert.equal(calendar_storage2[key], 4242,
+        'the page overwrote a day it is not the authority on');
+});
+
+test('today is still the page\'s to overwrite', async (t) => {
+    // The other half, and the reason the flag is not simply `false`: only the
+    // page can see browsing that happened after the crawl ran, so today's
+    // fresher count must win.
+    const { calendar_storage2 } = await importModule('modules/shared/calendar-storage.js');
+    restoreStorage(t, ['calendar-storage2', 'rh-group', 'rh-orderby', 'rh-order', 'rh-date', 'rh-timeformat']);
+    clearCalendarMap(calendar_storage2);
+    localStorage['rh-group'] = 'no';
+    localStorage['rh-orderby'] = 'time';
+    localStorage['rh-order'] = 'desc';
+    localStorage['rh-date'] = 'yyyy/mm/dd';
+    localStorage['rh-timeformat'] = '24';
+
+    const key = dayKeyOf(Date.now());
+    calendar_storage2[key] = 4242; // a stale number, written earlier today
+
+    await showDay(0, [rowOn(key, 1, 1), rowOn(key, 2, 2), rowOn(key, 3, 3)]);
+
+    assert.equal(calendar_storage2[key], 3, 'today\'s count must replace whatever was there');
+});
+
+test('a day that just became empty is dropped from the map', async (t) => {
+    // `save_calendar_storage2(obj, 0, …)` deletes the entry — that deletion is
+    // the only code in the extension that removes a heat-map entry, and it is
+    // what stops a range-deleted day from staying coloured.
+    //
+    // The call therefore has to happen when the list comes back *empty* too.
+    // It used to sit inside `if (rha.length > 0)`, so the one case the
+    // deletion exists for could never reach it: after deleting today's
+    // history the cell kept its old green, `history()` only rewrote the total
+    // line, and nothing else would ever correct it.
+    const { calendar_storage2 } = await importModule('modules/shared/calendar-storage.js');
+    restoreStorage(t, ['calendar-storage2', 'rh-group', 'rh-orderby', 'rh-order', 'rh-date', 'rh-timeformat']);
+    clearCalendarMap(calendar_storage2);
+    localStorage['rh-group'] = 'no';
+    localStorage['rh-orderby'] = 'time';
+    localStorage['rh-order'] = 'desc';
+    localStorage['rh-date'] = 'yyyy/mm/dd';
+    localStorage['rh-timeformat'] = '24';
+
+    const key = dayKeyOf(Date.now());
+    calendar_storage2[key] = 12; // the day was counted, then its history was deleted
+
+    await showDay(0, []);
+
+    assert.equal(calendar_storage2[key], undefined,
+        'an empty day must be deleted from the map, not skipped');
+});
+
+test('a day that just became empty also loses the colour it was painted with', async (t) => {
+    // The map entry and the DOM are two different places, and deleting a day
+    // fixes only the first. The order a range delete runs in makes the second
+    // certain: `deleteHistoryItem('range')` calls `calendar('yes','')` *first*
+    // — which repaints the whole month from a map that still holds the day —
+    // and only then calls `history('yes','')`, which is where the entry is
+    // finally removed. So by the time the count is zero the cell has just been
+    // given its old colour, and nothing is left to take it away.
+    //
+    // The symptom is a square reading "0" next to a dark green cell.
+    const { calendar_storage2 } = await importModule('modules/shared/calendar-storage.js');
+    const { paintDay } = await importModule('modules/calendar-colors.js');
+    restoreStorage(t, ['calendar-storage2', 'rh-group', 'rh-orderby', 'rh-order', 'rh-date', 'rh-timeformat']);
+    clearCalendarMap(calendar_storage2);
+    localStorage['rh-group'] = 'no';
+    localStorage['rh-orderby'] = 'time';
+    localStorage['rh-order'] = 'desc';
+    localStorage['rh-date'] = 'yyyy/mm/dd';
+    localStorage['rh-timeformat'] = '24';
+
+    const key = dayKeyOf(Date.now());
+    calendar_storage2[key] = 12; // the day was counted, then its history was deleted
+
+    // The cell as calendar() leaves it. `paintDay` is the same code calendar()
+    // uses, so this is not a hand-written colour that could drift from it.
+    const cell = dom.makeEl('a');
+    paintDay(cell, 120);
+    assert.equal(cell.style.backgroundColor, '#6dc738', 'the fixture must start from a painted cell');
+    const lookup = document.querySelector;
+    document.querySelector = (sel) => (String(sel).includes('a#selected') ? cell : lookup.call(document, sel));
+
+    try {
+        await showDay(0, []);
+    } finally {
+        document.querySelector = lookup;
+    }
+
+    assert.equal(cell.style.backgroundColor, '',
+        'the cell still shows the count that was just deleted — nothing else repaints it');
+});
+
+test('the deletion reaches storage, so the next page start sees it too', async (t) => {
+    // `calendar_storage2` is in-memory; the map only survives a reload if the
+    // delete is followed by a write.
+    const { calendar_storage2 } = await importModule('modules/shared/calendar-storage.js');
+    restoreStorage(t, ['calendar-storage2', 'rh-group', 'rh-orderby', 'rh-order', 'rh-date', 'rh-timeformat']);
+    clearCalendarMap(calendar_storage2);
+    localStorage['rh-group'] = 'no';
+    localStorage['rh-orderby'] = 'time';
+    localStorage['rh-order'] = 'desc';
+    localStorage['rh-date'] = 'yyyy/mm/dd';
+    localStorage['rh-timeformat'] = '24';
+
+    const key = dayKeyOf(Date.now());
+    calendar_storage2[key] = 12;
+
+    await showDay(0, []);
+
+    assert.deepEqual(JSON.parse(localStorage['calendar-storage2']), {},
+        'the map still holds the deleted day');
 });

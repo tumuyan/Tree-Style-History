@@ -340,6 +340,10 @@ document.addEventListener('DOMContentLoaded', function () {
                     }
 
                     tree.setNodes(zNodes.length > 0 ? zNodes : mNodes);
+                    // Replacement text, not a count: the tree labels the block
+                    // below it "Total tabs in the tree", and this number is
+                    // not the history-row total the calendar branch above
+                    // reports — see the note in the README's Changelog.
                     $('calendar-total-value').textContent = zNodes.length;
 
                     // $('header-text').set('text',new Date(loadfrom-DAY*t).toLocaleString()+' - '+new Date(loadto).toLocaleString());

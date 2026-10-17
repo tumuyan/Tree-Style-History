@@ -6,7 +6,10 @@ import { returnLang, TimeToStr, formatDate, truncate, get_host, getFaviconUrl, g
 import { filtUrl } from './config.js';
 // Straight from the bottom layer, not via calendar.js: that module imports
 // `history` from here, and going through it closed an import cycle.
-import { save_calendar_storage2 } from './shared/calendar-storage.js';
+// `dayKey` is imported as well as used by calendar.js: the answer to "is the
+// day on screen today?" has to be the *same* expression on both sides.
+import { save_calendar_storage2, dayKey } from './shared/calendar-storage.js';
+import { paintSelectedDay } from './calendar-colors.js';
 import { modifierState, ITEM_SELECTED_COLOR, RENDER_BUDGET_MS } from './ui-state.js';
 
 // Module-level variables
@@ -34,6 +37,25 @@ function alertLoadingHistory(pm) {
 }
 
 // --- History search and display ---
+
+/**
+ * Report a day that has nothing in it: total 0, an empty list, no colour.
+ *
+ * The repaint is the point. `calendar()` paints the month from the map, and
+ * deleteHistoryItem('range') runs it *before* the follow-up `history()` call —
+ * so on the way in the square still has its old count and is drawn in its old
+ * colour. Whatever erases that has to be here: the map entry is gone by now,
+ * but the DOM keeps what calendar() last wrote, and a cell reading "0" next to
+ * a dark green square is exactly the bug this round is about.
+ *
+ * `paintSelectedDay(0)` is a level-0 paint, which clears `style` — there is no
+ * separate "uncolour" path to keep in step.
+ */
+function finishEmptyDay(into) {
+    $('calendar-total-value').textContent = '0';
+    paintSelectedDay(0);
+    $(into).innerHTML = '<div class="no-results"><span>' + returnLang('noResults') + '</span></div>';
+}
 
 function history(w, q) {
 
@@ -98,6 +120,20 @@ function history(w, q) {
 
         console.log("search obj=" + obj['text']);
 
+        // `overwrite` = "nothing can have counted this day more recently
+        // than the loop above", and there is exactly one day for which
+        // that holds: today. The map's other writer is the crawl, and it
+        // only fills gaps — it cannot reach today at all (saveCrawledHeat()
+        // skips it), so today has one author and it has just spoken.
+        //
+        // For any other day the page is *not* authoritative. The dropdown
+        // is not necessarily on today: clicking a calendar cell rewrites
+        // it. Claiming otherwise would replace the crawl's *visit* count
+        // for that day with the page's *row* count — one column of the map
+        // silently switching measures — so older days go through the same
+        // gap-filling path the crawl uses.
+        var isToday = dayKey(obj['endTime']) === dayKey(Date.now());
+
         if (hi.length > 0) {
 
             alertLoadingHistory(false);
@@ -143,22 +179,14 @@ function history(w, q) {
                 if (into == 'rh-views-insert') {
                     var rhat = rha.length;
                     $('calendar-total-value').textContent = rhat;
-                    if (rhat == 0 || rhat < 50) {
-                        var selLink = document.querySelector('#calendar a#selected');
-                        if (selLink) selLink.style.backgroundColor = '#daf3cb';
-                    } else if (rhat > 49 && rhat < 100) {
-                        selLink = document.querySelector('#calendar a#selected');
-                        if (selLink) selLink.style.backgroundColor = '#aade8a';
-                    } else if (rhat > 99 && rhat < 150) {
-                        selLink = document.querySelector('#calendar a#selected');
-                        if (selLink) { selLink.style.backgroundColor = '#6dc738'; selLink.style.color = '#fff'; }
-                    } else {
-                        selLink = document.querySelector('#calendar a#selected');
-                        if (selLink) { selLink.style.backgroundColor = '#4e991f'; selLink.style.color = '#fff'; }
-                    }
+                    // One shared paint for the selected cell, the same tiers
+                    // every other cell is painted with. This used to be four
+                    // inline branches that duplicated calendar.js's colours —
+                    // and, critically, they were the *only* thing that ever
+                    // coloured the selected day: calendar() skipped it, so a
+                    // day stayed blank until it had been clicked at least once.
+                    paintSelectedDay(rhat);
                 }
-
-                save_calendar_storage2(obj, rha.length, true);
 
                 if (oby == 'title') {
                     rha.sort(function (a, b) {
@@ -367,14 +395,21 @@ function history(w, q) {
                 alertLoadingHistory(true);
             } else {
                 alertLoadingHistory(true);
-                $('calendar-total-value').textContent = '0';
-                $(into).innerHTML = '<div class="no-results"><span>' + returnLang('noResults') + '</span></div>';
+                finishEmptyDay(into);
             }
 
         } else {
-            $('calendar-total-value').textContent = '0';
-            $(into).innerHTML = '<div class="no-results"><span>' + returnLang('noResults') + '</span></div>';
+            finishEmptyDay(into);
         }
+
+        // Written here, once, for every outcome — including "no rows at
+        // all". A day with no rows still says something, and it is the
+        // *empty* case that matters most: save_calendar_storage2() deletes
+        // the entry when `n < 1`, and nothing else in the extension
+        // removes a heat-map entry, so a call that only ever happened for
+        // a non-empty list could never clean up. Deleting a day's history
+        // left the square coloured for good.
+        save_calendar_storage2(obj, rha.length, isToday);
 
     });
 

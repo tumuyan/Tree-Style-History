@@ -643,3 +643,181 @@ test('a tab navigating to a real page is still crawled', async () => {
 
     assert.deepEqual(w.state.queried, ['https://example.com/page']);
 });
+
+// ---------------------------------------------------------------------------
+// Heat map back-fill
+//
+// The crawl is the only writer for days older than today. It records each visit
+// it walks into `calendar_storage2` — but only where the map is empty, because
+// those days cannot change: re-reading them on every start is pure cost.
+// ---------------------------------------------------------------------------
+
+/** The map's key for the day `t` falls on (the day's own end). */
+function dayKeyOf(t) {
+    const d = new Date(t);
+    d.setHours(23);
+    d.setMinutes(59);
+    d.setSeconds(59);
+    d.setMilliseconds(999);
+    return d.getTime();
+}
+
+const DAY_MS = 86400000;
+
+/** A visit `daysAgo` days back. */
+function visitAt(daysAgo, id) {
+    return { visitId: id, visitTime: dayKeyOf(Date.now() - daysAgo * DAY_MS) - 3600000, referringVisitId: 0, transition: 'link' };
+}
+
+/** `getVisits` that reports `visits` for every URL. */
+function visitsFor(visits) {
+    return (state, q, cb) => setTimeout(() => { state.visitCounter += visits.length; cb(visits); }, 0);
+}
+
+test('the crawl fills the heat map for the days it walked', async () => {
+    // `load-range` is 7 in crawlUrls(): only visits inside that window reach
+    // the map, because only those are crawled. Days beyond it stay empty until
+    // the window moves over them — the map grows backwards one day per day,
+    // which is the trade the option already documents.
+    const w = await crawlUrls({
+        urls: urlList(2),
+        getVisits: visitsFor([visitAt(3, 1), visitAt(3, 2), visitAt(6, 3), visitAt(30, 4)]),
+    });
+
+    assert.equal(w.ctx.calendar_storage2[dayKeyOf(Date.now() - 3 * DAY_MS)], 4,
+        'two visits per URL, two URLs, all three days back');
+    assert.equal(w.ctx.calendar_storage2[dayKeyOf(Date.now() - 6 * DAY_MS)], 2,
+        'the last full day inside the window is filled too');
+    assert.equal(w.ctx.calendar_storage2[dayKeyOf(Date.now() - 30 * DAY_MS)], undefined,
+        'a visit the crawl never walks cannot reach the map');
+});
+
+test('a day that already has a count is not re-read (the map is a cache)', async () => {
+    // The whole point of the change: yesterday's square is a cache, not a
+    // snapshot. Recomputing it on every start is what the crawl exists to stop
+    // paying for.
+    //
+    // Only days within `load-range` are crawled at all (the crawl walks recent
+    // URLs), which is exactly the window this test is about: a day the crawl
+    // *does* revisit must still keep the count it already had.
+    const key = dayKeyOf(Date.now() - 3 * DAY_MS);
+    const w = loadWorker({ getVisits: visitsFor([visitAt(3, 1), visitAt(3, 2)]) });
+    w.ctx.localStorage['load-range'] = '7';
+    w.ctx.localStorage['calendar-storage2'] = JSON.stringify({ [key]: 99 });
+    w.boot();
+    await w.settle();
+    assert.equal(w.ctx.calendar_storage2[key], 99, 'boot() must hydrate the map from storage');
+
+    w.ctx.urls_wait_load = urlList(1);
+    await w.ctx.processVisits();
+
+    assert.equal(w.ctx.calendar_storage2[key], 99,
+        'four visits were just walked into a day that already said 99, and it must keep saying 99');
+});
+
+test('the crawl is what creates the map, and a back-filled day stays put', async () => {
+    // Same worker twice: the second crawl re-walks the same visits and must be
+    // a no-op for the map. A guard that only checked "is the map empty" would
+    // pass the first crawl and then either rewrite or duplicate on the second.
+    const w = await crawlUrls({
+        urls: urlList(1),
+        getVisits: visitsFor([visitAt(4, 1)]),
+    });
+    const key = dayKeyOf(Date.now() - 4 * DAY_MS);
+    assert.equal(w.ctx.calendar_storage2[key], 1);
+
+    w.ctx.calendar_storage2[key] = 7; // pretend a later crawl saw more
+    w.ctx.urls_wait_load = urlList(1);
+    await w.ctx.processVisits();
+    assert.equal(w.ctx.calendar_storage2[key], 7, 'the existing count must win');
+});
+
+test('browser-internal visits do not count towards a day', async () => {
+    // Same rule add_urls() uses to decide what enters the database, so the
+    // square counts what the tree can actually show.
+    const w = await crawlUrls({
+        urls: [{ id: 'id0', url: 'chrome://extensions/', title: 'Extensions', lastVisitTime: Date.now() }],
+        getVisits: visitsFor([visitAt(5, 1)]),
+    });
+
+    assert.equal(w.ctx.calendar_storage2[dayKeyOf(Date.now() - 5 * DAY_MS)], undefined,
+        'a chrome:// page is not browsing');
+});
+
+test('the heat map is persisted, not just kept in memory', async () => {
+    const w = await crawlUrls({
+        urls: urlList(1),
+        getVisits: visitsFor([visitAt(5, 1)]),
+    });
+
+    const stored = JSON.parse(w.ctx.localStorage['calendar-storage2']);
+    assert.equal(stored[dayKeyOf(Date.now() - 5 * DAY_MS)], 1,
+        'the map has to reach storage or the next worker start re-crawls for nothing');
+});
+
+test('real pages are counted and internal ones are not', async () => {
+    // The square is a summary of what the tree below it can show, so it uses
+    // the rule that decides what enters the tree at all (add_urls()'s regex
+    // pair on `(title, url)`). Note the two rules are *not* interchangeable
+    // and must not be merged: the crawl skips a page when its URL is internal,
+    // add_urls() also skips one whose title is — which is why `urls_wait_load`
+    // still contains pages that never reach the database.
+    const day = dayKeyOf(Date.now() - 4 * DAY_MS);
+
+    const w = await crawlUrls({
+        urls: [{ id: 'id0', url: 'https://example.com/', title: 'Example', lastVisitTime: Date.now() }],
+        getVisits: visitsFor([visitAt(4, 1), visitAt(4, 2)]),
+    });
+    assert.equal(w.ctx.calendar_storage2[day], 2, 'both visits on a browsable page count');
+
+    const internal = await crawlUrls({
+        urls: [{ id: 'id0', url: 'chrome://extensions/', title: 'Extensions', lastVisitTime: Date.now() }],
+        getVisits: visitsFor([visitAt(4, 1)]),
+    });
+    assert.equal(internal.ctx.calendar_storage2[day], undefined, 'a chrome:// page is not browsing');
+});
+
+test('the crawl never writes today, even into an empty map', async () => {
+    // Today belongs to the page. The crawl runs *before* the page ever does on
+    // a fresh profile (or after history was cleared, i.e. an empty map) and it
+    // only sees the visits that existed when it ran — so a count taken here
+    // would be a stale one, and being non-zero it would then hide today from
+    // the crawl forever, outliving the page's fresher count.
+    //
+    // The day to assert on is `Date.now()`, deliberately *not* `dayKeyOf(now)`
+    // used as a visit time: `dayKeyOf` pins the event to 23:59:59.999 of its
+    // day, so in the last millisecond of a day (or on any clock skew) the key
+    // would answer for tomorrow and this test would go green while the bug
+    // lived on. `Date.now()` is unambiguously in the day the worker calls
+    // today.
+    const w = loadWorker({
+        getVisits: visitsFor([{ visitId: 1, visitTime: Date.now(), referringVisitId: 0, transition: 'link' }]),
+    });
+    w.ctx.localStorage['load-range'] = '7';
+    w.ctx.urls_wait_load = urlList(1);
+
+    await w.ctx.processVisits();
+
+    assert.equal(w.ctx.calendar_storage2[dayKeyOf(Date.now())], undefined,
+        'the crawl counted a visit for today and wrote it; today is the page\'s to write');
+});
+
+test('a crawl started before today was re-counted does not undo it', async () => {
+    // The same boundary from the other side: the page has already written
+    // today, the worker boots (hydrating the map) and crawls. It must leave the
+    // page's count exactly as it is — it may only fill a day that has none, and
+    // today is not one of those.
+    const key = dayKeyOf(Date.now());
+    const w = loadWorker({ getVisits: visitsFor([{ visitId: 1, visitTime: Date.now(), referringVisitId: 0, transition: 'link' }]) });
+    w.ctx.localStorage['load-range'] = '7';
+    w.ctx.localStorage['calendar-storage2'] = JSON.stringify({ [key]: 42 });
+    w.boot();
+    await w.settle();
+    assert.equal(w.ctx.calendar_storage2[key], 42, 'boot() must hydrate the map from storage');
+
+    w.ctx.urls_wait_load = urlList(1);
+    await w.ctx.processVisits();
+
+    assert.equal(w.ctx.calendar_storage2[key], 42,
+        'the crawl saw one visit for today and must leave the page\'s fresh count alone');
+});

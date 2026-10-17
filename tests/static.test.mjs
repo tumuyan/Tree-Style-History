@@ -391,6 +391,7 @@ const MODULES = [
     'scripts/modules/helpers.js',
     'scripts/modules/config.js',
     'scripts/modules/calendar.js',
+    'scripts/modules/calendar-colors.js',
     'scripts/modules/popup-core.js',
     'scripts/modules/history-core.js',
     'scripts/modules/tree.js',
@@ -1630,6 +1631,99 @@ test('history.js hands the calendar redraw to the range delete', () => {
         /deleteHistoryItem\(\s*'range'\s*,\s*[\s\S]{0,200}?calendar\(/,
         'deleteHistoryItem(\'range\') needs the calendar redraw as its second argument',
     );
+});
+
+test('the heat map has exactly one page-side writer, and it lives in history-core.js', () => {
+    // Two things about `save_calendar_storage2()` are easy to undo by accident
+    // and invisible from the UI until an actual day is wrong:
+    //
+    //   * it must be called for an *empty* result too — `n < 1` is how an entry
+    //     is deleted, and no other code removes one, so a call that only sits
+    //     inside `if (rha.length > 0)` can never clean up;
+    //   * the `overwrite` argument must be written out, not hardcoded — only
+    //     today may be replaced by the page (see the note in the module's own
+    //     test), and `true` in that slot silently re-creates the race with the
+    //     crawl's differently-measured count.
+    //
+    // Both were true of the code this guard was added for; the module tests
+    // cover the behaviour, and this covers the shape.
+    const src = fs.readFileSync(path.join(CHROME_DIR, 'scripts/modules/history-core.js'), 'utf8');
+    const code = stripJsComments(src);
+
+    const calls = [...code.matchAll(/save_calendar_storage2\(([^;]*?)\);/g)].map((m) => m[1]);
+    assert.equal(calls.length, 1, `expected one call site in history-core.js, found ${calls.length}`);
+    assert.match(calls[0], /rha\.length/, 'the count has to come from the rows just collected');
+    assert.match(calls[0], /isToday/, 'the overwrite flag has to be decided, not literalled');
+
+    // And the decision itself: today, by day key, not by "the day on screen".
+    assert.match(code, /dayKey\(obj\['endTime'\]\)\s*===\s*dayKey\(Date\.now\(\)\)/,
+        'the authoritative day has to be computed from the query window being today');
+
+    // ...and both the flag and the write sit at the search callback's own
+    // level, so *both* the empty and the non-empty path reach the write.
+    // Written as a brace depth rather than a regex, because "outside the
+    // branch" is a structural property and a regex over the text cannot see it.
+    //
+    // Third round of review, twice over: the first attempt had both lines
+    // inside `if (hi.length > 0)` (the empty result got nothing, which is the
+    // bug this whole rule exists to prevent), and the second had the write
+    // *before* the fill loop that builds `rha` — so it always reported 0 and
+    // silently deleted the day. The depth check plus the fill-loop ordering
+    // catches both; the module tests' "an empty older day still gets filled
+    // in" and "a day that just became empty is dropped" catch them from the
+    // behaviour side.
+    //
+    // Quotes are blanked first: `'{'` in a string is not a brace, and this file
+    // has plenty of `{` inside string literals (`'div[rel="' + …`).
+    const depthOf = (text) => {
+        const slice = text.replace(/'(\\.|[^'])*'/g, "''").replace(/"(\\.|[^"])*"/g, '""');
+        let depth = 0;
+        for (const ch of slice) {
+            if (ch === '{') depth++;
+            else if (ch === '}') depth--;
+        }
+        return depth;
+    };
+    // Searched after the declaration: the import statement names the function
+    // too, and taking the first hit would compare the import's depth.
+    const declaration = code.indexOf('var isToday');
+    const call = code.indexOf('save_calendar_storage2', declaration);
+    assert.ok(declaration > -1 && call > declaration, 'the flag must be decided before the write');
+
+    // The fill loop comes between them: the rows are collected, then reported.
+    const fillLoop = code.indexOf('rha.push(', declaration);
+    assert.ok(fillLoop > -1 && fillLoop < call,
+        'the write has to report the rows the loop collected, not whatever `rha` held before it ran');
+
+    assert.equal(depthOf(code.slice(0, call)), depthOf(code.slice(0, declaration)),
+        `the write is nested deeper than the flag — one of the two is inside a branch, so an empty result never reaches the write`);
+});
+
+test('the tree pages label their total as a node count, not the row total', () => {
+    // `#calendar-total-value` means two different things: on history.html it is
+    // the day's history rows, on the two tree pages it is how many nodes the
+    // tree was given. Both used to say "Total History Items", which invites the
+    // reader to compare them — and they are not comparable (the tree counts
+    // every visit it walked, the list counts URLs after filtering).
+    //
+    // The distinction became load-bearing once the heat map stopped being
+    // written by these pages: their numbers no longer have anything to do with
+    // the calendar above them, so the label has to stop implying that they do.
+    for (const file of ['history2.html', 'closed.html']) {
+        const html = stripComments(fs.readFileSync(path.join(CHROME_DIR, file), 'utf8'));
+        assert.match(html, /data-lang-string="totalTabsInTree"/,
+            `${file} still labels its node count as a history-row total`);
+        assert.doesNotMatch(html, /data-lang-string="totalHistoryItems"/,
+            `${file} shows the history-row label next to a node count`);
+    }
+
+    // The key has to exist in both locales, or page-init() writes the key name
+    // into the element and nobody sees a number at all.
+    for (const locale of ['en', 'zh_CN']) {
+        const messages = JSON.parse(
+            fs.readFileSync(path.join(CHROME_DIR, '_locales', locale, 'messages.json'), 'utf8'));
+        assert.ok(messages.totalTabsInTree, `_locales/${locale} is missing totalTabsInTree`);
+    }
 });
 
 test('popup rows carry no dead per-row controls', () => {

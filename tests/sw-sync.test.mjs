@@ -88,8 +88,12 @@ test('background-sw.js only uses shared symbols the generated file defines', () 
         'background-sw.js calls getVersion(); it must be covered by this check',
     );
     assert.ok(
-        used.includes('save_calendar_storage2'),
-        'background-sw.js calls save_calendar_storage2(); it must be covered by this check',
+        used.includes('calendar_storage2'),
+        'background-sw.js reads calendar_storage2; it must be covered by this check',
+    );
+    assert.ok(
+        used.includes('dayKey'),
+        'background-sw.js calls dayKey(); it must be covered by this check',
     );
 
     for (const name of used.sort()) {

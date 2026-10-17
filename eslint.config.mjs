@@ -44,6 +44,8 @@ const crossFileGlobals = {
     getVersion: 'writable',
     returnLang: 'writable',
     save_calendar_storage2: 'writable',
+    calendar_storage2: 'writable',
+    dayKey: 'writable',
 
     // --- UMD guard in db-manager.js (dead branch in the browser) ---
     module: 'readonly',

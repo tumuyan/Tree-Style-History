@@ -299,6 +299,9 @@
     "totalHistoryItems": {
         "message": "Total History Items:"
     },
+    "totalTabsInTree": {
+        "message": "Total tabs in the tree:"
+    },
     "deleteItems": {
         "message": "Delete Items"
     },
