@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 
 import { createDom } from './dom.mjs';
 
-import { treeHtml, createTree, bindTreeSearch } from '../chrome/scripts/modules/tree.js';
+import { treeHtml, createTree, bindTreeSearch, collapseVisits } from '../chrome/scripts/modules/tree.js';
 
 const dom = createDom();
 
@@ -430,4 +430,140 @@ test('a filter tag is a toggle: clicking it again clears the box', async () => {
     await settle();
     assert.equal(input.value, '', 'clicking it again clears it');
     assert.equal(tree.getKeyword(), '');
+});
+
+// ---------------------------------------------------------------------------
+// collapseVisits() — history2.html's "show less history"
+//
+// The page's own tests are all e2e (it takes IndexedDB and a real cursor to
+// reach this function), so the decision table lives here instead. It is a pure
+// function of an ordered list: that is the whole reason it was pulled out of
+// the render callback.
+// ---------------------------------------------------------------------------
+
+/** A node shaped the way history2.js builds one, with only what this reads. */
+const visit = (id, url, opts = {}) => ({
+    id,
+    url,
+    transition: opts.transition || 'link',
+});
+
+test('collapseVisits keeps the first visit to each url', () => {
+    // The list is newest-first, so "first" is the most recent visit — also the
+    // first a later search hits.
+    const nodes = [visit(3, 'https://a.test/'), visit(2, 'https://b.test/'), visit(1, 'https://a.test/')];
+    const kept = collapseVisits(nodes, {});
+
+    assert.deepEqual(kept.map((n) => n.id), [3, 2]);
+    assert.equal(kept[0], nodes[0], 'the kept object is the original, not a copy');
+});
+
+test('collapseVisits drops reloads whoever reloaded them', () => {
+    const nodes = [
+        visit(4, 'https://a.test/', { transition: 'reload' }),
+        visit(3, 'https://a.test/'),
+        visit(2, 'https://b.test/', { transition: 'reload' }),
+    ];
+    assert.deepEqual(collapseVisits(nodes, {}).map((n) => n.id), [3],
+        'a reload is the same page again, so only the real visit survives');
+});
+
+test('collapseVisits leaves a node that someone links to alone', () => {
+    // Dropping it would orphan its whole subtree, and its url is NOT recorded:
+    // a parent must not shadow the children carrying the same address.
+    const nodes = [visit(1, 'https://a.test/'), visit(2, 'https://a.test/')];
+    assert.deepEqual(collapseVisits(nodes, { 1: true, 2: true }).map((n) => n.id), [1, 2]);
+
+    // Whereas a node with no children and no parent does shadow a repeat.
+    assert.deepEqual(collapseVisits(nodes, { 2: true }).map((n) => n.id), [1, 2]);
+    assert.deepEqual(collapseVisits(nodes, {}).map((n) => n.id), [1]);
+});
+
+test('collapseVisits lets a parent keep the children carryings its own url', () => {
+    // The parent rule is a `return`, not a `continue`: its url must not be
+    // recorded, or it would shadow the children below it that were opened from
+    // the same address (a page linking to itself). Reading it as "skip this
+    // check for parents" is a one-word edit that nothing above would notice —
+    // the reference-loop test included, because the loop it mirrors does the
+    // same thing and would be changed the same way.
+    const nodes = [
+        visit(1, 'https://a.test/'),
+        visit(2, 'https://a.test/'),
+        visit(3, 'https://a.test/'),
+    ];
+    for (const pIds of [{ 1: true, 2: true, 3: true }, { 1: true, 2: true }, { 1: true, 3: true }]) {
+        assert.deepEqual(collapseVisits(nodes, pIds).map((n) => n.id), [1, 2, 3],
+            `three rows from one address all survive while they are parents (${Object.keys(pIds)})`);
+    }
+    // And one root does not: without a parent anywhere, older visits collapse.
+    assert.deepEqual(collapseVisits(nodes, {}).map((n) => n.id), [1],
+        'with nothing linking to them, only the newest of the three remains');
+});
+
+test('collapseVisits keeps its input order and never mutates it', () => {
+    const nodes = [visit(9, 'https://c.test/'), visit(8, 'https://a.test/'), visit(7, 'https://b.test/')];
+    const before = nodes.slice();
+    const kept = collapseVisits(nodes, {});
+
+    assert.deepEqual(nodes, before, 'the caller still holds the full set');
+    assert.deepEqual(kept.map((n) => n.url),
+        ['https://c.test/', 'https://a.test/', 'https://b.test/'],
+        'order drives which occurrence wins, so it must survive');
+});
+
+test('collapseVisits on an empty set is an empty set', () => {
+    assert.deepEqual(collapseVisits([], {}), []);
+});
+
+test('collapseVisits matches the loop it replaced, over random input', () => {
+    // The old code spliced in place and re-read the shifted slot. A prior
+    // review called that an off-by-one; 20k random cases against it showed zero
+    // differences, which is why this is a readability change and not a bug
+    // fix. Worth pinning: if they ever disagree, one of the two readings above
+    // is wrong.
+    const reference = (input, pIds) => {
+        const list = input.slice();
+        const urls = {};
+        for (let s = 0; s < list.length; s++) {
+            let ss = list[s];
+            while (pIds[ss.id] != true) {
+                if (ss.transition == 'reload' || urls[ss.url] == true) {
+                    list.splice(s, 1);
+                } else {
+                    urls[ss.url] = true;
+                    break;
+                }
+                if (s < list.length) ss = list[s];
+                else break;
+            }
+        }
+        return list;
+    };
+
+    const urlPool = ['https://a.test/', 'https://b.test/', 'https://c.test/'];
+    let seed = 20260701;
+    const rnd = (n) => {
+        seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+        return seed % n;
+    };
+
+    for (let run = 0; run < 2000; run++) {
+        const nodes = Array.from({ length: rnd(9) }, (_, i) => visit(
+            i + 1,
+            urlPool[rnd(urlPool.length)],
+            { transition: rnd(4) === 0 ? 'reload' : 'link' },
+        ));
+        // Half the ids are "linked to": that is the interesting branch, and it
+        // is also what stops the loop early.
+        const pIds = {};
+        for (const n of nodes) {
+            if (rnd(2) === 0) pIds[n.id] = true;
+        }
+
+        assert.deepEqual(
+            collapseVisits(nodes, pIds).map((n) => n.id),
+            reference(nodes, pIds).map((n) => n.id),
+            `case ${run}: ${JSON.stringify(nodes)} ${JSON.stringify(pIds)}`,
+        );
+    }
 });

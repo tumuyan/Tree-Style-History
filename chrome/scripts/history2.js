@@ -7,7 +7,7 @@ import { TimeToStr, dateFormat, getFaviconUrl } from './modules/helpers.js';
 import { filtUrl } from './modules/config.js';
 import { calendar, showCalendar } from './modules/calendar.js';
 import { alertLoadingHistory } from './modules/history-core.js';
-import { createTree, bindTreeSearch } from './modules/tree.js';
+import { createTree, bindTreeSearch, collapseVisits } from './modules/tree.js';
 import { modifierState } from './modules/ui-state.js';
 import { initPage } from './modules/page-init.js';
 
@@ -318,25 +318,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     // set, and setNodes() replaces it in one render. Removing
                     // them one by one re-rendered the tree once per row.
                     if (zNodes.length > 0 && showLessItem == 'yes') {
-
-                        let urls = {};
-
-                        for (let s = 0; s < zNodes.length; s++) {
-                            let ss = zNodes[s];
-                            while (pIDs[ss.id] != true) {
-                                if (ss.transition == 'reload' || urls[ss.url] == true) {
-                                    zNodes.splice(s, 1);
-                                } else {
-                                    urls[ss.url] = true;
-                                    break;
-                                }
-
-                                if (s < zNodes.length)
-                                    ss = zNodes[s];
-                                else
-                                    break;
-                            }
-                        }
+                        zNodes = collapseVisits(zNodes, pIDs);
                     }
 
                     tree.setNodes(zNodes.length > 0 ? zNodes : mNodes);

@@ -237,9 +237,6 @@ document.addEventListener('DOMContentLoaded', function () {
         localStorage[versionKey] = 'true';
     }
 
-    // -- Scrollbar fix
-    //popup_scrollbar_fix.periodical(250);
-
     });
 
     const popupEndTime = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();

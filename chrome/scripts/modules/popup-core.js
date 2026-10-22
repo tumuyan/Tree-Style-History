@@ -278,10 +278,6 @@ function popupSearch(q) {
 function alertUser(msg, action) {
     if (action == 'close') {
         $('alert-holder').style.display = 'none';
-        var alertYes = $('alert-yes');
-        var alertNo = $('alert-no');
-        if (alertYes) alertYes.remove();
-        if (alertNo) alertNo.remove();
     } else if (action == 'open') {
         $('alert-holder').style.display = 'block';
         $('alert-text').innerHTML = msg;
