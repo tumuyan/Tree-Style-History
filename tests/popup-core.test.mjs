@@ -580,3 +580,30 @@ test('a switched-off block does not query its API', (t) => {
     assert.equal(history.children.length, 0);
     assert.equal(closed.children.length, 0);
 });
+
+test('recentHistory renders exactly the configured count, not one less', (t) => {
+    // The quota check is `ir >= rhino`. This test asserts the boundary itself —
+    // asking for 3 draws 3 — and deliberately does NOT claim to distinguish
+    // `>=` from `==`: `ir` only ever steps by one here, so it can never jump
+    // over the limit and the two spellings behave identically in this loop.
+    // Reverting to `==` keeps this test green, which is the honest outcome.
+    //
+    // Keep `>=` anyway: it states "stop once full" rather than "stop when the
+    // count happens to line up", so a future change that drops several rows in
+    // one step (or starts `ir` from a non-zero base) cannot walk past the
+    // quota. What this test protects is that the configured number of rows
+    // reaches the DOM at all.
+    restoreStorage(t, ['rh-itemsno']);
+    const holder = block('rh-inject');
+    localStorage['rh-itemsno'] = '3';
+
+    const now = Date.now();
+    const rows = Array.from({ length: 6 }, (_v, i) => ({
+        url: `https://r${i}.test/`, title: `R${i}`, visitCount: 1, lastVisitTime: now - i * 1000,
+    }));
+    withChromeApi({ history: { search: (_query, cb) => cb(rows) } }, () => {
+        popupCore.recentHistory();
+    });
+
+    assert.equal(holder.children.length, 3, 'three asked for, three drawn');
+});

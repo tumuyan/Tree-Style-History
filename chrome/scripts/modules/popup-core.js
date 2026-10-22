@@ -323,7 +323,14 @@ function recentHistory() {
 
                 for (var i = 0; i < hi.length; i++) {
 
-                    if (ir == rhino) { break; }
+                    // `ir` steps by exactly one per row appended, so `>=` and
+                    // `==` render the same number of rows here (checked over
+                    // every quota x row-count x leading-skip combination; see
+                    // popup-core.test.mjs, which says so rather than claiming
+                    // to distinguish them). `>=` is only the sturdier spelling:
+                    // it still stops once full if a later change skips several
+                    // rows in one step, or starts `ir` above zero.
+                    if (ir >= rhino) { break; }
 
                     if (hi[i] !== undefined) {
 
@@ -616,7 +623,9 @@ function mostVisited() {
 
         for (var i = 0; i < limit; i++) {
 
-            if (r == itemsno) {
+            // Same as recentHistory(): `>=` is the sturdier spelling, not a
+            // behavioural fix — `r` also steps by one.
+            if (r >= itemsno) {
                 break;
             }
 

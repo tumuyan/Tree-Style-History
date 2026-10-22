@@ -11,6 +11,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { CHROME_DIR } from './stubs.mjs';
+import { createDom } from './dom.mjs';
 
 const readJson = (rel) => JSON.parse(fs.readFileSync(path.join(CHROME_DIR, rel), 'utf8'));
 const exists = (rel) => fs.existsSync(path.join(CHROME_DIR, rel));
@@ -54,6 +55,19 @@ function moduleExports(rel) {
 }
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** The source of `function name(...) { ... }`, braces balanced. */
+function functionBody(src, name) {
+    const head = new RegExp(`function\\s+${name}\\s*\\(`).exec(src);
+    assert.ok(head, `${name}() is gone; update this guard`);
+    const open = src.indexOf('{', head.index);
+    let depth = 0;
+    for (let i = open; i < src.length; i++) {
+        if (src[i] === '{') depth++;
+        else if (src[i] === '}' && --depth === 0) return src.slice(open, i + 1);
+    }
+    assert.fail(`${name}(): unbalanced braces`);
+}
 
 const MANIFEST = readJson('manifest.json');
 const EN = readJson('_locales/en/messages.json');
@@ -492,6 +506,12 @@ test('no first-party script mounts anything onto window any more', () => {
     //   - storage-adapter.js replaces the `localStorage` global itself;
     //   - db-manager.js exposes a singleton to classic scripts, including the
     //     service worker's importScripts().
+    //
+    // There used to be a third, `selectBookmarkItemForTest` in bookmark.js:
+    // the page's selection logic lived inside its `DOMContentLoaded` +
+    // `onStorageReady` callback, so a global was the only way to reach it.
+    // It is a module-level function now and tests/modules.test.mjs imports
+    // it, so the exemption is gone rather than pinned.
     const EXEMPT = new Set([
         'scripts/storage-adapter.js',
         'scripts/db-manager.js',
@@ -501,7 +521,7 @@ test('no first-party script mounts anything onto window any more', () => {
     walkScripts((file, src) => {
         if (EXEMPT.has(file.replace(/\\/g, '/'))) return;
         for (const m of src.matchAll(/^\s*(?:window|self|globalThis)\.[\w$]+\s*=/gm)) {
-            offenders.push(`${file}: ${m[0].trim()}`);
+            offenders.push(`${file.replace(/\\/g, '/')}: ${m[0].trim()}`);
         }
     });
     assert.deepEqual(offenders, [], 'a first-party script writes to a global again — import it instead');
@@ -1797,4 +1817,466 @@ test('the e2e favicon blocklist matches the service worker patterns', () => {
         [...fromSpec].sort(),
         'e2e/pages.spec.mjs must abort every favicon host the worker can produce',
     );
+});
+test('unselecting a row clears its inline colour instead of painting a third shade', () => {
+    // Clicking "select all" then "unselect all" has to leave the list exactly
+    // as it was. Selecting writes ITEM_SELECTED_COLOR inline, so unselecting
+    // must *remove that write* — `backgroundColor = ''` — and let the row fall
+    // back to `div[rel="white"]` / `div[rel="grey"]` in history.css.
+    //
+    // Every literal this used to write was wrong somewhere: `#fafafa` was not
+    // even the light-theme grey row (`#f1f1f1` was), and in the dark theme the
+    // CSS pair is `#555`/`#444`, so no literal at all can be right.
+    //
+    // Scope is whole functions, not the `unselect all` branch. Two rounds of
+    // this guard have now been too narrow to be true:
+    //
+    //   - the first matched `w == 'all'`, which covers three of history-core's
+    //     six unselect sites;
+    //   - the second took whole functions, which covers history-core but *not*
+    //     bookmark.js's two: both live in a helper (`markBookmarkedRow`) that
+    //     `selectBookmarkItem()` calls, and the helper is where a literal would
+    //     be written anyway. Reverting either one kept the suite green.
+    //
+    // So the guard follows the call: `clearRowColor()` and
+    // `markBookmarkedRow()` are the two functions that may write an unselect
+    // colour, and every function in `WRITERS` has to route through one of
+    // them.
+    const WRITERS = ['scripts/modules/history-core.js', 'scripts/bookmark.js'];
+    const HELPERS = ['clearRowColor', 'markBookmarkedRow'];
+
+    let sites = 0;
+    const routed = new Set();
+    for (const file of WRITERS) {
+        const src = fs.readFileSync(path.join(CHROME_DIR, file), 'utf8')
+            .replace(/\/\*[\s\S]*?\*\//g, '')
+            .replace(/^\s*\/\/.*$/gm, '');
+
+        // Every place a row colour can be written, anywhere in the file.
+        // A literal is what cannot follow the theme, so any hex string in an
+        // assignment is a failure — including one that only *looks* like it
+        // came from ITEM_SELECTED_COLOR, which is why the value is matched and
+        // not the line's tail.
+        for (const line of src.split('\n')) {
+            const write = /(?:backgroundColor|['"]background-color['"])\s*[:=]\s*(.+)$/.exec(line);
+            if (!write) continue;
+            assert.ok(!/#/.test(write[1]) || /^\s*''\s*;?\s*$/.test(write[1]),
+                `${file} writes the literal colour ${line.trim()}`);
+        }
+
+        for (const name of HELPERS) {
+            if (src.includes(`function ${name}(`)) routed.add(name);
+        }
+    }
+
+    // The one function that may paint a *row* on the bookmarks page. Everything
+    // that selects or unselects a bookmark has to reach it: a grouped row shows
+    // its group title's colour, and only this function knows to paint the title
+    // instead. An inline `style.backgroundColor = ITEM_SELECTED_COLOR` in the
+    // click handler turns one bookmark pink inside a white group.
+    const ROW_PAINTER_FILE = 'scripts/bookmark.js';
+    for (const file of WRITERS) {
+        const src = fs.readFileSync(path.join(CHROME_DIR, file), 'utf8')
+            .replace(/\/\*[\s\S]*?\*\//g, '')
+            .replace(/^\s*\/\/.*$/gm, '');
+        for (const name of HELPERS) {
+            if (new RegExp(`function\\s+${name}\\s*\\(`).test(src)) {
+                sites += (functionBody(src, name).match(/backgroundColor/g) || []).length;
+            }
+        }
+    }
+
+    // …and it is called from both branches of the click handler (select and
+    // unselect), not just the sweep: the single-click path was the one place
+    // that painted a row directly.
+    {
+        const src = fs.readFileSync(path.join(CHROME_DIR, ROW_PAINTER_FILE), 'utf8');
+        const caller = functionBody(src, 'selectBookmarkItem');
+        for (const call of ['markBookmarkedRow(el, true)', 'markBookmarkedRow(ele, false)',
+            'markBookmarkedRow(ele, selectingAll)']) {
+            assert.ok(caller.includes(call),
+                `selectBookmarkItem() no longer routes through ${call.split('(')[0]}()`);
+        }
+    }
+
+    // The helpers exist and are the only ones allowed to touch the colour.
+    assert.deepEqual([...routed].sort(), [...HELPERS].sort(),
+        'an unselect helper disappeared; a literal would have nowhere to hide is not true without it');
+
+    // `clearRowColor()` is reached from two functions in history-core
+    // (`getMoreItems`, `selectHistoryItem`) and one in bookmark.js
+    // (`markBookmarkedRow`), which is where the count comes from —
+    // it is the only thing that writes an unselect colour, so a call site that
+    // stops routing through it would have to write a literal instead, and the
+    // literal scan above would catch it. Pinned anyway: the count is the cheap
+    // signal that the helper did not simply lose its callers.
+    const calls = WRITERS.map((file) => fs.readFileSync(path.join(CHROME_DIR, file), 'utf8')).join('\n');
+    const callCount = (calls.match(/clearRowColor\(/g) || []).length;
+    assert.ok(callCount >= 9, `only ${callCount} unselect sites still route through clearRowColor()`);
+    assert.ok(sites >= 1, 'neither helper writes a colour any more; update this guard');
+});
+test('a repaint never carries a literal colour of its own', () => {
+    // `paintClosest()` is the third way a colour reaches an element: the colour
+    // is the THIRD ARGUMENT, so the guard above — which reads
+    // `backgroundColor = …` assignments — cannot see a single one of its five
+    // call sites. It writes `''` in one of them today, and `''` happens to be
+    // the shape that guard allows, so the two look consistent; the moment the
+    // argument becomes `#fff` the whole suite stays green. Measured: reverting
+    // getMoreItems()'s unselect to `paintClosest(el, 'div.group-title', '#fff')`
+    // kept 311/311 green.
+    //
+    // So scan the call itself, over both list pages, and forbid a hex literal
+    // in any position. The legal values are `ITEM_SELECTED_COLOR` and — while
+    // one call site still clears through it — `''`.
+    const REPAINTERS = ['scripts/modules/history-core.js', 'scripts/bookmark.js'];
+    // Probes below reuse this regex, and `test()` on a /g-flagged one resumes
+    // from where the last match ended — the second probe would then read
+    // nothing and fail for the wrong reason. So the scanner gets its own copy.
+    // The argument list is read with balanced one-level nesting rather than up
+    // to a `;`: a call written as an arrow body —
+    // `.forEach((e) => paintClosest(e, 'a', '#fff'))` — has no semicolon to
+    // stop at, and that is exactly the shape a repaint inside a sweep takes.
+    const PAINT = /paintClosest\s*\(([^()]*(?:\([^()]*\))?[^()]*)\)/;
+    const PAINT_G = new RegExp(PAINT.source, 'g');
+    let seen = 0;
+    for (const file of REPAINTERS) {
+        const src = fs.readFileSync(path.join(CHROME_DIR, file), 'utf8')
+            .replace(/\/\*[\s\S]*?\*\//g, '')
+            .replace(/^\s*\/\/.*$/gm, '');
+        for (const hit of src.matchAll(PAINT_G)) {
+            seen++;
+            assert.ok(!/#[0-9a-fA-F]{3,8}\b/.test(hit[1]),
+                `${file} repaints with a literal colour: paintClosest(${hit[1].trim()})`);
+        }
+    }
+
+    // Zero matches would make the loop above a pass, so the number of calls it
+    // actually read is asserted: renaming `paintClosest()` — or moving every
+    // repaint onto a direct assignment — has to turn this red rather than
+    // quietly empty it. Same reason the `clearRowColor()` guard pins a count.
+    assert.ok(seen >= 4, `the repaint guard only saw ${seen} call sites; it stopped matching`);
+
+    // …and the matcher itself, so it cannot drift into matching nothing. The
+    // pair that matters is "sees a hex" vs "does not": the first two are the
+    // regression, the third is the legal value the fix is written in, and the
+    // fourth is the helper that replaced the call in one place — a matcher wide
+    // enough to read it would be reporting code that is already right.
+    const HEX = /#[0-9a-fA-F]{3,8}\b/;
+    const argOf = (call) => PAINT.exec(call)?.[1] ?? null;
+    assert.ok(HEX.test(argOf("paintClosest(el, 'div.group-title', '#fff');")),
+        'the repaint matcher stopped seeing a literal in the third argument');
+    assert.ok(HEX.test(argOf("paintClosest(el, 'div.group-title',\n        '#ffcbd3');")),
+        'the repaint matcher stopped spanning the newline a wrapped call has');
+    // The legal value has to be READ, not merely not-matched: `HEX.test(null)`
+    // is false too, so a matcher that stopped extracting the argument would
+    // pass the negative probe while seeing nothing at all.
+    const legal = argOf("paintClosest(el, 'div.group-title', ITEM_SELECTED_COLOR);");
+    assert.ok(legal && legal.includes('ITEM_SELECTED_COLOR'),
+        'the repaint matcher stopped reading the third argument');
+    assert.ok(!HEX.test(legal), 'the legal repaint value was reported as a literal');
+    assert.equal(argOf("clearRowColor(el.closest('div.group-title'));"), null,
+        'the repaint matcher started matching the helper that replaced it');
+    // The no-semicolon shape: a repaint written as an arrow body, which the
+    // `;`-terminated version of this matcher could never see.
+    assert.ok(HEX.test(argOf("Array.from(x).forEach((e) => paintClosest(e, 'div.item-holder', '#fff'))")),
+        'the repaint matcher stopped seeing a call with no semicolon after it');
+});
+
+test('a grouped row keeps the group title in charge of its colour', () => {
+    // Grouping renders each `div.item-holder` with an EMPTY inline colour and
+    // lets `div[rel=white|grey]` on the enclosing title show through. Copying
+    // the title's inline colour onto the row disconnects the two: selecting the
+    // group repaints the title, the row never follows, and the row's copy wins
+    // over the stylesheet for good. It is also not what the CSS says the row's
+    // colour is — the row's `rel` is the one the render loop assigned it.
+    //
+    // Both render loops copy it — history-core.js grouped rows AND
+    // bookmark.js grouped rows — so both are scanned. The two earlier versions
+    // of this line asserted shapes that could not fail:
+    //
+    //   - matching the value (`styles: { 'backgroundColor': group|parentHolder… }`)
+    //     missed the only occurrence there ever was, because the value assigned
+    //     was an intermediate variable (`bgColor`) resolved two lines above;
+    //   - matching only the unquoted key missed bookmark.js, which spells it
+    //     `'background-color'`.
+    //
+    // So match the fact rather than the expression: a `styles:` block that
+    // carries a background key at all, in either spelling, is the failure.
+    const COPIERS = ['scripts/modules/history-core.js', 'scripts/bookmark.js'];
+    for (const file of COPIERS) {
+        const src = fs.readFileSync(path.join(CHROME_DIR, file), 'utf8');
+        const copy = /styles:\s*\{[^}]*['"]?background-?[Cc]olor['"]?\s*:/.exec(src);
+        assert.ok(!copy, `${file} copies an inline background onto a rendered row again: `
+            + `${(copy?.[0] || '').replace(/\s+/g, ' ')}`);
+    }
+});
+
+test('no code calls an array method on a querySelectorAll result', () => {
+    // $$() is `querySelectorAll()`, which answers a NodeList — no concat, no
+    // map, no filter, no push. tests/dom.mjs answers a real array instead, so
+    // `$$(...).concat(...)` passes the whole suite and throws a TypeError in
+    // the browser. That is exactly what happened to groupTitleOf() in
+    // bookmark.js: the throw made it return null for every grouped row, so the
+    // "paint the group title" branch could not be reached outside the tests.
+    //
+    // The fix is always Array.from() first (the shape the other nineteen sites
+    // use). This guard is the only thing standing between the shim and a
+    // repeat, because the suite cannot tell the two apart.
+    //
+    // Matched over the WHOLE text, not line by line. The matcher allows a
+    // newline between `$$(...)` and the method — that is what makes
+    // `$$(sel)\n    .map(fn)` visible — so a line-by-line scan could never
+    // match the very shape the probes below pin: the two are split apart
+    // first. Measured before the change: rewriting popup.js's
+    // `Array.from($$('.favicon')).forEach(...)` as a two-line
+    // `$$('.favicon')\n    .forEach(...)` was one hit whole-text, zero
+    // per-line, and the whole suite stayed green.
+    //
+    // Counting the hits over the whole text and then locating each one in a
+    // line is what keeps both halves honest: the detection covers a newline,
+    // and the report still says where the code is.
+    const ARRAY_ONLY = /\$\$\s*\([^)]*\)\s*\.\s*(?:concat|map|filter|forEach|reduce|push|slice|sort|join|indexOf)\s*\(/g;
+    const files = fs.readdirSync(path.join(CHROME_DIR, 'scripts'))
+        .filter((name) => name.endsWith('.js'))
+        .map((name) => path.join('scripts', name))
+        .concat(fs.readdirSync(path.join(CHROME_DIR, 'scripts/modules'))
+            .filter((name) => name.endsWith('.js'))
+            .map((name) => path.join('scripts/modules', name)));
+
+    const offenders = [];
+    for (const file of files) {
+        const src = fs.readFileSync(path.join(CHROME_DIR, file), 'utf8')
+            .replace(/\/\*[\s\S]*?\*\//g, '')
+            .replace(/^\s*\/\/.*$/gm, '');
+        for (const hit of src.matchAll(ARRAY_ONLY)) {
+            const line = src.slice(0, hit.index).split('\n').length;
+            const where = src.split('\n')[line - 1].trim();
+            offenders.push(`${file}:${line}: ${where}`);
+        }
+    }
+    assert.deepEqual(offenders, [], 'a NodeList is being used as an array: '
+        + offenders.join(' | '));
+});
+test('the NodeList guard matches the shapes it claims to catch', () => {
+    // Same convention as the closest() and numeric-wrapper guards: pin the
+    // matcher itself, so a guard that quietly stops matching is visible without
+    // having to mutate production code.
+    const ARRAY_ONLY = /\$\$\s*\([^)]*\)\s*\.\s*(?:concat|map|filter|forEach|reduce|push|slice|sort|join|indexOf)\s*\(/;
+
+    // Caught: calling an array method straight off a $$() result. The probes
+    // run over whole text (`match()`), the same way the guard above matches —
+    // pinning them against a single line would pin a shape the guard never
+    // uses.
+    assert.ok(ARRAY_ONLY.test("$$('#a .b').concat($$('#c .d'))"));
+    assert.ok(ARRAY_ONLY.test("$$(into + ' .chkbx').forEach(function () {})"));
+    assert.ok(ARRAY_ONLY.test('$$(sel)\n    .map(fn)'));
+    // The one the line-by-line version missed, and the reason it is spelled
+    // out: method on its own line, without the dots aligned.
+    assert.ok(ARRAY_ONLY.test('$$(sel)\n    .forEach(fn)'));
+
+    // Not caught, because these are what the fix looks like.
+    assert.ok(!ARRAY_ONLY.test("Array.from($$('#a .b')).concat(Array.from($$('#c .d')))"));
+    assert.ok(!ARRAY_ONLY.test("var list = $$('#a .b'); list.concat(other)"));
+    assert.ok(!ARRAY_ONLY.test("$$('#a .b')[i]"));
+
+    // `.length` is the one member a NodeList does share with an array, so it
+    // never throws — and that is exactly why it needs pinning here rather than
+    // in the guard above: `$$(...).length` reads fine in both the shim and the
+    // browser, and it was the shape of the one real defect this guard exists
+    // for (bookmark.js' groupTitleOf() counted `querySelectorAll()` directly).
+    // Counting is not an array method, so the scanner deliberately leaves it
+    // alone; what is pinned is that the scanner KNOWS it is not catching it.
+    assert.ok(!ARRAY_ONLY.test("var n = $$('#a .b').length"),
+        'the scanner started reporting .length; production code counts it in 8 places');
+});
+
+test('a test-side re-render really replaces the nodes', () => {
+    // `container.textContent = ''` is how every page clears a list before
+    // drawing the next one, and the shim used to leave `children` untouched —
+    // so `assert.equal(children.length, 2)` after a re-render could not tell
+    // two fresh rows from two stale ones.
+    //
+    // Asserted through a query and not through `children`: the first version
+    // built the box with `makeEl()` and counted `box.children` directly, so it
+    // never reached `queryAll()` — deleting the `el.children.length = 0` line
+    // from the shim left the whole suite green. What a page actually does after
+    // clearing is ask the container what is inside it, so that is what is asked
+    // here: rows are seeded, cleared, re-seeded, and counted back.
+    const dom = createDom();
+    const view = dom.el('rh-views-insert');
+    for (let i = 0; i < 2; i++) {
+        const row = dom.makeEl('div');
+        row.className = 'item-holder';
+        view.appendChild(row);
+    }
+    assert.equal(document.querySelectorAll('#rh-views-insert div.item-holder').length, 2,
+        'the shim stopped answering the selector this case counts with');
+
+    view.textContent = '';
+    assert.equal(document.querySelectorAll('#rh-views-insert div.item-holder').length, 0,
+        'textContent = "" left the old children behind, so a re-render cannot be told from the last one');
+    assert.equal(view.textContent, '');
+
+    // …and the container takes new children afterwards, which is the other half
+    // of "replaces": an emptied list has to be drawable again.
+    const fresh = dom.makeEl('div');
+    fresh.className = 'item-holder';
+    view.appendChild(fresh);
+    assert.equal(document.querySelectorAll('#rh-views-insert div.item-holder').length, 1);
+});
+
+test('a document-wide query reports each element once, even after a move', () => {
+    // `queryAll()` walks `document.body` plus every id-seeded element, skipping
+    // any root an earlier one already contains. That test is about containment
+    // and cannot see ordering: seed A, hang A under a later-seeded B, and A is
+    // no longer inside anything checked before it — so both go in `roots` and
+    // everything under A is visited twice.
+    //
+    // The first version of this case moved the leaf into the later container
+    // and then compared `new Set(hits).size` with `hits.length` — which is the
+    // same number whatever `queryAll()` does, because a Set of two identical
+    // references is one entry. Removing the de-duplication left all 310 tests
+    // green. So the count is asserted directly, and it is the count of a real
+    // query: the shape below measured 2 hits before the fix and 1 after.
+    const dom = createDom();
+    const a = dom.el('seeded-first');
+    const leaf = dom.makeEl('div');
+    leaf.className = 'target';
+    a.appendChild(leaf);
+    // The move: A itself goes under a container seeded after it. Both are roots
+    // now — `contains()` cannot see that A was seeded first — so the walk of B
+    // reaches the leaf a second time.
+    const b = dom.el('seeded-second');
+    b.appendChild(a);
+
+    const hits = document.querySelectorAll('.target');
+    assert.equal(hits.length, 1, 'the moved node should be reported exactly once');
+    assert.equal(hits[0], leaf);
+});
+
+test('the unselect guards stay pointed at code that is still there', () => {
+    // The three guards above agree on a small set of facts about the code —
+    // which functions may write a row colour, and how many sites route through
+    // `clearRowColor()` — and every one of those facts has been wrong at some
+    // point because it was only written in a comment. Two rounds of the
+    // literal scan were too narrow to be true (see the note in that test) and
+    // one comment named a function that never existed.
+    //
+    // So pin the premises against the real files: the helper names have to
+    // appear in the sources the guards read, and the count they compare against
+    // has to be one the sources still reach. A future edit that renames or
+    // moves a helper then turns a silently-green guard into a red one here.
+    const historySrc = fs.readFileSync(path.join(CHROME_DIR, 'scripts/modules/history-core.js'), 'utf8');
+    const bookmarkSrc = fs.readFileSync(path.join(CHROME_DIR, 'scripts/bookmark.js'), 'utf8');
+
+    // The two functions the literal scan scopes itself to, and the one
+    // bookmark.js routes its own unselects through.
+    assert.ok(/function\s+clearRowColor\s*\(/.test(historySrc), 'clearRowColor() left history-core.js');
+    assert.ok(/function\s+markBookmarkedRow\s*\(/.test(bookmarkSrc), 'markBookmarkedRow() left bookmark.js');
+
+    // The count the guard pins (`>= 9`) is only meaningful while the call is
+    // what the writers actually use: bookmark.js reaches it by import now, so a
+    // rename on either side has to be visible.
+    assert.ok(/clearRowColor/.test(bookmarkSrc), 'bookmark.js stopped routing through clearRowColor()');
+    const exports = /export \{([\s\S]*?)\};/.exec(historySrc);
+    assert.ok(exports, 'history-core.js no longer has an export block');
+    for (const name of ['clearRowColor', 'groupTitleOf']) {
+        assert.ok(exports[1].includes(name), `history-core.js stopped exporting ${name}()`);
+    }
+
+    // The group-title lookup is one rule for both list pages, so bookmark.js
+    // imports it rather than declaring its own. A second copy is how the two
+    // drifted in the first place (one was document-wide, one was not).
+    assert.ok(!/function\s+groupTitleOf\s*\(/.test(bookmarkSrc),
+        'bookmark.js declares its own groupTitleOf() again; import history-core.js instead');
+    assert.ok(/groupTitleOf/.test(bookmarkSrc), 'bookmark.js no longer resolves group titles');
+
+    // "When is a group title released?" is one rule, and bookmark.js decides it
+    // once per sweep (`clearOrphanedTitles`) instead of per row — the per-row
+    // version cleared the title of a group that still had a ticked row in it.
+    assert.ok(/function\s+clearOrphanedTitles\s*\(/.test(bookmarkSrc),
+        'clearOrphanedTitles() left bookmark.js; a title cleared per row again is the bug');
+    assert.ok(!/function\s+clearOrphanedTitles\s*\(/.test(historySrc),
+        'clearOrphanedTitles() belongs to bookmark.js, which owns its own sweeps');
+
+    // …and the tally it reads is a question about ONE group, so it is asked of
+    // that group's own holder. Counting over the view answers "is anything left
+    // anywhere", which lets a group with a ticked row of its own look emptied
+    // out; it also makes one click walk every bookmark on the page, because
+    // bookmark.html spreads its rows over one group per host.
+    //
+    // The unselect-all branch carries no tally at all: the sweep above it has
+    // just set every checkbox false, so "how many are left" is 0 before it is
+    // asked — collecting survivors there only adds a branch the reader has to
+    // rule out. It clears the titles the way history-core.js does instead.
+    {
+        const sweep = functionBody(bookmarkSrc, 'selectBookmarkItem');
+        assert.ok(/holder\.querySelectorAll\('\.chkbx:checked'\)/.test(sweep),
+            "the survivors tally is no longer scoped to the group's own holder");
+        assert.ok(!/survivors\s*\+\+/.test(sweep),
+            'the survivors tally counts per row over the view again');
+        // Exactly one, and it has to be the sweep's own: the argument of that
+        // call is what a reintroduced unselect-all tally would be named.
+        // Matching the NAME (`emptied`) is what the previous version did, and
+        // renaming the local to `emptied2` put the branch straight back with
+        // the suite green — the fact being guarded is the number of call sites,
+        // not a spelling.
+        assert.equal((sweep.match(/clearOrphanedTitles\(/g) || []).length, 1,
+            'unselect-all collects survivors for a tally whose answer is already 0');
+    }
+
+    // …and neither sweep resolves a title per row. `groupTitleOf()` walks the
+    // container's `children`, so once per row it costs rows x groups — the
+    // shape both sweeps had, and the reason "select all" measured 7.5s on 8000
+    // bookmarks over 2000 groups. Both now paint the titles in one pass over
+    // `.group-title` afterwards; the per-row helper only reaches for one when
+    // it is about to paint it.
+    {
+        const sweep = functionBody(bookmarkSrc, 'selectBookmarkItem');
+        assert.equal((sweep.match(/\.group-title/g) || []).length, 2,
+            'the sweeps stopped painting the group titles in one pass');
+        // Scoped to the select-all call, because that is the only site where
+        // the two are distinguishable: the helper is reached from four places,
+        // and a check over the whole function passes either way (measured).
+        const selectAll = /\(function\(ele\) \{\s*ele\.checked = selectingAll;([\s\S]*?)\}\)\(items\[i\]\);/.exec(sweep);
+        assert.ok(selectAll, 'the select-all sweep changed shape; update this guard');
+        assert.ok(/div\.group-holder/.test(selectAll[1]),
+            'select-all resolves a group title for every row again');
+    }
+
+    // …and the per-row painter resolves a title only when it is painting one.
+    // `groupTitleOf()` walks the container's `children`, so calling it on the
+    // unselect path — which returns without ever looking at the result — costs
+    // rows x groups: "unselect all" on 8000 bookmarks over 2000 groups measured
+    // 58ms -> 4188ms with it hoisted back to the top of the function. It is a
+    // guard rather than a test because nothing in the suite is big enough to
+    // feel it.
+    {
+        // Comments stripped first: the reason a lookup must not happen here is
+        // worth writing down, and writing it down names the function — which
+        // would trip a matcher that reads comments as code.
+        const painter = functionBody(bookmarkSrc, 'markBookmarkedRow')
+            .replace(/\/\*[\s\S]*?\*\//g, '')
+            .replace(/^\s*\/\/.*$/gm, '');
+        const unselect = /if \(!selected\) \{[\s\S]*?\n    \}/.exec(painter);
+        assert.ok(unselect, 'markBookmarkedRow() lost the branch that only clears colours');
+        // Before the branch, not inside it: resolving the title at the top of
+        // the function is how the cost got in — the unselect path then walks a
+        // container it never looks at. Pinning the branch's own body would pass
+        // on exactly that shape, which is what the first version of this guard
+        // did (measured: the lookup hoisted back to the top stayed green).
+        const prologue = painter.slice(0, unselect.index);
+        assert.ok(!/groupTitleOf\(/.test(prologue),
+            'the unselect path resolves a group title it goes on to ignore');
+    }
+
+    // bookmark.js's selection logic is a module-level function, so the
+    // behaviour tests import it. It used to live inside the page's
+    // `DOMContentLoaded` + `onStorageReady` callback, and the only way to
+    // reach it was a `globalThis.selectBookmarkItemForTest` hook — which made
+    // a test-only door part of the shipped extension. Keep the export, so that
+    // moving it back into the callback is impossible without a hook.
+    const bookmarkExports = /export \{([\s\S]*?)\};/.exec(bookmarkSrc);
+    assert.ok(bookmarkExports && bookmarkExports[1].includes('selectBookmarkItem'),
+        'bookmark.js stopped exporting selectBookmarkItem(); the tests would need a global again');
 });

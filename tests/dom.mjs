@@ -17,6 +17,10 @@
 //     comparing, and an attribute selector whose value contains an unescaped
 //     quote throws a SyntaxError — both as the browser does. Selectors beyond
 //     the shapes listed in `matches()` return [] rather than half-working.
+//     `matches()` also accepts a type + class compound (`div.item-holder`):
+//     that is the selector the selection code reaches its rows with, via
+//     `closest()`, so supporting it is what lets an unselect-all sweep find
+//     the rows a test just built.
 //   * `getElementById` returns null for unknown ids and records them in
 //     `missing`, so tests can assert the code never touches an element that
 //     options.html does not define.
@@ -104,14 +108,30 @@ export function createDom(options = {}) {
 
         Object.defineProperty(el, 'textContent', {
             get() { return el._text; },
-            set(v) { el._text = String(v); el._html = ''; },
+            set(v) {
+                el._text = String(v);
+                el._html = '';
+                // Assigning textContent replaces everything inside the element,
+                // children included. Leaving them made `container.textContent =
+                // ''` a no-op on the tree, so an assertion like
+                // `children.length === 2` after a re-render could not tell two
+                // fresh rows from two stale ones.
+                el.children.length = 0;
+            },
         });
 
         Object.defineProperty(el, 'firstChild', { get() { return el.children[0] ?? null; } });
 
         Object.defineProperty(el, 'className', {
             get() { return [...el.classes].join(' '); },
-            set(v) { el.classes = new Set(String(v).split(/\s+/).filter(Boolean)); },
+            set(v) {
+                el.classes = new Set(String(v).split(/\s+/).filter(Boolean));
+                // `className` and the `class` attribute are one thing in the
+                // DOM; without this the attribute selector `div.item-holder`
+                // (type + class compound) could not match an element whose
+                // class was set the ordinary way.
+                el.attrs.class = [...el.classes].join(' ');
+            },
         });
 
         el.classList = {
@@ -134,7 +154,19 @@ export function createDom(options = {}) {
         /** Invoke the handlers registered for `type` (test-side trigger). */
         el.dispatch = (type, event = {}) => (el.handlers[type] || []).forEach((fn) => fn.call(el, { type, target: el, preventDefault() {}, ...event }));
 
-        el.appendChild = (child) => { child.parentNode = el; el.children.push(child); return child; };
+        // Appending MOVES: the child leaves whatever `children` list it was in,
+        // which is the only reason an element can never be under two parents at
+        // once. Pushing it on top of the old list left the same node reachable
+        // from two roots, and `queryAll()` had to de-duplicate the walk to hide
+        // it — a shim answering a shape the DOM cannot produce. Also `moveRow`
+        // semantics: a render loop that re-parents a row expects the row gone
+        // from where it was.
+        el.appendChild = (child) => {
+            if (child.parentNode) child.parentNode.removeChild(child);
+            child.parentNode = el;
+            el.children.push(child);
+            return child;
+        };
         el.removeChild = (child) => { el.children = el.children.filter((c) => c !== child); return child; };
         el.remove = () => { if (el.parentNode) el.parentNode.removeChild(el); };
         el.getBoundingClientRect = () => ({ left: 0, top: 0, width: el.clientWidth, height: 20 });
@@ -146,6 +178,11 @@ export function createDom(options = {}) {
         };
         el.querySelector = (sel) => queryAll(sel, el)[0] ?? null;
         el.querySelectorAll = (sel) => queryAll(sel, el);
+        /** True when this node is `node` or one of its ancestors. */
+        el.contains = (node) => {
+            for (let cur = node; cur; cur = cur.parentNode) if (cur === el) return true;
+            return false;
+        };
 
         return el;
     }
@@ -163,8 +200,24 @@ export function createDom(options = {}) {
 
     function matches(el, sel) {
         const s = String(sel).trim();
+        // `:checked` is a state, not a shape: `.chkbx:checked` is how every
+        // selection sweep asks for the ticked rows, and answering it with
+        // "unknown selector, no match" made the shim report zero ticked rows in
+        // a tree that had them. Anything past the state falls through to the
+        // class match below.
+        const stateful = /^(\.[\w-]+):checked$/.exec(s);
+        if (stateful) return el.classes.has(stateful[1].slice(1)) && el.checked === true;
         if (s.startsWith('#')) return el.id === s.slice(1);
         if (s.startsWith('.')) return el.classes.has(s.slice(1));
+        // Type + class compound: `div.item-holder`. This is the shape the
+        // selection code reaches its rows with (`closest('div.item-holder')`),
+        // so without it every repaint silently finds nothing and the tests
+        // below would assert on rows the code never touched.
+        const compound = /^([a-zA-Z][\w-]*)((?:\.[\w-]+)+)$/.exec(s);
+        if (compound) {
+            return el.tagName === compound[1].toUpperCase()
+                && compound[2].split('.').filter(Boolean).every((cls) => el.classes.has(cls));
+        }
         // Presence: `li[data-tid]`, the shape a delegated handler uses to find
         // the row a click landed in. `getAttribute()` returns null for an
         // attribute that was never set, which is what distinguishes it.
@@ -198,7 +251,11 @@ export function createDom(options = {}) {
         const sel = String(selector).trim();
         if (bySelector.has(sel)) return bySelector.get(sel);
 
-        if (root) {
+        // Document-rooted selectors carry the descendant axis too: a root-less
+        // query used to answer every selector that did not start with `#` by
+        // matching it against the document node itself — always zero rows, so
+        // "found nothing to paint" and "painted nothing" were the same result.
+        if (root || !/^#/.test(sel)) {
             const out = [];
             const walk = (node) => {
                 for (const child of node.children) {
@@ -206,18 +263,70 @@ export function createDom(options = {}) {
                     walk(child);
                 }
             };
-            walk(root);
-            return out;
+            // `el()` makes elements on demand and does not parent them
+            // anywhere, so a walk from `document.body` alone would miss whatever
+            // a test appended to a container it seeded by id — the shape these
+            // fixtures use. Walk the seeded roots as well, skipping any a
+            // parent already reaches so nothing is reported twice.
+            const roots = root ? [root] : [document.body];
+            if (!root) {
+                for (const seeded of byId.values()) {
+                    if (!roots.some((r) => r !== seeded && r.contains(seeded))) roots.push(seeded);
+                }
+            }
+            // "Not contained in an earlier root" is the wrong test when an
+            // element MOVES between containers: seed A, put A inside B, seed B,
+            // and A is no longer inside anything seeded before it — so both go
+            // in `roots` and everything under A is visited twice. Measured: one
+            // node came back as two. Containment cannot see the ordering, so
+            // drop the repeats the walk actually produced instead.
+            const seen = new Set();
+            for (const r of roots) walk(r);
+            return out.filter((el) => (seen.has(el) ? false : (seen.add(el), true)));
         }
 
-        // Supported shapes: `#id`, `#id tag`, `#id tag tag2[:first-child]`.
-        const m = /^#([\w-]+)(?:\s+([a-zA-Z][\w-]*)(?:\s+([a-zA-Z][\w-]*)(?::first-child)?)?)?$/.exec(sel);
-        if (!m) return [];
-        const base = byId.get(m[2] && CONTAINER_ALIAS[m[1]] ? CONTAINER_ALIAS[m[1]] : m[1]);
+        // Remaining shape: `#id`, `#id <step>`, `#id <step> <tag>[:first-child]`.
+        // The ids are answered from the registry (and its aliases) rather than
+        // from the tree, so a test can seed a container by id alone. A `<step>`
+        // is one of `tag`, `tag.class`, `.class` — spelling `.class` out is
+        // what makes `#view .chkbx` (the shape every selection sweep uses)
+        // answerable, instead of silently returning [] and turning "painted
+        // nothing" into a pass.
+        //
+        // No attribute in a step. `div[title="host"]` used to be admitted — for
+        // the group-title lookup — but that lookup is a walk of the container's
+        // `children` now (history-core.js's `titleInContainer()`), so nothing
+        // reaches the shim with that shape: admitting a step it never sees is
+        // how a shim ends up answering a selector nobody asks for.
+        const STEP = /^(?:[a-zA-Z][\w-]*(?:\.[\w-]+)*|\.[\w-]+)$/;
+        const parts = sel.split(/\s+/).filter(Boolean);
+        let base = null;
+        let step = null;
+        let tail = null;
+        if (/^#[\w-]+$/.test(parts[0] || '')) {
+            const id = parts[0].slice(1);
+            base = byId.get(CONTAINER_ALIAS[id] || id);
+            step = parts[1] ?? null;
+            tail = parts[2] ?? null;
+            if ((step && !STEP.test(step)) || (tail && !/^[a-zA-Z][\w-]*(?::first-child)?$/.test(tail))) return [];
+            if (parts.length > 3) return [];
+        }
         if (!base) return [];
-        if (!m[2]) return [base];
-        const rows = base.children.filter((c) => c.tagName === m[2].toUpperCase());
-        if (!m[3]) return rows;
+        if (!step) return [base];
+        // `matches()` understands `tag`, `.class` and `tag.class` alike, which
+        // is exactly the three shapes a step can take here.
+        // Descendant axis: a row can be nested (`div.group-title` sits beside
+        // `div.group-holder`, and the checkboxes sit inside `div.item-holder`),
+        // so the step is matched at any depth, as CSS does.
+        const rows = [];
+        const walk = (node) => {
+            for (const child of node.children) {
+                if (matches(child, step)) rows.push(child);
+                walk(child);
+            }
+        };
+        walk(base);
+        if (!tail) return rows;
         return rows.flatMap((row) => row.cells.slice(0, 1));
     }
 
@@ -232,7 +341,18 @@ export function createDom(options = {}) {
         createTextNode: (text) => { const el = makeEl('#text'); el.textContent = text; return el; },
         querySelector: (sel) => queryAll(sel)[0] ?? null,
         querySelectorAll: (sel) => queryAll(sel),
-        addEventListener() {},
+        /**
+         * Page scripts register their entry point here
+         * (`document.addEventListener('DOMContentLoaded', ...)`). Keep the
+         * handlers so a test can run them with `dispatch('DOMContentLoaded')`;
+         * dropping them silently meant no page script could ever be driven.
+         */
+        handlers: {},
+        addEventListener(type, fn) { (this.handlers[type] ||= []).push(fn); },
+        /** Run every handler registered for `type` (test-side trigger). */
+        dispatch(type, event = {}) {
+            (this.handlers[type] || []).forEach((fn) => fn.call(this, { type, target: this, ...event }));
+        },
         execCommand() {},
         write() {},
     };
@@ -273,8 +393,14 @@ export function createDom(options = {}) {
         },
         makeEl,
         seedIds(ids) { for (const id of ids) if (!byId.has(id)) byId.set(id, makeEl('div')); },
-        /** Pin the result of a literal selector, e.g. `register('a[href="#"]', [])`. */
-        register(sel, list) { bySelector.set(sel, list); return list; },
+        /**
+         * Pin the result of a literal selector, e.g. `register('a[href="#"]', [])`.
+         *
+         * Answering `undefined` is not the same as answering `[]`: the lookups
+         * hand the pinned value straight back, so `undefined.length` throws
+         * inside the caller instead of the code under test. Keep the two apart.
+         */
+        register(sel, list = []) { bySelector.set(sel, list); return list; },
         /**
          * Turn an element into a <select> with the given option values.
          *

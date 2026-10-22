@@ -299,20 +299,12 @@ function history(w, q) {
                                 item += '<span class="title" title="' + urlAttr + '" rel="' + tipAttr + '">' + titleText + '</span>';
                                 item += '</a>';
                                 item += '</div>';
-                                // The group title carries class `item-holder`
-                                // and title=host; the holder carries rel=host.
-                                // Both were built above, so the Map answers
-                                // what used to be two container scans.
+                                // The holder was built above, so the Map
+                                // answers what used to be two container scans.
                                 var group = groups.get(hostKey);
-                                var parentHolder = group ? group.title : null;
-                                var relVal = parentHolder ? parentHolder.getAttribute('rel') : ibcv;
-                                var bgColor = parentHolder ? parentHolder.style.backgroundColor : '';
                                 var itemHolder = createElement('div', {
-                                    'rel': relVal,
-                                    'class': 'item-holder',
-                                    styles: {
-                                        'backgroundColor': bgColor
-                                    }
+                                    'rel': ibcv,
+                                    'class': 'item-holder'
                                 });
                                 itemHolder.innerHTML = item + '<div class="clearitem" style="clear:both;"></div>';
                                 var groupHolder = group ? group.holder : null;
@@ -471,6 +463,95 @@ function paintClosest(el, selector, color) {
     if (node) node.style.backgroundColor = color;
 }
 
+/**
+ * Drop the inline colour a row carries, leaving the CSS one to show through.
+ *
+ * Selecting a row means writing `ITEM_SELECTED_COLOR` into it; unselecting
+ * therefore means *removing that write*, not writing a colour back. The colour
+ * a row is supposed to return to comes from `div[rel="white"]` / `div[rel="grey"]`
+ * in history.css — and that CSS is a different pair of values per theme
+ * (`#fff`/`#fafafa` in light, `#555`/`#444` in dark). Writing a literal back
+ * gets both halves wrong: `#fafafa` is not the grey row in dark mode either,
+ * and no literal can follow a user who switches theme.
+ *
+ * An emptied inline value is also what the row starts with, so an unselect
+ * restores exactly the properties the select wrote.
+ */
+function clearRowColor(row) {
+    if (row) row.style.backgroundColor = '';
+}
+
+/**
+ * Where a grouped row sits: the container it was drawn in and the host it was
+ * grouped under.
+ *
+ * Both halves of the group rule start here — the title to paint and the group's
+ * own checkboxes deciding whether it should still be painted — so they cannot
+ * disagree about which group a row is in. Null for an ungrouped row, and for a
+ * row that has been detached: `closest()` answers with a subtree that is no
+ * longer in the document, and its host cannot be resolved against anything.
+ *
+ * `view` is the container the group was drawn in, which is where the title
+ * lives: both list pages keep TWO containers in the DOM (main list and search
+ * results) and switch between them by `display`, so "the title of this group"
+ * is only answerable inside the one the row came from.
+ */
+function groupOf(checkbox) {
+    var holder = checkbox.closest('div.group-holder');
+    if (!holder) return null;
+    var view = holder.parentNode;
+    if (!view) return null;
+    return { view: view, host: holder.getAttribute('rel') };
+}
+
+/**
+ * The `div.group-title` carrying `host` inside `view`, or null.
+ *
+ * Matched by hand rather than with `div.group-title[title="<host>"]`: the host
+ * goes into an attribute value, so a quote in it would make that selector
+ * syntactically invalid and `querySelector` would throw. Every row of a group
+ * is a sibling of its holder, so the titles are one level up and a walk of
+ * `children` is the whole list.
+ */
+function titleInContainer(view, host) {
+    for (var i = 0; i < view.children.length; i++) {
+        var el = view.children[i];
+        if (el.getAttribute('title') == host
+            && (' ' + el.className + ' ').indexOf(' group-title ') >= 0) {
+            return el;
+        }
+    }
+    return null;
+}
+
+/**
+ * The group title a row belongs to, or null when it is not grouped.
+ *
+ * Grouping wraps rows in `div.group-holder[rel=host]` and the title above it
+ * carries the same host in `title`. Shared by the unselect sweep so a grouped
+ * row and its title are always cleared as a pair — clearing only the row
+ * leaves the title pink, which is one of the two ways this used to go wrong.
+ *
+ * Both list pages group their rows the same way, so bookmark.js imports this
+ * rather than keeping its own copy: the two copies had already drifted (one
+ * reached the title through a document-wide query, the other did not) and
+ * "which element carries a grouped row's colour" is one rule, not two.
+ *
+ * Resolved from the holder's own container, not from `document`. Both pages
+ * keep the main list and the search results in the DOM at the same time and
+ * switch views by `display` alone, so the same host has a title in each — and
+ * a document-wide query returns the first one in document order, which is the
+ * main list's no matter which view the row came from. Unselecting everything
+ * in the search view then cleared the main list's title while its group
+ * checkbox stayed ticked. Every other lookup in this file already scopes
+ * itself the same way (`$$(into + ' div[title="…"]')`,
+ * `document.querySelector(into + ' …')`).
+ */
+function groupTitleOf(checkbox) {
+    var group = groupOf(checkbox);
+    return group ? titleInContainer(group.view, group.host) : null;
+}
+
 function getMoreItems(el) {
     if (getActiveHistory() == 'history') {
         var into = '#rh-views-insert';
@@ -484,13 +565,8 @@ function getMoreItems(el) {
             if (ihost == eleh) {
                 ele.checked = false;
                 var parentHolder = ele.closest('div.item-holder');
-                if (parentHolder && parentHolder.getAttribute('rel') == 'white') {
-                    parentHolder.style.backgroundColor = '#fff';
-                    paintClosest(el, 'div.group-title', '#fff');
-                } else {
-                    if (parentHolder) parentHolder.style.backgroundColor = '#f1f1f1';
-                    paintClosest(el, 'div.group-title', '#f1f1f1');
-                }
+                clearRowColor(parentHolder);
+                clearRowColor(el.closest('div.group-title'));
             }
         });
     } else if (el.checked == true) {
@@ -537,12 +613,7 @@ function selectHistoryItem(el, w) {
                     if (hitState == 'true' && chkbxs[i] !== el && chkbxs[i] !== selectedItem) {
                         if (chkbxs[i].checked == true) {
                             chkbxs[i].checked = false;
-                            var parentHolder = chkbxs[i].closest('div.item-holder');
-                            if (parentHolder && parentHolder.getAttribute('rel') == 'white') {
-                                parentHolder.style.backgroundColor = '#fff';
-                            } else {
-                                if (parentHolder) parentHolder.style.backgroundColor = '#f1f1f1';
-                            }
+                            clearRowColor(chkbxs[i].closest('div.item-holder'));
                         } else if (chkbxs[i].checked == false) {
                             chkbxs[i].checked = true;
                             paintClosest(chkbxs[i], 'div.item-holder', ITEM_SELECTED_COLOR);
@@ -557,12 +628,12 @@ function selectHistoryItem(el, w) {
             var iurl = el.value;
             Array.from($$(into + ' .chkbx')).forEach(function (ele) {
                 if (ele.value == iurl) {
-                    var parentHolder = ele.closest('div.item-holder');
-                    if (parentHolder && parentHolder.getAttribute('rel') == 'white') {
-                        parentHolder.style.backgroundColor = '#fff';
-                    } else {
-                        if (parentHolder) parentHolder.style.backgroundColor = '#f1f1f1';
-                    }
+                    clearRowColor(ele.closest('div.item-holder'));
+                    // The title is left to the recompute below, which is the
+                    // only place that decides it: this sweep cannot tell
+                    // "last ticked row of the group" from "row I am looking at"
+                    // — it walks rows one at a time, and the state it reads
+                    // is the one from before this click landed.
                 }
             });
         }
@@ -573,35 +644,41 @@ function selectHistoryItem(el, w) {
             $('master-check-all').checked = false;
             $('master-check-all').value = 'false';
         }
+        // One place decides a group title's colour, and it is this one: the
+        // row sweeps above cannot, because they walk rows one at a time and
+        // read the state from before the click landed.
         if (grp == 'yes') {
             var elem = el.closest('.group-holder');
             if (elem) {
                 var chkbxCount = elem.querySelectorAll('.chkbx').length;
                 var chkbxChecked = elem.querySelectorAll('.chkbx:checked').length;
-                if (chkbxCount == chkbxChecked) {
-                    var titleDivs = $$(into + ' div[title="' + CSS.escape(elem.getAttribute('rel')) + '"]');
-                    if (titleDivs.length > 0) {
-                        titleDivs[0].style.backgroundColor = ITEM_SELECTED_COLOR;
-                        var chkBox = titleDivs[0].querySelector('.group-title-checkbox');
-                        if (chkBox) chkBox.checked = true;
+                var titleDiv = groupTitleOf(el);
+                if (titleDiv) {
+                    // "Anything left" is what the title stands for, not "all of
+                    // them": a group with no row ticked and a group with every
+                    // row ticked both answer `count == checked` (0 == 0, n ==
+                    // n), so that equality cannot tell *painted* from
+                    // *released* — unticking one row out of two landed on the
+                    // release branch and left the still-ticked sibling
+                    // unmarked, with the delete button still live for it. The
+                    // equality still drives the title's own checkbox, which is
+                    // the one thing that literally means "all of them".
+                    if (chkbxChecked > 0) {
+                        titleDiv.style.backgroundColor = ITEM_SELECTED_COLOR;
+                    } else {
+                        clearRowColor(titleDiv);
                     }
-                } else {
-                    titleDivs = $$(into + ' div[title="' + CSS.escape(elem.getAttribute('rel')) + '"]');
-                    if (titleDivs.length > 0) {
-                        if (titleDivs[0].getAttribute('rel') == 'grey') {
-                            titleDivs[0].style.backgroundColor = '#f1f1f1';
-                            chkBox = titleDivs[0].querySelector('.group-title-checkbox');
-                            if (chkBox) chkBox.checked = false;
-                        } else if (titleDivs[0].getAttribute('rel') == 'white') {
-                            titleDivs[0].style.backgroundColor = '#fff';
-                            chkBox = titleDivs[0].querySelector('.group-title-checkbox');
-                            if (chkBox) chkBox.checked = false;
-                        }
-                    }
+                    var chkBox = titleDiv.querySelector('.group-title-checkbox');
+                    if (chkBox) chkBox.checked = (chkbxCount == chkbxChecked);
                 }
             }
         }
     } else if (w == 'all') {
+        // Unselecting has to undo exactly what selecting wrote, on the same
+        // elements: the row, plus the group title when the row has one. A
+        // grouped row's colour and its title's are painted independently here
+        // (the `grp` blocks below handle the titles for select-all), so the
+        // sweep has to clear both — clearing only the row left the title pink.
         if (el.value == 'false') {
             Array.from($$(into + ' .chkbx')).forEach(function (ele) {
                 ele.checked = true;
@@ -618,22 +695,13 @@ function selectHistoryItem(el, w) {
         } else {
             Array.from($$(into + ' .chkbx')).forEach(function (ele) {
                 ele.checked = false;
-                var parentHolder = ele.closest('div.item-holder');
-                if (parentHolder && parentHolder.getAttribute('rel') == 'white') {
-                    parentHolder.style.backgroundColor = '#fff';
-                } else {
-                    if (parentHolder) parentHolder.style.backgroundColor = '#fafafa';
-                }
+                clearRowColor(ele.closest('div.item-holder'));
             });
             if (grp == 'yes') {
                 Array.from($$(into + ' .group-title')).forEach(function (gel) {
                     var chkInput = gel.querySelector('input');
                     if (chkInput) chkInput.checked = false;
-                    if (gel.getAttribute('rel') == 'white') {
-                        gel.style.backgroundColor = '#fff';
-                    } else {
-                        gel.style.backgroundColor = '#fafafa';
-                    }
+                    clearRowColor(gel);
                 });
             }
             el.value = 'false';
@@ -744,6 +812,8 @@ export {
     toggleGroup,
     getActiveHistory,
     getMoreItems,
+    clearRowColor,
+    groupTitleOf,
     selectHistoryItem,
     deleteHistoryItem,
     alertUserHistory,

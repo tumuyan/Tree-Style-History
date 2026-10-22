@@ -1470,6 +1470,481 @@ test('selectHistoryItem("all") survives rows that have already been removed', as
 });
 
 // ---------------------------------------------------------------------------
+// The colour a row returns to when it is unselected
+//
+// Selecting writes selectedColor inline; unselecting has to *remove* that
+// write, so the row falls back to `div[rel="white"]` / `div[rel="grey"]` in
+// history.css. Those two rules are redefined per theme (#fff/#fafafa in light,
+// #555/#444 in dark), so writing any literal back is wrong in at least one of
+// them — which is how "unselect all" used to leave a stripe no single uncheck
+// ever reproduced.
+// ---------------------------------------------------------------------------
+
+/**
+ * Swap in a DOM whose `querySelectorAll` understands the one descendant
+ * selector the select/unselect sweeps use (`#view .chkbx`).
+ *
+ * The shared `tests/dom.mjs` shim answers that selector from a registry the
+ * test pins by hand, which is fine for a single row and useless for a sweep
+ * over several. This one just walks the subtree, so a fixture can append as
+ * many rows as it likes and the sweep finds exactly them.
+ *
+ * The stand-in is restored when the test ends; `selectHistoryItem` reads the
+ * ambient `document` at call time, so nothing is re-imported.
+ */
+function withRowDom(t, rows) {
+    const saved = document;
+    // `document` is not a snapshot: reading `saved.querySelectorAll` in the
+    // restore hook would read whatever is installed *then* — which is the
+    // walker installed below, so the hook would put the walker back. Hold the
+    // function itself, before anything replaces it.
+    const savedQuerySelectorAll = saved.querySelectorAll;
+    const view = saved.getElementById('rh-views-insert');
+    const restore = { children: view.children, display: view.style.display };
+    view.children = [];
+    view.style.display = 'block'; // getActiveHistory() -> 'history'
+
+    const holders = [];
+    for (const rel of rows) {
+        const holder = saved.createElement('div');
+        holder.className = 'item-holder';
+        holder.setAttribute('rel', rel);
+        const input = saved.createElement('input');
+        input.className = 'chkbx';
+        input.value = `https://example.com/${rel}`;
+        holder.appendChild(input);
+        view.appendChild(holder);
+        holders.push({ holder, input });
+    }
+
+    // `#view .chkbx[:checked]` -> every checkbox under `view` (optionally only
+    // the checked ones), depth-first at any depth.
+    const collect = (root, checkedOnly) => {
+        const out = [];
+        const walk = (node) => {
+            for (const child of node.children) {
+                // `classes`, not `hasAttribute('class', 'chkbx')`: the shim's
+                // `hasAttribute` takes one argument and silently drops the
+                // second, so that spelling means "an <input> carrying any class
+                // at all" — every input in the fixture. No case currently puts
+                // a non-checkbox <input> inside the view, so the two spellings
+                // cannot be told apart by the suite; the predicate is still the
+                // one thing this sweep is supposed to ask.
+                if (child.tagName === 'INPUT' && child.classes.has('chkbx')
+                    && (!checkedOnly || child.checked)) out.push(child);
+                walk(child);
+            }
+        };
+        walk(root);
+        return out;
+    };
+    // One selector is answered here: the checkbox sweep the assertions are
+    // about. Everything else falls through to the shim, which answers selectors
+    // it does not understand with [] — the same way it did before, so a test
+    // cannot start relying on something the browser would answer differently.
+    // The group-title lookup used to be answered here too, until both list
+    // pages started resolving it by walking their container's `children` —
+    // which needs no shim at all.
+    document.querySelectorAll = (sel) => {
+        const text = String(sel).trim();
+        const m = /^#([\w-]+)\s+\.chkbx(:checked)?$/.exec(text);
+        if (m) {
+            const root = saved.getElementById(m[1]);
+            return root ? collect(root, Boolean(m[2])) : [];
+        }
+        return savedQuerySelectorAll.call(document, sel);
+    };
+
+    t.after(() => {
+        document.querySelectorAll = savedQuerySelectorAll;
+        view.children = restore.children;
+        view.style.display = restore.display;
+    });
+
+    return holders;
+}
+
+test('one uncheck puts the row back to the colour the stylesheet gives it', async (t) => {
+    const historyCore = await importModule('modules/history-core.js');
+    restoreStorage(t, ['rh-group']);
+    localStorage['rh-group'] = 'no';
+    const [{ holder, input }] = withRowDom(t, ['grey']);
+    document.getElementById('master-check-all');
+
+    input.checked = true;
+    historyCore.selectHistoryItem(input, 'single');
+    assert.equal(holder.style.backgroundColor, '#ffcbd3', 'the fixture must start from a selected row');
+
+    input.checked = false;
+    historyCore.selectHistoryItem(input, 'single');
+
+    assert.equal(holder.style.backgroundColor, '',
+        'the row still carries an inline colour, so it cannot follow the theme');
+});
+
+/**
+ * A grouped history row: `div.group-holder[rel=host]` wrapping the row, plus
+ * the title above it carrying the same host in `title`. That pairing is the
+ * render loop's, and it is how the unselect sweep finds the title.
+ *
+ * Requires `withRowDom()` first: the sweep resolves its rows through
+ * `$$('#view .chkbx')`, and the shared shim answers that selector from an empty
+ * registry — the rows would be invisible and every assertion here would pass or
+ * fail for the wrong reason.
+ */
+let groupedRowSeq = 0;
+
+function seedGroupedRow(rows, host) {
+    const view = document.getElementById('rh-views-insert');
+    const title = document.createElement('div');
+    title.className = 'item-holder group-title';
+    title.setAttribute('title', host);
+    title.setAttribute('rel', 'white');
+
+    view.appendChild(title);
+
+    const holder = document.createElement('div');
+    holder.className = 'group-holder';
+    holder.setAttribute('rel', host);
+
+    const built = [];
+    for (const rel of rows) {
+        const row = document.createElement('div');
+        row.className = 'item-holder';
+        row.setAttribute('rel', rel);
+        const input = document.createElement('input');
+        input.className = 'chkbx';
+        // One URL per row: the single-click sweep unticks every checkbox that
+        // shares a URL, so a shared value would make one click a bulk action.
+        input.value = `https://${host}/${rel}/${++groupedRowSeq}`;
+        row.appendChild(input);
+        holder.appendChild(row);
+        built.push({ holder: row, input });
+    }
+    view.appendChild(holder);
+    return { title, rows: built };
+}
+
+test('select-all paints the group title rather than the rows inside it', async (t) => {
+    // Same rule as the bookmarks page: a grouped row carries no inline colour
+    // of its own, it shows the title's. Painting the row leaves one pink line
+    // inside a group whose title still reads as unselected, and it also pins a
+    // colour the row cannot drop when the theme changes.
+    const historyCore = await importModule('modules/history-core.js');
+    restoreStorage(t, ['rh-group']);
+    localStorage['rh-group'] = 'yes';
+    withRowDom(t, ['grey']);
+    const { title, rows } = seedGroupedRow(['grey'], 'group.test');
+    const master = document.getElementById('master-check-all');
+    master.value = 'false';
+
+    historyCore.selectHistoryItem(master, 'all');
+
+    assert.equal(title.style.backgroundColor, '#ffcbd3', 'the title is what shows the selection');
+    for (const { holder } of rows) {
+        assert.equal(holder.style.backgroundColor, '#ffcbd3',
+            'select-all paints the row too; only the unselect sweep has to clear both');
+    }
+});
+
+test('select-all then unselect-all leaves a group title and its rows uncoloured', async (t) => {
+    // The sweep behind "select all" visits every row; the one behind "unselect
+    // all" has to undo exactly what the first wrote, on the same element. When
+    // the two disagree the title keeps its selection colour for good.
+    const historyCore = await importModule('modules/history-core.js');
+    restoreStorage(t, ['rh-group']);
+    localStorage['rh-group'] = 'yes';
+    withRowDom(t, ['grey']);
+    const { title } = seedGroupedRow(['grey'], 'group.test');
+    const master = document.getElementById('master-check-all');
+
+    master.value = 'false';
+    historyCore.selectHistoryItem(master, 'all');
+    assert.equal(title.style.backgroundColor, '#ffcbd3', 'the fixture must start selected');
+
+    master.value = 'true';
+    historyCore.selectHistoryItem(master, 'all');
+
+    assert.equal(title.style.backgroundColor, '', 'the title kept its selection colour');
+});
+
+test('unselect-all clears the title of its own view, not the other one', async (t) => {
+    // history.html keeps both lists in the DOM at once and switches views by
+    // `display`, so the same host owns a group title in each — one under
+    // `#rh-views-insert`, one under `#rh-views-search-insert`.
+    //
+    // The title lookup used to be `document.querySelector(...)`, which answers
+    // with the first match in document order: always the main list's, whichever
+    // view the row came from. Unselecting everything in the search view then
+    // cleared the main list's title and left that view's own painted.
+    const historyCore = await importModule('modules/history-core.js');
+    restoreStorage(t, ['rh-group']);
+    localStorage['rh-group'] = 'yes';
+
+    const host = 'both.views.test';
+    // One grouped row: a title above a `div.group-holder` holding the checkbox
+    // — the shape the render loop makes.
+    const group = (view) => {
+        const title = document.createElement('div');
+        title.className = 'item-holder group-title';
+        title.setAttribute('title', host);
+        title.setAttribute('rel', 'white');
+        const holder = document.createElement('div');
+        holder.className = 'group-holder';
+        holder.setAttribute('rel', host);
+        const row = document.createElement('div');
+        row.className = 'item-holder';
+        row.setAttribute('rel', 'white');
+        const checkbox = document.createElement('input');
+        checkbox.className = 'chkbx';
+        checkbox.value = `https://${host}/x`;
+        row.appendChild(checkbox);
+        holder.appendChild(row);
+        view.appendChild(title);
+        view.appendChild(holder);
+        title.style.backgroundColor = '#ffcbd3';
+        checkbox.checked = true;
+        return { title, checkbox };
+    };
+
+    // Both views are real containers with the same host inside, and the search
+    // one is the ACTIVE view — that is the situation the bug needed. The ids are
+    // the registry's elements, which is what `$()`/`getElementById` answer with.
+    const mainView = dom.el('rh-views-insert');
+    const searchView = dom.el('rh-views-search-insert');
+    mainView.style.display = 'none';
+    searchView.style.display = 'block';
+    t.after(() => {
+        mainView.style.display = '';
+        searchView.style.display = '';
+    });
+
+    const main = group(mainView);
+    const search = group(searchView);
+    dom.register('#rh-views-search-insert .chkbx', [search.checkbox]);
+    dom.register('#rh-views-search-insert .chkbx:checked', [search.checkbox]);
+
+    const master = document.getElementById('master-check-all');
+    master.value = 'true'; // -> the "unselect everything" branch
+    historyCore.selectHistoryItem(master, 'all');
+
+    assert.equal(search.title.style.backgroundColor, '', 'the search view title was left painted');
+    assert.equal(main.title.style.backgroundColor, '#ffcbd3',
+        'the main list title was cleared by a sweep that never touched that view');
+});
+
+test('a group title is repainted in its own view, and its checkbox means "all of them"', async (t) => {
+    // The block that decides a title's colour resolves the title from the row's
+    // own container. It used to ask `$$(into + ' div[title="…"]')`, which is
+    // scoped by `into` — and `into` is the ACTIVE view, not the view the row
+    // was drawn in. Unticking a row in the search view then repainted the main
+    // list's copy of the same host.
+    //
+    // The same block drives the group's own checkbox, and that one really does
+    // mean "every row of this group" — a different question from "is anything
+    // left", which is what the colour answers.
+    const historyCore = await importModule('modules/history-core.js');
+    restoreStorage(t, ['rh-group']);
+    localStorage['rh-group'] = 'yes';
+
+    const host = 'twice.drawn';
+    const build = (view) => {
+        const title = document.createElement('div');
+        title.className = 'item-holder group-title';
+        title.setAttribute('title', host);
+        title.setAttribute('rel', 'white');
+        const chk = document.createElement('input');
+        chk.className = 'group-title-checkbox';
+        title.appendChild(chk);
+        const holder = document.createElement('div');
+        holder.className = 'group-holder';
+        holder.setAttribute('rel', host);
+        const inputs = [];
+        for (const rel of ['grey', 'white']) {
+            const row = document.createElement('div');
+            row.className = 'item-holder';
+            row.setAttribute('rel', rel);
+            const input = document.createElement('input');
+            input.className = 'chkbx';
+            input.value = `https://${host}/${rel}`;
+            row.appendChild(input);
+            holder.appendChild(row);
+            inputs.push(input);
+        }
+        view.appendChild(title);
+        view.appendChild(holder);
+        return { title, chk, inputs };
+    };
+
+    const mainView = dom.el('rh-views-insert');
+    const searchView = dom.el('rh-views-search-insert');
+    mainView.style.display = 'block';
+    searchView.style.display = 'none';
+    t.after(() => {
+        mainView.children.length = 0;
+        searchView.children.length = 0;
+        mainView.style.display = '';
+        searchView.style.display = '';
+    });
+    dom.el('master-check-all');
+
+    const main = build(mainView);
+    const search = build(searchView);
+    for (const group of [main, search]) {
+        for (const input of group.inputs) input.checked = true;
+        group.title.style.backgroundColor = '#ffcbd3';
+        group.chk.checked = true;
+    }
+
+    // One row of the search view's group let go: that group still has a ticked
+    // row, so it stays painted — but so does the main list's, and only the
+    // search one's checkbox drops, because "all of them" is now false there.
+    search.inputs[0].checked = false;
+    historyCore.selectHistoryItem(search.inputs[0], 'single');
+
+    assert.equal(search.title.style.backgroundColor, '#ffcbd3', 'the group still has a ticked row');
+    assert.equal(main.title.style.backgroundColor, '#ffcbd3',
+        'the main list title was repainted by a click in the search view');
+
+    // Second row goes: the group is empty, so the colour is released AND the
+    // checkbox is false. Releasing the colour is `checked == 0`; the checkbox
+    // is `count != checked`, and both have to be visible in one block.
+    search.inputs[1].checked = false;
+    historyCore.selectHistoryItem(search.inputs[1], 'single');
+    assert.equal(search.title.style.backgroundColor, '', 'the group is empty now');
+    assert.equal(search.chk.checked, false, 'the title checkbox still claims the group is ticked');
+    assert.equal(main.chk.checked, true, 'the other view group was emptied too');
+
+    // …and re-ticking every row brings both back, which is the only way to see
+    // that the checkbox follows `count == checked` and not the colour.
+    for (const input of search.inputs) input.checked = true;
+    historyCore.selectHistoryItem(search.inputs[0], 'single');
+    assert.equal(search.title.style.backgroundColor, '#ffcbd3');
+    assert.equal(search.chk.checked, true, 'every row ticked again: the checkbox has to follow');
+});
+
+test('a group keeps its title while another group still has a ticked row', async (t) => {
+    // "Is this group still ticked?" has to be asked of the group, not of the
+    // list. Sweeping the whole view answers "is anything ANYWHERE still
+    // ticked?", so as long as one row of one other group stayed ticked, the
+    // group that had just been emptied kept its colour — and a sweep over the
+    // view also costs O(rows) per row, which is 76 seconds over an 8000-row
+    // unselect-all against 177ms for the group's own holder. (Both numbers
+    // measured with the shim's own element model; the shape is what matters.)
+    const historyCore = await importModule('modules/history-core.js');
+    restoreStorage(t, ['rh-group']);
+    localStorage['rh-group'] = 'yes';
+    withRowDom(t, ['grey']);
+    const emptied = seedGroupedRow(['grey'], 'empty.host');
+    const kept = seedGroupedRow(['white'], 'kept.host');
+
+    for (const group of [emptied, kept]) {
+        for (const row of group.rows) row.input.checked = true;
+        group.title.style.backgroundColor = '#ffcbd3';
+    }
+
+    // The other group is deliberately NOT emptied: it is the bystander that a
+    // list-wide sweep would count as "something is still ticked".
+    emptied.rows[0].input.checked = false;
+    historyCore.selectHistoryItem(emptied.rows[0].input, 'single');
+
+    assert.equal(kept.rows[0].input.checked, true, 'the bystander group is still ticked');
+    assert.equal(emptied.title.style.backgroundColor, '',
+        'a group that lost its last ticked row kept the title of the group beside it');
+
+    // …and the bystander keeps ITS OWN: the two answers have to be independent,
+    // which is the whole point of asking per group.
+    assert.equal(kept.title.style.backgroundColor, '#ffcbd3',
+        'emptying one group released the title of a group that was never touched');
+});
+
+test('unticking one history row keeps the title of the row beside it', async (t) => {
+    // A group title shows the whole group, so it is released by the row that
+    // empties it and by no earlier one. Clearing it per row left the sibling
+    // ticked and unpainted, with the delete button live for a row that looked
+    // unselected.
+    const historyCore = await importModule('modules/history-core.js');
+    restoreStorage(t, ['rh-group']);
+    localStorage['rh-group'] = 'yes';
+    withRowDom(t, ['grey']);
+    const { title, rows } = seedGroupedRow(['grey', 'white'], 'pair.host');
+    for (const row of rows) row.input.checked = true;
+    title.style.backgroundColor = '#ffcbd3';
+
+    rows[0].input.checked = false;
+    historyCore.selectHistoryItem(rows[0].input, 'single');
+
+    assert.equal(rows[1].input.checked, true, 'the sibling is still ticked');
+    assert.equal(title.style.backgroundColor, '#ffcbd3',
+        'the still-ticked sibling lost the only thing that showed its selection');
+
+    // The last one out releases it: the title would otherwise stay pink over a
+    // group with nothing ticked in it.
+    rows[1].input.checked = false;
+    historyCore.selectHistoryItem(rows[1].input, 'single');
+    assert.equal(title.style.backgroundColor, '',
+        'the group is empty now, so the title has to go back to the stylesheet');
+
+    // …and the sweep behind "unselect all" agrees, which is the same rule from
+    // the bulk side.
+    title.style.backgroundColor = '#ffcbd3';
+    for (const row of rows) row.input.checked = true;
+    const master = document.getElementById('master-check-all');
+    master.value = 'true';
+    historyCore.selectHistoryItem(master, 'all');
+    assert.equal(title.style.backgroundColor, '', 'the title kept its selection colour');
+});
+
+test('withRowDom hands the ambient querySelectorAll back when the test ends', async (t) => {
+    // A test that swaps in a DOM helper has to put the original back — the
+    // suite shares one `document` for the whole file, so a leak reaches every
+    // test after it and makes unrelated failures depend on file order.
+    //
+    // The restore hook is the trap: `const saved = document` is not a snapshot,
+    // so `document.querySelectorAll = saved.querySelectorAll` runs *after* the
+    // walker is installed and puts the walker back. Nothing caught it because
+    // the tests that follow only use selectors the shim registry answers, and
+    // the walker answers those with the same []. This asserts the identity of
+    // the function, which is the only thing that can tell the two apart.
+    const ambient = document.querySelectorAll;
+    withRowDom(t, ['grey']);
+    assert.notEqual(document.querySelectorAll, ambient, 'the walker was never installed');
+
+    // Registered *after* withRowDom's restore hook, and `t.after` hooks run
+    // newest-first, so this one only fires once the restore has already run —
+    // which is exactly the state a later test would see.
+    t.after(() => {
+        assert.equal(document.querySelectorAll, ambient,
+            'withRowDom left its walker installed on the shared document');
+    });
+});
+
+test('"unselect all" leaves no inline colour behind, on either row colour', async (t) => {
+    // Both row colours in one sweep, because the bug was a mismatch *between*
+    // them: the odd rows kept a shade that the single uncheck above never
+    // produced, so "select all / unselect all" was not a no-op.
+    const historyCore = await importModule('modules/history-core.js');
+    restoreStorage(t, ['rh-group']);
+    localStorage['rh-group'] = 'no';
+    const rows = withRowDom(t, ['white', 'grey']);
+    const master = document.getElementById('master-check-all');
+
+    for (const { holder, input } of rows) {
+        input.checked = true;
+        historyCore.selectHistoryItem(input, 'single');
+        assert.equal(holder.style.backgroundColor, '#ffcbd3', 'both rows must start selected');
+    }
+
+    master.value = 'true'; // -> the "unselect everything" branch
+    historyCore.selectHistoryItem(master, 'all');
+
+    for (const { holder } of rows) {
+        assert.equal(holder.style.backgroundColor, '',
+            `a ${holder.getAttribute('rel')} row kept an inline colour after "unselect all"`);
+    }
+});
+
+// ---------------------------------------------------------------------------
 // deleteHistoryItem('range')
 //
 // The range is parsed by position: `rh-date` names the fields ("yyyy/mm/dd")
@@ -2341,4 +2816,309 @@ test('the deletion reaches storage, so the next page start sees it too', async (
 
     assert.deepEqual(JSON.parse(localStorage['calendar-storage2']), {},
         'the map still holds the deleted day');
+});
+test('calendar() draws the month the dropdowns name, not the current year', async (t) => {
+    // Every cell's `rel` carries the year the page will load, and its colour is
+    // looked up under that year's key. `new Date().getFullYear()` broke both:
+    // browsing to a month in another year drew this year's weekday offsets
+    // (Saturday/Sunday landing on the wrong days) and painted each square with
+    // the count belonging to the same month of *this* year.
+    const { calendar } = await importModule('modules/calendar.js');
+    restoreStorage(t, ['rh-date', 'rh-timeformat']);
+    dom.setOptions('date-select-day', ['01', '02'], '01');
+    dom.setOptions('date-select-month', ['01', '02', '12'], '12');
+    dom.setOptions('date-select-year', ['2025', '2024'], '2024');
+    const days = dom.el('calendar-days');
+
+    calendar('selected', '');
+
+    const cells = days.children.filter((el) => el.tagName === 'A');
+    assert.ok(cells.length > 0, 'the month was not drawn');
+    assert.equal(cells[0].getAttribute('rel'), '1|12|2024',
+        'the first cell has to name the year the dropdowns are on');
+});
+
+// ---------------------------------------------------------------------------
+// bookmark.js — the colour a bookmark row shows
+//
+// Rows on `bookmark.html` render the same two ways as on the history page:
+// ungrouped (each `div.item-holder` carries `rel="white"`/`"grey"` and takes its
+// colour from the stylesheet) and grouped (the row's own colour is left empty on
+// purpose — it shows the group title's, see the render loop's
+// `background-color: existingHolder ? … : ''`).
+//
+// `selectBookmarkItem()` painted `div.item-holder` in *both* cases, so selecting
+// a bookmark inside a group turned exactly one row pink and left the title
+// white. Nothing noticed: this file had no bookmark-page selection tests, and
+// the only guard read `selectBookmarkItem()` itself, not the helper it calls.
+// ---------------------------------------------------------------------------
+
+const { ITEM_SELECTED_COLOR: selectedColor } = await importModule('modules/ui-state.js');
+
+let bookmarkPage = null;
+let bookmarkPageSeq = 0;
+
+/**
+ * The page's `selectBookmarkItem()`, imported straight from bookmark.js.
+ *
+ * It is a module-level function, so importing the file is all it takes: no
+ * global hook, and nothing has to be driven through `DOMContentLoaded`. The
+ * page's bootstrap is still run once here, because the listener is where the
+ * button handlers are wired and a typo in an id would otherwise be invisible.
+ */
+async function importBookmark() {
+    if (bookmarkPage) return bookmarkPage;
+    const page = await importModule('bookmark.js');
+    // A page quiet enough that the listener's own rendering does nothing:
+    // `rh-group: no` skips the grouped branch, and `bookmarks.getTree` is a
+    // stub that never calls back. Every id here is one bookmark.html really
+    // has — the shim records unknown ids, so a typo would show up in
+    // `dom.missing` rather than as a silent no-op.
+    localStorage['rh-group'] = 'no';
+    // `location.search` is the page URL's query string; the real one is ''.
+    globalThis.location.search = '';
+    dom.el('history-container');
+    dom.el('rh-search');
+    dom.el('rh-bar');
+    dom.el('rh-bar-group');
+    dom.el('rh-bar-orderby');
+    dom.el('rh-bar-order');
+    dom.el('master-check-all');
+    dom.el('rh-views-insert').style.display = 'block';
+    dom.el('rh-views-search-insert').style.display = 'none';
+    // The page focuses its search box on load; the shim's elements have no
+    // focus() — it is not something the extension logic depends on.
+    dom.el('rh-search').focus = () => {};
+    dom.el('delete-bookmark-button');
+    dom.el('edit-bookmark-button');
+    withChromeApi({ bookmarks: { getTree: (_cb) => {} }, history: { search: (_q, _cb) => {} } }, () => {
+        globalThis.document.dispatch('DOMContentLoaded');
+        // The page registers itself inside onStorageReady(); the stub queues
+        // those callbacks until the storage cache is filled, exactly as the
+        // adapter does, so nothing in bookmark.js runs before this line.
+        env.fireStorageReady();
+    });
+    bookmarkPage = { selectBookmarkItem: page.selectBookmarkItem };
+    return bookmarkPage;
+}
+
+/**
+ * A bookmark row, optionally inside a group holder.
+ *
+ * `holder` puts the row in an existing holder, which is how the render loop
+ * builds a group: ONE title, ONE holder, every row of that host inside it.
+ */
+function bookmarkRow({ grouped = false, host = 'docs.test', holder } = {}) {
+    const container = dom.el('rh-views-insert');
+
+    // A fresh URL per row: the page sweeps `#view .chkbx` and matches on
+    // `value`, so two rows sharing a URL would make "uncheck this one" clear
+    // both.
+    const bookmarkUrl = `https://${host}/${++bookmarkPageSeq}`;
+    const row = dom.makeEl('div');
+    row.className = 'item-holder';
+    row.setAttribute('rel', 'white');
+    row.setAttribute('data-bookmark-url', bookmarkUrl);
+
+    const input = dom.makeEl('input');
+    input.className = 'chkbx bookmark-checkbox';
+    input.value = bookmarkUrl;
+    row.appendChild(input);
+
+    if (grouped) {
+        let into = holder;
+        if (!into) {
+            into = dom.makeEl('div');
+            into.className = 'group-holder';
+            into.setAttribute('rel', host);
+            container.appendChild(into);
+        }
+        into.appendChild(row);
+        return { row, input, holder: into };
+    }
+    container.appendChild(row);
+    return { row, input };
+}
+
+/** The group title the render loop puts above a holder, sharing its host. */
+function bookmarkGroupTitle(host) {
+    const title = dom.makeEl('div');
+    title.className = 'item-holder group-title';
+    title.setAttribute('title', host);
+    title.setAttribute('rel', 'white');
+    dom.el('rh-views-insert').appendChild(title);
+    return title;
+}
+
+test('selecting a bookmark paints the group title, not the row inside it', async () => {
+    // A grouped row is rendered with an empty inline colour so it follows the
+    // title. Painting the row itself left one pink bookmark in a group whose
+    // title still read as unselected, and unticking then cleared a colour the
+    // row never had.
+    const { selectBookmarkItem } = await importBookmark();
+    const titleDiv = dom.makeEl('div');
+    titleDiv.className = 'item-holder group-title';
+    titleDiv.setAttribute('title', 'docs.test');
+    titleDiv.setAttribute('rel', 'white');
+    dom.el('rh-views-insert').appendChild(titleDiv);
+    const { row, input } = bookmarkRow({ grouped: true });
+
+    input.checked = true;
+    selectBookmarkItem(input, 'single');
+
+    assert.equal(titleDiv.style.backgroundColor, selectedColor,
+        'the group title is the element that shows the selection');
+    assert.equal(row.style.backgroundColor, undefined,
+        'the row must keep its empty inline colour so it still follows the title');
+});
+
+test('selecting an ungrouped bookmark paints the row itself', async () => {
+    const { selectBookmarkItem } = await importBookmark();
+    const { row, input } = bookmarkRow({ grouped: false });
+
+    input.checked = true;
+    selectBookmarkItem(input, 'single');
+
+    assert.equal(row.style.backgroundColor, selectedColor);
+});
+
+test('select all then unselect all leaves the group title uncoloured', async () => {
+    const { selectBookmarkItem } = await importBookmark();
+    const titleDiv = dom.makeEl('div');
+    titleDiv.className = 'item-holder group-title';
+    titleDiv.setAttribute('title', 'docs.test');
+    titleDiv.setAttribute('rel', 'white');
+    titleDiv.setAttribute('title', 'bulk.test');
+    dom.el('rh-views-insert').appendChild(titleDiv);
+    const { row, input } = bookmarkRow({ grouped: true });
+
+    // The row has to say which group it belongs to, exactly as the render loop
+    // does it: the title carries the host in `title`, the holder in `rel`.
+    row.parentNode.setAttribute('rel', 'bulk.test');
+    const master = dom.el('master-check-all');
+
+    input.checked = true;
+    selectBookmarkItem(input, 'single');
+    assert.equal(titleDiv.style.backgroundColor, selectedColor, 'the fixture must start selected');
+
+    master.value = 'false';
+    selectBookmarkItem(master, 'all');
+    assert.equal(titleDiv.style.backgroundColor, selectedColor, 'select-all repaints it');
+
+    master.value = 'true';
+    selectBookmarkItem(master, 'all');
+
+    assert.equal(titleDiv.style.backgroundColor, '', 'the title kept its selection colour');
+    // `''` is "no inline colour", which is what an unselect has to leave behind:
+    // the row then follows the stylesheet, whichever theme is in force.
+    assert.equal(row.style.backgroundColor, '', 'the row kept an inline colour');
+});
+
+test('select all paints every group title, and leaves the rows to them', async () => {
+    // Selecting all used to resolve a title for every row: one walk of the
+    // container per row, so rows x groups — 7.5s for 8000 bookmarks over 2000
+    // groups. Painting the titles in one pass after the sweep is the same
+    // result, so the behaviour is what is pinned here and the cost is what the
+    // static guard in static.test.mjs pins.
+    const { selectBookmarkItem } = await importBookmark();
+    // Hosts no other case uses: `groupTitleOf()` resolves a host to the FIRST
+    // matching title in the container, and every case here appends to the same
+    // one — a reused host would paint this case's rows onto an earlier case's
+    // title.
+    const shared = bookmarkGroupTitle('bulk-shared.test');
+    const lonely = bookmarkGroupTitle('bulk-lonely.test');
+    const first = bookmarkRow({ grouped: true, host: 'bulk-shared.test' });
+    const second = bookmarkRow({ grouped: true, host: 'bulk-shared.test', holder: first.holder });
+    const third = bookmarkRow({ grouped: true, host: 'bulk-lonely.test' });
+    const master = dom.el('master-check-all');
+
+    master.value = 'false';
+    selectBookmarkItem(master, 'all');
+
+    for (const title of [shared, lonely]) {
+        assert.equal(title.style.backgroundColor, selectedColor, 'select-all missed a group title');
+    }
+    // A grouped row carries no colour of its own: painting it as well as the
+    // title is what disconnected the two again.
+    for (const row of [first, second, third]) {
+        assert.equal(row.row.style.backgroundColor, undefined,
+            'a grouped row was painted, so it no longer follows its title');
+    }
+});
+
+test('unselecting one bookmark keeps the title of its still-ticked sibling', async () => {
+    // The title is the group's, not the row's. Clearing it whenever *a* row is
+    // unticked left the sibling ticked with no mark of it: `checked === true`,
+    // nothing painted, and the delete button live — a click would remove a
+    // bookmark that looked unselected. It is cleared by the row that empties
+    // the group, and by no earlier one.
+    const { selectBookmarkItem } = await importBookmark();
+    const host = 'pair.test';
+    const title = bookmarkGroupTitle(host);
+    const first = bookmarkRow({ grouped: true, host });
+    const second = bookmarkRow({ grouped: true, host, holder: first.holder });
+
+    for (const row of [first, second]) {
+        row.input.checked = true;
+        selectBookmarkItem(row.input, 'single');
+    }
+    assert.equal(title.style.backgroundColor, selectedColor, 'the fixture must start selected');
+
+    first.input.checked = false;
+    selectBookmarkItem(first.input, 'single');
+
+    assert.equal(second.input.checked, true, 'the sibling is still ticked');
+    assert.equal(title.style.backgroundColor, selectedColor,
+        'the still-ticked sibling lost the only thing that showed its selection');
+
+    // …and the last one out does release it, or the title would stay pink over
+    // an empty selection.
+    second.input.checked = false;
+    selectBookmarkItem(second.input, 'single');
+    assert.equal(title.style.backgroundColor, '',
+        'the group is empty now, so the title has to go back to the stylesheet');
+});
+
+test('one untick among many keeps every title that still has a ticked row', async () => {
+    // The bulk single-untick (the sweep that follows a single click) paints no
+    // title, so the titles have to be decided against the checkboxes as they
+    // are once it has run — a per-row decision made *during* the sweep clears
+    // every title, because the row it is looking at is the one that was just
+    // unticked.
+    const { selectBookmarkItem } = await importBookmark();
+    const shared = bookmarkGroupTitle('shared.test');
+    const lonely = bookmarkGroupTitle('lonely.test');
+    const first = bookmarkRow({ grouped: true, host: 'shared.test' });
+    const second = bookmarkRow({ grouped: true, host: 'shared.test', holder: first.holder });
+    const third = bookmarkRow({ grouped: true, host: 'lonely.test' });
+
+    for (const row of [first, second, third]) {
+        row.input.checked = true;
+        selectBookmarkItem(row.input, 'single');
+    }
+    assert.equal(shared.style.backgroundColor, selectedColor, 'the fixture must start selected');
+    assert.equal(lonely.style.backgroundColor, selectedColor, 'the fixture must start selected');
+
+    // The sweep unticks every row sharing a URL, so sharing one is what makes
+    // it visit two groups in a single click. `second` is the survivor of the
+    // shared one: unticked and re-checked here, the state the sweep decides
+    // against. `third` is ticked and outside the sweep entirely — its title has
+    // to survive a click that never touched its group.
+    first.input.value = second.input.value;
+    first.input.checked = false;
+    selectBookmarkItem(first.input, 'single');
+
+    assert.equal(third.input.checked, true, 'the other group was not touched');
+    assert.equal(lonely.style.backgroundColor, selectedColor,
+        'an untouched group lost its title');
+
+    assert.equal(second.input.checked, true, 'the swept survivor is still ticked');
+    assert.equal(shared.style.backgroundColor, selectedColor,
+        'a group that still has a ticked row lost its title');
+
+    // …and once nothing in that group is ticked, the title goes.
+    first.input.checked = false;
+    second.input.checked = false;
+    selectBookmarkItem(first.input, 'single');
+    assert.equal(shared.style.backgroundColor, '', 'the emptied group kept its title');
 });

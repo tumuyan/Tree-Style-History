@@ -85,7 +85,13 @@ function calendar(w, e, clickCallback) {
     }
 
     $('date-select-day').innerHTML = '';
-    var ydatec = new Date().getFullYear();
+    // The year of the month being drawn, NOT the current year. `cdateo` is
+    // rebuilt from the three dropdowns above and can point at any month, so
+    // `new Date().getFullYear()` drew every other year's month with this
+    // year's weekday offsets and looked up the wrong keys in the heat map —
+    // last December showed this December's counts, and the cells that did
+    // load (via `date-select-year`) disagreed with their own colours.
+    var ydatec = cdateo.getFullYear();
     var mdatec = cdateo.getMonth();
     var ddatec = cdateo.getDate();
     var yeararray = [ydatec, (ydatec - 1)];

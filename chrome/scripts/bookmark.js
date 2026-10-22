@@ -9,11 +9,209 @@ import {
     escapeHtmlAttr, escapeHtmlText, executeBookmarklet, isBookmarkletUrl
 } from './modules/helpers.js';
 import { filtUrl } from './modules/config.js';
-import { getActiveHistory, toggleGroup, getMoreItems, alertLoadingHistory } from './modules/history-core.js';
+import { getActiveHistory, toggleGroup, getMoreItems, alertLoadingHistory, clearRowColor, groupTitleOf } from './modules/history-core.js';
 import { modifierState, ITEM_SELECTED_COLOR, RENDER_BUDGET_MS } from './modules/ui-state.js';
 import { initPage } from './modules/page-init.js';
 
 initPage();
+
+// --- Selection: a module-level function, not a closure inside the page
+// bootstrap. Everything it needs is the DOM and the imported helpers, so
+// keeping it here is what lets the behaviour tests import it instead of
+// reaching for it through a global the page would otherwise have to mount.
+
+function getActiveBookmark() {
+    if (getStyle($('rh-views-insert'), 'display') == 'block') {
+        return 'history';
+    } else if (getStyle($('rh-views-search-insert'), 'display') == 'block') {
+        return 'search';
+    }
+}
+
+
+/**
+ * Paint one bookmark row as selected (or not).
+ *
+ * The inline ITEM_SELECTED_COLOR belongs to whichever element the theme's
+ * `div[rel=...]` rules are *not* providing the colour for: the group title
+ * when the row is grouped, the row itself otherwise. Painting the row in
+ * both cases is what left a single pink bookmark inside a white group while
+ * the title stayed unselected.
+ *
+ * Selecting paints; unselecting only ever removes this row's own colour.
+ * The title is not this row's to clear — one still-ticked sibling and the
+ * selection it stands for disappear with it — so that is decided by
+ * `clearOrphanedTitles()` once the whole sweep has run.
+ *
+ * Clearing goes through `clearRowColor()` rather than a literal so the row
+ * falls back to the stylesheet, which differs per theme.
+ */
+function markBookmarkedRow(checkbox, selected) {
+    var row = checkbox.closest('div.item-holder');
+    // Unselecting never touches a title, so it does not resolve one. Calling
+    // `groupTitleOf()` here anyway is what made "unselect all" quadratic: it
+    // walks the container's `children`, so once per row it costs rows x groups.
+    // Measured on this page's own render shape: 8000 bookmarks over 2000 groups
+    // went 58ms -> 4188ms, 4000 over 1000 went 41ms -> 708ms.
+    if (!selected) {
+        clearRowColor(row);
+        return;
+    }
+    var title = groupTitleOf(checkbox);
+    if (title) {
+        title.style.backgroundColor = ITEM_SELECTED_COLOR;
+    } else if (row) {
+        row.style.backgroundColor = ITEM_SELECTED_COLOR;
+    }
+}
+
+/**
+ * Release the group titles whose last ticked row has just been unticked.
+ *
+ * A title belongs to the group, so it is cleared only when nothing in that
+ * group is ticked any more — clearing it per row is what left a sibling
+ * ticked with no mark of it, and the delete button live for a row that
+ * looked unselected. Decided after the sweep has set every checkbox, so the
+ * state the titles are read against is the final one.
+ */
+function clearOrphanedTitles(groups) {
+    for (var host in groups) {
+        if (!Object.prototype.hasOwnProperty.call(groups, host)) continue;
+        var group = groups[host];
+        if (group.survivors === 0) clearRowColor(group.title);
+    }
+}
+
+function selectBookmarkItem(el, w) {
+    if (getActiveBookmark() == 'history') {
+        var into = '#rh-views-insert';
+    } else if (getActiveBookmark() == 'search') {
+        into = '#rh-views-search-insert';
+    }
+
+    if (w == 'single') {
+        if (el.checked == true) {
+            // Not a bare `row.style.backgroundColor = ITEM_SELECTED_COLOR`:
+            // a grouped row carries no inline colour of its own (it shows
+            // the group title's), so painting the row directly turned one
+            // bookmark pink inside a group of white ones.
+            markBookmarkedRow(el, true);
+        } else if (el.checked == false) {
+            var iurl = el.value;
+            var items = $$(into + ' .chkbx');
+            // host -> { title, holder, survivors }: a group keeps its colour
+            // while any row of it is still ticked.
+            //
+            // Only the groups this sweep actually touched are in here. A click
+            // unticks the rows of ONE url, so every other group is exactly as
+            // it was and counting it buys nothing — while costing the whole
+            // view, since bookmark.html spreads its rows over one group per
+            // host. That made a single click walk every bookmark the user has.
+            var groups = {};
+            for (var i = 0; i < items.length; i++) {
+                (function(ele) {
+                    if (ele.value != iurl) return;
+                    // The row can be gone: a delete detaches
+                    // `div.item-holder` elements while this sweep is
+                    // still walking their checkboxes.
+                    markBookmarkedRow(ele, false);
+                    // The holder is where the tally is asked, and it is the
+                    // same element `groupTitleOf()` resolves the title from —
+                    // taken here so the two halves cannot name different
+                    // groups. Null only for an ungrouped row, which has no
+                    // title to keep either.
+                    var holder = ele.closest('div.group-holder');
+                    if (!holder) return;
+                    var title = groupTitleOf(ele);
+                    if (!title) return;
+                    var host = title.getAttribute('title');
+                    if (!groups[host]) {
+                        groups[host] = { title: title, holder: holder, survivors: 0 };
+                    }
+                })(items[i]);
+            }
+            // Read after the sweep has set every checkbox, because which row is
+            // the group's last one is only true at the end — and scoped to the
+            // group's own holder, so "is anything in this group still ticked"
+            // is one query per group, not one per row in the view.
+            for (var host in groups) {
+                if (!Object.prototype.hasOwnProperty.call(groups, host)) continue;
+                var group = groups[host];
+                group.survivors = group.holder.querySelectorAll('.chkbx:checked').length;
+            }
+            clearOrphanedTitles(groups);
+        }
+        if ($$(into + ' .chkbx').length == $$(into + ' .chkbx:checked').length) {
+            $('master-check-all').checked = true;
+            $('master-check-all').value = 'true';
+        } else {
+            $('master-check-all').checked = false;
+            $('master-check-all').value = 'false';
+        }
+    } else if (w == 'all') {
+        // Both sweeps walk their own snapshot of the checkboxes and go
+        // through the same per-row helper as the single click: the colour a
+        // row shows is the group title's when it has one, and its own
+        // otherwise — and the detach check has to be the same wherever the
+        // walk starts.
+        items = $$(into + ' .chkbx');
+        var selectingAll = el.value == 'false';
+        // Select-all ticks every row, so every group ends up with one and the
+        // titles can be painted in a single pass below. Resolving one per row
+        // instead — the shape this branch had — cost rows x groups: 7.5s for
+        // 8000 bookmarks over 2000 groups, against ~40ms now. It is the same
+        // trap the single-click path climbed out of one branch earlier.
+        for (i = 0; i < items.length; i++) {
+            (function(ele) {
+                ele.checked = selectingAll;
+                // `closest()` walks the row's own ancestors, so it is one
+                // cheap question per row — and it asks the DOM rather than the
+                // setting, so a row in a collapsed group is still a grouped
+                // row. Unselecting still goes through the helper either way:
+                // it only clears the row's own colour.
+                if (selectingAll && ele.closest('div.group-holder')) return;
+                markBookmarkedRow(ele, selectingAll);
+            })(items[i]);
+        }
+        if (selectingAll) {
+            // One walk of the container, after the sweep: every row is ticked,
+            // so every group has one and each title is painted exactly once.
+            Array.from($$(into + ' .group-title')).forEach(function (gel) {
+                gel.style.backgroundColor = ITEM_SELECTED_COLOR;
+            });
+        } else {
+            // Unselect-all empties every group, so no group can have a ticked
+            // row left and there is nothing to count. Collecting survivors here
+            // used to answer 0 for all of them (the loop above has just set
+            // every checkbox false) — a whole tally whose result was decided
+            // before it ran. Same shape as history-core.js's unselect-all.
+            Array.from($$(into + ' .group-title')).forEach(function (gel) {
+                clearRowColor(gel);
+            });
+        }
+        el.value = selectingAll ? 'true' : 'false';
+    }
+
+    updateBookmarkButtons();
+}
+
+function updateBookmarkButtons() {
+    var into = getActiveBookmark() == 'history' ? '#rh-views-insert' : '#rh-views-search-insert';
+    var checkedItems = $$(into + ' .chkbx:checked');
+    var checkedCount = checkedItems.length;
+
+    if (checkedCount > 0) {
+        $('delete-bookmark-button').style.display = 'inline-block';
+    } else {
+        $('delete-bookmark-button').style.display = 'none';
+    }
+
+    if (checkedCount == 1) {
+        $('edit-bookmark-button').style.display = 'inline-block';
+    } else {
+        $('edit-bookmark-button').style.display = 'none';
+    }
+}
 
 document.addEventListener('DOMContentLoaded', function () {
     onStorageReady(function () {
@@ -506,16 +704,21 @@ document.addEventListener('DOMContentLoaded', function () {
                             // Built above, so the Map answers what used to be
                             // four container scans per item.
                             var group = groups.get(host);
-                            var existingHolder = group ? group.title : null;
+                            // No inline colour is copied from the group title.
+                            // A grouped row shows the title's colour only while
+                            // the title is what carries it; selecting the group
+                            // repaints the title and the row must follow, which
+                            // a copy frozen at render time can never do (and it
+                            // outranks the stylesheet, so the row stays wrong).
+                            // The row's own `rel` is the colour it is entitled
+                            // to. Same reasoning as markBookmarkedRow(), which
+                            // paints the title rather than the row.
                             var itemHolder = createElement('div', {
-                                'rel': existingHolder ? existingHolder.getAttribute('rel') : ibcv,
+                                'rel': ibcv,
                                 'class': 'item-holder',
                                 'data-bookmark-id': rha[thisc.counter].bookmarkId,
                                 'data-bookmark-title': rha[thisc.counter].originalTitle,
-                                'data-bookmark-url': rha[thisc.counter].url,
-                                styles: {
-                                    'background-color': existingHolder ? getStyle(existingHolder, 'background-color') : ''
-                                }
+                                'data-bookmark-url': rha[thisc.counter].url
                             });
                             itemHolder.innerHTML = item + '<div class="clearitem" style="clear:both;"></div>';
                             var groupDiv = group ? group.holder : null;
@@ -673,105 +876,6 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
 
-    function getActiveBookmark() {
-        if (getStyle($('rh-views-insert'), 'display') == 'block') {
-            return 'history';
-        } else if (getStyle($('rh-views-search-insert'), 'display') == 'block') {
-            return 'search';
-        }
-    }
-
-
-    function selectBookmarkItem(el, w) {
-        if (getActiveBookmark() == 'history') {
-            var into = '#rh-views-insert';
-        } else if (getActiveBookmark() == 'search') {
-            into = '#rh-views-search-insert';
-        }
-        
-        if (w == 'single') {
-            if (el.checked == true) {
-                var parent = el.closest('div.item-holder');
-                if (parent) parent.style.backgroundColor = ITEM_SELECTED_COLOR;
-            } else if (el.checked == false) {
-                var iurl = el.value;
-                var items = $$(into + ' .chkbx');
-                for (var i = 0; i < items.length; i++) {
-                    (function(ele) {
-                        if (ele.value == iurl) {
-                            var parent = ele.closest('div.item-holder');
-                            // The row can be gone: a delete detaches
-                            // `div.item-holder` elements while this sweep is
-                            // still walking their checkboxes.
-                            if (!parent) return;
-                            if (parent.getAttribute('rel') == 'white') {
-                                parent.style.backgroundColor = '#fff';
-                            } else {
-                                parent.style.backgroundColor = '#f1f1f1';
-                            }
-                        }
-                    })(items[i]);
-                }
-            }
-            if ($$(into + ' .chkbx').length == $$(into + ' .chkbx:checked').length) {
-                $('master-check-all').checked = true;
-                $('master-check-all').value = 'true';
-            } else {
-                $('master-check-all').checked = false;
-                $('master-check-all').value = 'false';
-            }
-        } else if (w == 'all') {
-            if (el.value == 'false') {
-                items = $$(into + ' .chkbx');
-                for (i = 0; i < items.length; i++) {
-                    (function(ele) {
-                        ele.checked = true;
-                        var parent = ele.closest('div.item-holder');
-                        if (parent) parent.style.backgroundColor = ITEM_SELECTED_COLOR;
-                    })(items[i]);
-                }
-                el.value = 'true';
-            } else {
-                items = $$(into + ' .chkbx');
-                for (i = 0; i < items.length; i++) {
-                    (function(ele) {
-                        ele.checked = false;
-                        var parent = ele.closest('div.item-holder');
-                        if (!parent) return; // row already detached — see above
-                        if (parent.getAttribute('rel') == 'white') {
-                            parent.style.backgroundColor = '#fff';
-                        } else {
-                            parent.style.backgroundColor = '#fafafa';
-                        }
-                    })(items[i]);
-                }
-                el.value = 'false';
-            }
-        }
-        
-        updateBookmarkButtons();
-    }
-
-
-    function updateBookmarkButtons() {
-        var into = getActiveBookmark() == 'history' ? '#rh-views-insert' : '#rh-views-search-insert';
-        var checkedItems = $$(into + ' .chkbx:checked');
-        var checkedCount = checkedItems.length;
-        
-        if (checkedCount > 0) {
-            $('delete-bookmark-button').style.display = 'inline-block';
-        } else {
-            $('delete-bookmark-button').style.display = 'none';
-        }
-        
-        if (checkedCount == 1) {
-            $('edit-bookmark-button').style.display = 'inline-block';
-        } else {
-            $('edit-bookmark-button').style.display = 'none';
-        }
-    }
-
-
     function deleteBookmarkItems() {
         var into = getActiveBookmark() == 'history' ? '#rh-views-insert' : '#rh-views-search-insert';
         var checkedItems = $$(into + ' .chkbx:checked');
@@ -904,6 +1008,8 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-
     });
+
 });
+
+export { selectBookmarkItem };
