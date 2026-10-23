@@ -950,6 +950,91 @@ test('no render site relies on title_fix for safety', () => {
     assert.deepEqual(offenders, []);
 });
 
+// A value heading for storage or for another module must arrive RAW: the side
+// that turns it into markup is the only one that knows whether it is writing
+// attribute text, element text or JSON, and a pre-escaped value cannot be
+// un-escaped there. It is also how a title ended up displayed as literal
+// `&amp;#34;` — hand-escaped on the way into `mv-cache`, escaped again at the
+// interpolation site.
+//
+// What this does NOT ban: the two escapers themselves (helpers.js defines
+// them), and the odd HTML string a page builds inline. It bans the one shape
+// that has actually bitten twice — reaching for `.replace()` to do escaping.
+// Running it inside helpers.js too is deliberate: a third escaping helper must
+// not appear there either.
+const HAND_ESCAPED = /(?:&(?:amp|lt|gt|quot|#3[49]);)/;
+
+/**
+ * `src` with the two escapers' bodies cut out.
+ *
+ * They are defined here as what they are: the tables listing those five
+ * entities. A rule banning the entities with no exception for the escapers
+ * would report helpers.js eight times, and an allow-list keyed on file would
+ * let a third escaper appear next to them — so cut the two by name instead,
+ * which keeps the rest of the file covered.
+ */
+function withoutEscapers(src) {
+    let out = src;
+    for (const name of ['escapeHtmlAttr', 'escapeHtmlText']) {
+        const head = new RegExp(`function\\s+${name}\\s*\\(`).exec(out);
+        if (!head) continue;
+        const open = out.indexOf('{', head.index);
+        let depth = 0;
+        let close = -1;
+        for (let i = open; i < out.length; i++) {
+            if (out[i] === '{') depth++;
+            else if (out[i] === '}' && --depth === 0) { close = i; break; }
+        }
+        assert.ok(close > 0, `${name}(): unbalanced braces`);
+        out = out.slice(0, open) + out.slice(close + 1);
+    }
+    return out;
+}
+
+test('nothing hand-escapes a value on its way into storage', () => {
+    const offenders = [];
+    walkScripts((file, src) => {
+        const rel = file.replace(/\\/g, '/');
+        for (const line of stripJsComments(withoutEscapers(src)).split('\n')) {
+            if (!HAND_ESCAPED.test(line)) continue;
+            offenders.push(`${rel}: ${line.trim()}`);
+        }
+    });
+    assert.deepEqual(offenders, []);
+});
+
+test('the hand-escaping guard matches the shape it claims to catch', () => {
+    // Same rule as above, run against invented source: without this the guard
+    // is one `.replace()` away from going green permanently. The first two
+    // shapes are the ones that were actually in the tree; the last two are what
+    // the rule must NOT see, and they are why it runs on stripJsComments()
+    // output rather than on the raw file.
+    const foundIn = (src) => stripJsComments(withoutEscapers(src)).split('\n')
+        .filter((line) => HAND_ESCAPED.test(line))
+        .map((line) => line.trim());
+
+    const was = "title: title.replace(/\"/g, \'&#34;\'),";
+    assert.equal(foundIn(was).length, 1, 'the mv-cache write must not come back');
+    assert.equal(foundIn("title = t.replace(/&/g, \'&amp;\');").length, 1, 'an inline & escaper either');
+
+    assert.deepEqual(foundIn("// which came out as a literal \'&#34;\'"), [],
+        'prose describing the entities is not an offender');
+    assert.deepEqual(foundIn('value.replace(/&/g, ESC.amp)'), [],
+        'a table-driven replacement does not mention the entity');
+    // The escapers are cut rather than exempted by file, so a third one
+    // appearing beside them is what this has to stay able to see. The escape
+    // sequences are what they are because the snippet has to be a real
+    // function body: withoutEscapers() looks for a brace-balanced block, and
+    // a truncated one would leave the rest of the line in place and look like
+    // an offender for the wrong reason.
+    assert.equal(
+        foundIn('function escapeHtmlAttr(t) {\n  return t.replace(/&/g, \'&amp;\');\n}\n').length, 0,
+        'the two escapers themselves are not offenders');
+    assert.equal(
+        foundIn('function escapeHtmlXss(t) {\n  return t.replace(/&/g, \'&amp;\');\n}\n').length, 1,
+        'a hand-rolled escaper next to the real ones still is');
+});
+
 // `date = date + DAY` reads like date arithmetic but is string concatenation:
 // `+` converts a Date through ToPrimitive with hint "default", which prefers a
 // string, so the variable silently becomes "Wed Sep 10 2026 ...86400000".
@@ -1766,6 +1851,153 @@ test('popup rows carry no dead per-row controls', () => {
     }
 });
 
+/**
+ * Every `#id` popup.css and the popup's own scripts reach for.
+ *
+ * A selector naming an element that no longer exists is invisible at runtime:
+ * $('alert-yes') returns null, .remove() on it was guarded, and nothing ever
+ * said anything. CSS is worse still: a rule for a missing element simply never
+ * applies, so those rules sat in the file for years.
+ *
+ * Why the popup alone: it is the only page with a stylesheet of its own.
+ * css/history.css styles six pages at once, so #calendar resolves on some of
+ * them and not others, and any per-file answer either way would be noise.
+ *
+ * Which is also why the dark-mode block is exempt below: half of it names ids
+ * that only ever existed on the other pages (#main-table, #rh-bar,
+ * #rhlistorder), because it was written by copying rules out of history.css.
+ * Judging it against popup.html judges it against a page it was never about.
+ * The bright-mode half, where the real dead selector lived, is checked whole.
+ *
+ * `declared` also carries what createElement() produces: popup.js builds its
+ * blocks in JS (mv-inject, rh-inject...), and those ids are absent from the
+ * HTML by design. Ids written inside a markup string are collected from the
+ * string too, because being inside a string is not the same as being dead.
+ */
+function popupIdReferences() {
+    const JS = ['scripts/popup.js', 'scripts/modules/popup-core.js'];
+    const declared = new Set(
+        [...fs.readFileSync(path.join(CHROME_DIR, 'popup.html'), 'utf8')
+            .matchAll(/\bid\s*=\s*"([^"]+)"/g)].map((m) => m[1]),
+    );
+
+    for (const file of JS) {
+        const raw = fs.readFileSync(path.join(CHROME_DIR, file), 'utf8');
+        const js = stripCommentsOf(raw);
+        // createElement options: `id: 'mv-inject'`
+        for (const m of js.matchAll(/\bid:\s*'([\w-]+)'/g)) declared.add(m[1]);
+        // markup written as a string: `id="rt-inject-title"`
+        for (const m of js.matchAll(/\bid=(\\?["'])([\w-]+)\1/g)) declared.add(m[2]);
+    }
+
+    const css = fs.readFileSync(path.join(CHROME_DIR, 'css/popup.css'), 'utf8');
+    const inScope = cutMediaBlock(css, 'prefers-color-scheme: dark');
+
+    const referenced = new Map();
+    // $() calls are id lookups too, and they are the half that fails loudly:
+    // a null dereference the first time the row is drawn. The CSS half fails
+    // silently, which is why it gets the longer comment above.
+    const inFiles = [['css/popup.css', inScope],
+        ...JS.map((f) => [f, stripCommentsOf(fs.readFileSync(path.join(CHROME_DIR, f), 'utf8'))])];
+    for (const [file, src] of inFiles) {
+        for (const m of src.matchAll(/#([A-Za-z][\w-]*)|\$\('([\w-]+)'\)/g)) {
+            const id = m[1] ?? m[2];
+            // Colour literals are not ids. There is no hex-shaped id here, so
+            // excluding the shape costs nothing and they are everywhere.
+            if (/^[0-9a-fA-F]{3,8}$/.test(id)) continue;
+            if (!referenced.has(id)) referenced.set(id, []);
+            referenced.get(id).push(file.replace(/\\/g, '/'));
+        }
+    }
+    return { declared, referenced };
+}
+
+/** `src` with every comment blanked out, newlines kept so line numbers hold. */
+function stripCommentsOf(src) {
+    return src.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ''))
+        .replace(/\/\/[^\n]*/g, '');
+}
+
+/**
+ * `css` minus one @media block.
+ *
+ * If the block is absent the whole file comes back, so renaming the media
+ * query widens what is checked rather than silently narrowing it.
+ */
+function cutMediaBlock(css, needle) {
+    const head = new RegExp(
+        `@media[^{]*\\b${needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^{]*\\{`).exec(css);
+    if (!head) return css;
+    const open = css.indexOf('{', head.index);
+    let depth = 0;
+    for (let i = open; i < css.length; i++) {
+        if (css[i] === '{') depth++;
+        else if (css[i] === '}' && --depth === 0) return css.slice(0, head.index) + css.slice(i + 1);
+    }
+    return css;
+}
+
+test('no popup selector targets an element the page does not have', () => {
+    // #alert-yes / #alert-no belonged to a confirm dialog whose buttons were
+    // deleted, leaving four rules and a two-line alertUser() branch that
+    // quietly did nothing. See the note above popupIdReferences() for what is
+    // and is not in scope.
+    const { declared, referenced } = popupIdReferences();
+
+    const dead = [];
+    for (const [id, files] of referenced) {
+        if (declared.has(id)) continue;
+        dead.push(`${id} (${[...new Set(files)].join(', ')})`);
+    }
+    assert.deepEqual(dead.sort(), [], [
+        'a selector names an id no page and no createElement() produces.',
+        'Delete the selector along with whatever it styled.',
+    ].join(' '));
+});
+
+test('the popup dead-selector guard matches the shape it claims to catch', () => {
+    // Otherwise it stays green by the oldest trick in the book: a regex that
+    // quietly stopped matching anything.
+    //
+    // Each case swaps the real file out, so this exercises the whole path
+    // including stripCommentsOf(): a commented-out selection is exactly why the
+    // rule does not read a raw file, and a stripper that failed would pass
+    // every case here while being unable to tell live code from a note about
+    // dead code.
+    const CSS_PATH = path.join(CHROME_DIR, 'css/popup.css');
+    const JS_PATH = path.join(CHROME_DIR, 'scripts/modules/popup-core.js');
+    /** Run popupIdReferences() against a replaced copy of `file`, then undo it. */
+    const withFile = (file, src) => {
+        const saved = fs.readFileSync(file, 'utf8');
+        fs.writeFileSync(file, src);
+        try {
+            return popupIdReferences();
+        } finally {
+            fs.writeFileSync(file, saved);
+        }
+    };
+    const deadIds = (res) => [...res.referenced.keys()].filter((id) => !res.declared.has(id));
+
+    // The shape that was in the file, inside the half that gets checked.
+    assert.deepEqual(deadIds(withFile(CSS_PATH, '#alert #alert-yes { color: #444; }')), ['alert-yes'],
+        'a selector for an element nobody creates');
+    assert.deepEqual(deadIds(withFile(CSS_PATH, '#popup { margin: 5px; }')), [], 'a live id is fine');
+    assert.deepEqual(deadIds(withFile(CSS_PATH, '#alert { color: #444; background: #fafafa; }')), [],
+        'colour literals are not ids');
+    // The other half: a $() lookup of an id nothing produces. It fails loudly
+    // rather than silently, which is not a reason to leave it unchecked.
+    const jsShifted = fs.readFileSync(JS_PATH, 'utf8').replace(
+        "$('alert-holder').style.display = 'none';",
+        "$('alert-holder').style.display = 'none'; var yes = $('alert-yes');");
+    assert.deepEqual(deadIds(withFile(JS_PATH, jsShifted)), ['alert-yes'],
+        'a $("...") lookup is an id reference too');
+    // And inside the exempted block, which has to stay exempt: it names ids
+    // from the pages it was copied out of.
+    assert.deepEqual(deadIds(withFile(CSS_PATH,
+        '@media (prefers-color-scheme: dark) {\n  #rh-bar { color: #fff; }\n}\n')), [],
+    'the dark-mode block still names ids from the pages it was copied from');
+});
+
 test('popup-core.js does not export its renderer internals', () => {
     // `showRecentTabs` normalises an odd-shaped snapshot and then hands the
     // result to `showRecentTabsImpl`. Exporting the implementation alongside it
@@ -2279,4 +2511,48 @@ test('the unselect guards stay pointed at code that is still there', () => {
     const bookmarkExports = /export \{([\s\S]*?)\};/.exec(bookmarkSrc);
     assert.ok(bookmarkExports && bookmarkExports[1].includes('selectBookmarkItem'),
         'bookmark.js stopped exporting selectBookmarkItem(); the tests would need a global again');
+});
+
+// Removing from an array while walking it forward is the classic off-by-one:
+// `splice(i, 1)` shifts everything after `i` down, so the next element is never
+// examined. The ways out are to iterate backwards, or to not mutate at all and
+// build a new array — which is what the one site that had this shape does now.
+//
+// Matched structurally rather than by file: background-sw.js splices inside a
+// `.indexOf()` guard where the element can only ever be removed once, and that
+// is a legitimate use of the idiom. What is never legitimate is doing it in a
+// `for` loop whose counter is also the index being spliced.
+const SPLICE_WHILE_WALKING = /for\s*\(\s*(?:var|let|const)\s+(\w+)\s*=[\s\S]{0,120}?\1\s*<\s*(\w+)\.length[\s\S]{0,400}?\2\.splice\(\s*\1\b/;
+
+test('no loop removes from the array it is walking', () => {
+    const offenders = [];
+    walkScripts((file, src) => {
+        const code = stripJsComments(src);
+        for (const m of code.matchAll(new RegExp(SPLICE_WHILE_WALKING.source, 'g'))) {
+            offenders.push(`${file.replace(/\\/g, '/')}: for (${m[1]}...) { ${m[2]}.splice(${m[1]}...) }`);
+        }
+    });
+    assert.deepEqual(offenders, []);
+});
+
+test('the splice guard matches the shape it claims to catch', () => {
+    // The shape that was in history2.js, and the two shapes it must stay blind
+    // to — the indexOf() idiom, which is safe, and a splice of a *different*
+    // variable, which is not this bug at all.
+    const hits = (src) => [...src.matchAll(new RegExp(SPLICE_WHILE_WALKING.source, 'g'))].length;
+
+    assert.equal(hits(`for (let s = 0; s < zNodes.length; s++) {
+    zNodes.splice(s, 1);
+}`), 1, 'the loop this was written for');
+
+    assert.equal(hits(`var i = recentTabs.indexOf(id);
+if (i >= 0) { recentTabs.splice(i, 1); }`), 0, 'indexOf() + splice is not a walk');
+
+    assert.equal(hits(`for (let s = 0; s < zNodes.length; s++) {
+    others.splice(s, 1);
+}`), 0, 'a splice on another array is not this bug');
+
+    assert.equal(hits(`zNodes = zNodes.filter(function (node) {
+    return pIDs[node.id] == true;
+});`), 0, 'the replacement must pass');
 });

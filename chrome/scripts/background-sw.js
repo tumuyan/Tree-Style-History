@@ -724,6 +724,12 @@ var mostVisitedInit = function () {
                         // The time-of-day a page was last visited was computed
                         // here and dropped on the floor — mostVisited() in
                         // popup-core.js builds its items without it.
+                        //
+                        // Raw, not escaped. It used to be
+                        // `title.replace(/"/g, '&#34;')` here, and mostVisited()
+                        // hands it to formatItem(), which escapes again: a title
+                        // of `say "hi"` was stored as `say &#34;hi&#34;` and
+                        // came out as the literal text `say &amp;#34;hi&amp;#34;`.
                         var title = hi[i].title;
                         var url = hi[i].url;
                         var furl = getFaviconUrl(hi[i].url);
@@ -735,7 +741,7 @@ var mostVisitedInit = function () {
                         mv.push({ 
                             url: url, 
                             favicon: furl, 
-                            title: title.replace(/\"/g, '&#34;'), 
+                            title: title, 
                             visitCount: hi[i].visitCount 
                         });
 

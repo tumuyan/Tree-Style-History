@@ -148,7 +148,9 @@ function loadWorker(opts = {}) {
             onRemoved: ev('tabs.onRemoved'),
         },
         history: {
-            search: (_q, cb) => cb([]),
+            // @param opts.historyResults replaces this; mostVisitedInit() is
+            // the one caller that reads what the real API would return.
+            search: (_q, cb) => cb(opts.historyResults || []),
             getVisits: (q, cb) => {
                 state.queried.push(q.url);
                 // Called straight through: the worker wraps this in a Promise
@@ -820,4 +822,59 @@ test('a crawl started before today was re-counted does not undo it', async () =>
 
     assert.equal(w.ctx.calendar_storage2[key], 42,
         'the crawl saw one visit for today and must leave the page\'s fresh count alone');
+});
+
+// ---------------------------------------------------------------------------
+// The most-visited cache
+//
+// mv-cache is the one thing the worker writes that the popup renders verbatim,
+// so whatever lands in it has already decided how the title will look. This is
+// the mostVisitedInit() half of that contract: it must store the title the
+// browser reported, not a pre-escaped version of it.
+// ---------------------------------------------------------------------------
+
+test('the most-visited cache stores titles raw', async () => {
+    // `mv-cache` used to be written with `title.replace(/"/g, '&#34;')`, and
+    // mostVisited() hands the value straight to formatItem(), which escapes it
+    // again — so a page titled `say "hi"` reached the cache as
+    // `say &#34;hi&#34;` and rendered as the literal text `say &amp;#34;hi&amp;#34;`.
+    // Escaping belongs to the renderer, which is the only side that knows it is
+    // writing text content.
+    const w = loadWorker({
+        historyResults: [{
+            url: 'https://example.com/quotes',
+            title: 'say "hi" & <b>bye</b>',
+            lastVisitTime: Date.now(),
+            visitCount: 7,
+        }],
+    });
+    w.boot();
+    await w.settle();
+
+    const cache = JSON.parse(w.ctx.localStorage['mv-cache']);
+    assert.equal(cache.length, 1);
+    assert.equal(cache[0].title, 'say "hi" & <b>bye</b>',
+        'the cache must hold the title verbatim; escaping it here double-escapes it at render time');
+});
+
+test('the most-visited cache drops nothing a later read would need', async () => {
+    // The pair it rides along with: an empty title falls back to the URL, which
+    // is what the popup has always shown for untitled pages. Also covers the
+    // browser-internal rows it skips, so "one row survived" means "the right
+    // row survived".
+    const w = loadWorker({
+        historyResults: [
+            { url: 'https://example.com/untitled', title: '', lastVisitTime: Date.now(), visitCount: 3 },
+            { url: 'https://example.com/named', title: 'Named', lastVisitTime: Date.now(), visitCount: 2 },
+            { url: 'chrome://extensions', title: 'Extensions', lastVisitTime: Date.now(), visitCount: 99 },
+        ],
+    });
+    w.boot();
+    await w.settle();
+
+    const cache = JSON.parse(w.ctx.localStorage['mv-cache']);
+    assert.deepEqual(cache.map((c) => c.url),
+        ['https://example.com/untitled', 'https://example.com/named']);
+    assert.equal(cache[0].title, 'https://example.com/untitled', 'an empty title falls back to the URL');
+    assert.equal(cache[1].visitCount, 2);
 });

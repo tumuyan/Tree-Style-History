@@ -378,7 +378,43 @@ function bindTreeSearch(tree, opts) {
     }
 }
 
+/**
+ * Drop the visits that add nothing to the tree.
+ *
+ * history2.html's "show less history" option: with it on, a reload is not meant
+ * to appear beside the page it reloaded, and opening the same address twice (as
+ * roots: no parent, no children) leaves one row, not two.
+ *
+ * Every rule is order-dependent, so this walks the array once in the given
+ * order and decides each node against what it has kept so far. The list arrives
+ * newest-first, which makes "the first occurrence" the most recent visit — the
+ * one worth keeping, and the one a later search hits first.
+ *
+ * The loop used to splice in place and re-read `zNodes[s]` afterwards. Same
+ * answer, but it takes a minute to see that the re-read lands on the row the
+ * splice shifted down and not on the one it was already looking at. Building a
+ * new array removes the question.
+ *
+ * @param {Array}  nodes flat `{ id, url, transition }`
+ * @param {object} pIds  visit ids that some other node names as its parent
+ * @returns {Array} the same order, minus what it dropped
+ */
+function collapseVisits(nodes, pIds) {
+    const urls = {};
+    return nodes.filter(function (node) {
+        // Something links here. Dropping the row would orphan everything under
+        // it, and its url is deliberately NOT recorded: a node with children
+        // casts no shadow over them.
+        if (pIds[node.id] == true) return true;
+        // A reload is the same page again, not a step sideways.
+        if (node.transition === 'reload') return false;
+        if (urls[node.url] == true) return false;
+        urls[node.url] = true;
+        return true;
+    });
+}
+
 // One `export {}` block rather than three inline `export function`s:
 // tests/static.test.mjs reads this block to cross-check the module's public
 // API, and it cannot see the inline form.
-export { treeHtml, createTree, bindTreeSearch };
+export { treeHtml, createTree, bindTreeSearch, collapseVisits };

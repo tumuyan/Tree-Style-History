@@ -264,20 +264,6 @@ Clipboard.copy = function (data) {
     return false;
 };
 
-// --- Popup scrollbar ---
-
-function popup_scrollbar_fix() {
-    var ps = document.body.offsetHeight;
-    var pss = document.body.scrollHeight;
-    if (pss > ps) {
-        var popupEl = document.getElementById('popup');
-        if (popupEl) popupEl.style.marginRight = '24px';
-    } else {
-        popupEl = document.getElementById('popup');
-        if (popupEl) popupEl.style.marginRight = '5px';
-    }
-}
-
 // --- Favicon rendering ---
 
 // Setup favicon image element with error and load-based fallback detection
@@ -324,6 +310,5 @@ export {
     getUrlVars, extractBookmarkletCode, decodeBookmarkletCode, executeBookmarklet,
     chromeURL,
     Clipboard,
-    popup_scrollbar_fix,
     setupFaviconElement
 };
