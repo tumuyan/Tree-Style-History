@@ -77,6 +77,23 @@ function defaultGetVisits(state, q, cb) {
 }
 
 /**
+ * `localStorage` with a counter on the favicon negative cache.
+ *
+ * That key is the whole cache as one JSON string, so counting the writes to
+ * it is how the tests see the difference between "one write per failed icon"
+ * and "one write per popup".
+ */
+function negLocalStorage(state) {
+    const store = {};
+    return Object.defineProperty({}, 'favicon-negative-cache', {
+        enumerable: true,
+        configurable: true,
+        get() { return store['favicon-negative-cache']; },
+        set(v) { state.negWrites++; store['favicon-negative-cache'] = String(v); },
+    });
+}
+
+/**
  * Evaluate the worker in a fresh context.
  *
  * @param {object} [opts]
@@ -102,6 +119,13 @@ function loadWorker(opts = {}) {
         visitCounter: 0,
         inFlight: 0,
         maxInFlight: 0,
+        // How many times the whole negative cache was re-serialised. It is one
+        // JSON string in storage, so this — not the entry count — is what the
+        // batching is buying.
+        negWrites: 0,
+        // Likewise how many times it was re-parsed, which is how the tests tell
+        // a cached copy from a discarded one.
+        jsonParses: 0,
     };
 
     const ev = (name) => ({
@@ -138,7 +162,9 @@ function loadWorker(opts = {}) {
             local: makeArea(new Map()),
             sync: makeArea(new Map()),
             session: sessionArea,
-            onChanged: { addListener() {} },
+            // Recorded rather than discarded: the worker listens for the
+            // options page clearing the favicon caches from another context.
+            onChanged: ev('storage.onChanged'),
         },
         tabs: {
             query: (_q, cb) => cb(state.tabs),
@@ -195,7 +221,14 @@ function loadWorker(opts = {}) {
         // Only used to build the query range in loadHistory(); the DB is a
         // stub, so no key range is ever interpreted.
         IDBKeyRange: { lowerBound: () => ({}), upperBound: () => ({}) },
-        localStorage: {},
+        // `JSON.parse` is counted rather than stubbed: the negative cache is
+        // one JSON string, and "was it parsed again" is the observable
+        // difference between a cached copy and a discarded one.
+        JSON: {
+            parse: (text, reviver) => { state.jsonParses++; return JSON.parse(text, reviver); },
+            stringify: (value, a, b) => JSON.stringify(value, a, b),
+        },
+        localStorage: negLocalStorage(state),
         caches: { open: async () => ({ match: async () => undefined, put: async () => {} }), delete: async () => true },
         Response: { error: () => ({}) },
         // The worker's own onStorageReady hook; nothing runs until boot().
@@ -877,4 +910,199 @@ test('the most-visited cache drops nothing a later read would need', async () =>
         ['https://example.com/untitled', 'https://example.com/named']);
     assert.equal(cache[0].title, 'https://example.com/untitled', 'an empty title falls back to the URL');
     assert.equal(cache[1].visitCount, 2);
+});
+
+// ---------------------------------------------------------------------------
+// Favicon negative cache
+//
+// It lives in `chrome.storage.local` as one JSON string, so every read is a
+// full `JSON.parse()` and every write a full `JSON.stringify()` — and one
+// popup open adds an entry per row whose icon failed. Left unbounded it grew
+// for as long as the favicon service stayed unreachable: measured 20k entries
+// is 1.3MB, ~12ms to read and ~51ms to write, i.e. seconds of service-worker
+// CPU per popup on the worker that is also answering those requests.
+// ---------------------------------------------------------------------------
+
+// Read back out of the source: hard-coding it here would let the two drift.
+const NEGATIVE_CACHE_MAX = Number(/const NEGATIVE_CACHE_MAX = (\d+)/.exec(SW_SRC)[1]);
+const NEGATIVE_CACHE_TTL = Number(/const NEGATIVE_CACHE_TTL = (\d+)/.exec(SW_SRC)[1]);
+const NEGATIVE_CACHE_FLUSH_MS = Number(/const NEGATIVE_CACHE_FLUSH_MS = (\d+)/.exec(SW_SRC)[1]);
+
+/** The cache as the worker left it in storage. */
+function negCache(w) {
+    return JSON.parse(w.ctx.localStorage['favicon-negative-cache'] || '{}');
+}
+
+/**
+ * Failures are held for a tick and written back as one batch, so a test has
+ * to end the batch before it can look at storage.
+ */
+function addNeg(w, url) {
+    w.ctx.addNegativeCache(url);
+    w.ctx.flushNegativeCache();
+}
+
+test('the negative cache stops growing instead of filling chrome.storage.local', async () => {
+    const w = loadWorker();
+    w.boot();
+    await w.settle();
+
+    const n = NEGATIVE_CACHE_MAX + 200;
+    for (let i = 0; i < n; i++) {
+        addNeg(w, 'https://icons.duckduckgo.com/ip3/host' + i + '.test.ico');
+    }
+
+    const size = Object.keys(negCache(w)).length;
+    assert.ok(size <= NEGATIVE_CACHE_MAX,
+        `${n} failures left ${size} entries, expected at most ${NEGATIVE_CACHE_MAX}`);
+});
+
+test('the negative cache evicts its oldest entries, not arbitrary ones', async () => {
+    // `Object.keys()` walks insertion order, so the survivors must be the most
+    // recently failed URLs — the ones still likely to fail.
+    const w = loadWorker();
+    w.boot();
+    await w.settle();
+
+    const n = NEGATIVE_CACHE_MAX + 200;
+    for (let i = 0; i < n; i++) {
+        addNeg(w, 'https://icons.duckduckgo.com/ip3/host' + i + '.test.ico');
+    }
+    const keys = Object.keys(negCache(w));
+    assert.equal(keys.length, NEGATIVE_CACHE_MAX, 'the cache holds exactly the cap');
+    assert.ok(!keys.includes('https://icons.duckduckgo.com/ip3/host0.test.ico'),
+        'the oldest entry must be the first to go');
+    assert.ok(!keys.includes('https://icons.duckduckgo.com/ip3/host199.test.ico'),
+        'the 200 oldest entries must all be gone');
+    assert.ok(keys.includes('https://icons.duckduckgo.com/ip3/host' + (n - 1) + '.test.ico'),
+        'the newest entry must survive');
+});
+
+test('a popup\'s worth of failures is one write, not one per icon', async () => {
+    // The cap stops the cache growing; it does not stop every add costing a
+    // full read-modify-write of the whole thing, because once the cache sits
+    // at the cap every add still parses and re-serialises 2000 entries.
+    // Measured 5000 adds at ~0.9ms each, i.e. ~15ms of worker CPU for a
+    // 16-row popup whose icons all failed.
+    const w = loadWorker();
+    w.boot();
+    await w.settle();
+
+    const rows = 16;
+    for (let i = 0; i < rows; i++) {
+        w.ctx.addNegativeCache('https://icons.duckduckgo.com/ip3/batch' + i + '.test.ico');
+    }
+    w.ctx.flushNegativeCache();
+
+    assert.equal(w.state.negWrites, 1,
+        `${rows} failures cost ${w.state.negWrites} cache writes; they are one batch`);
+    assert.equal(Object.keys(negCache(w)).length, rows, 'the batch must reach storage in full');
+});
+
+test('a failure is remembered before the batch that carries it is written', async () => {
+    // Batching delays the write, and `handleFaviconRequest()` asks about the
+    // fallback URL immediately after failing the primary one — inside the
+    // same tick. A batch that only counted once it landed in storage would
+    // fetch the fallback it just recorded as broken.
+    const w = loadWorker();
+    w.boot();
+    await w.settle();
+
+    const url = 'https://icons.duckduckgo.com/ip3/inflight.test.ico';
+    w.ctx.addNegativeCache(url);
+    assert.equal(w.ctx.isNegativeCached(url), true,
+        'a pending failure must suppress its own URL before the flush');
+});
+
+test('the batch is written by its timer, not only by hand', async () => {
+    const w = loadWorker();
+    w.boot();
+    await w.settle();
+
+    w.ctx.addNegativeCache('https://icons.duckduckgo.com/ip3/timed.test.ico');
+    assert.equal(w.state.negWrites, 0, 'nothing is written inside the add itself');
+
+    await new Promise((r) => setTimeout(r, NEGATIVE_CACHE_FLUSH_MS + 20));
+    assert.equal(w.state.negWrites, 1, 'the timer must flush the batch on its own');
+});
+
+test('a negative-cached URL is skipped, and one past its TTL is retried', async () => {
+    const w = loadWorker();
+    w.boot();
+    await w.settle();
+
+    const url = 'https://icons.duckduckgo.com/ip3/once.test.ico';
+    addNeg(w, url);
+    assert.equal(w.ctx.isNegativeCached(url), true, 'a fresh failure must be remembered');
+
+    // Age it out: the entry is a timestamp, so rewriting it is enough.
+    const cache = negCache(w);
+    cache[url] = Date.now() - NEGATIVE_CACHE_TTL - 1;
+    w.ctx.setNegativeCache(cache);
+    assert.equal(w.ctx.isNegativeCached(url), false, 'an expired entry must allow a retry');
+});
+
+test('expired entries are swept on the periodic alarm, not on every write', async () => {
+    const w = loadWorker();
+    w.boot();
+    await w.settle();
+
+    const stale = 'https://icons.duckduckgo.com/ip3/stale.test.ico';
+    const fresh = 'https://icons.duckduckgo.com/ip3/fresh.test.ico';
+    const cache = { [stale]: Date.now() - NEGATIVE_CACHE_TTL - 1, [fresh]: Date.now() };
+    w.ctx.setNegativeCache(cache);
+
+    // Adding to the cache must not sweep it — that is a second O(size) pass
+    // on top of a write that is already O(size), and the cap already bounds
+    // what the sweep would reclaim.
+    addNeg(w, 'https://icons.duckduckgo.com/ip3/added.test.ico');
+    assert.ok(stale in negCache(w), 'an add must not pay for a sweep');
+
+    w.fire('alarms.onAlarm', { name: 'mostVisited' });
+    assert.ok(!(stale in negCache(w)), 'the alarm must drop entries past their TTL');
+    assert.ok(fresh in negCache(w), 'entries inside their TTL must survive');
+});
+
+test('the parsed negative cache is dropped when another context clears it', async () => {
+    // The options page's "clear icon cache" calls
+    // `localStorage.removeItem()`, which does not go through
+    // `setNegativeCache()`. Without invalidation the worker keeps its parsed
+    // copy and goes on suppressing URLs the user just unblocked.
+    const w = loadWorker();
+    w.boot();
+    await w.settle();
+
+    const url = 'https://icons.duckduckgo.com/ip3/cleared.test.ico';
+    addNeg(w, url);
+    assert.equal(w.ctx.isNegativeCached(url), true);
+
+    delete w.ctx.localStorage['favicon-negative-cache'];
+    // What storage-adapter.js delivers for a removal from another context.
+    w.fire('storage.onChanged', { 'favicon-negative-cache': {} }, 'local');
+    assert.equal(w.ctx.isNegativeCached(url), false, 'clearing the cache must take effect immediately');
+});
+
+test('the worker\'s own writes do not invalidate the copy it just made', async () => {
+    // The other writer is this worker, and `setNegativeCache()` reaches the
+    // same `onChanged` listener — as a change *with* a `newValue`. Taking
+    // every change as foreign discards the parsed copy on every add, so the
+    // next lookup re-parses the cache the copy was there to avoid: measured
+    // re-parse on every add, which is the cost the copy removes.
+    const w = loadWorker();
+    w.boot();
+    await w.settle();
+
+    const url = 'https://icons.duckduckgo.com/ip3/own.test.ico';
+    addNeg(w, url);
+
+    // What storage-adapter.js delivers for a write from anywhere, including
+    // from here: the change carries the new value.
+    w.fire('storage.onChanged',
+        { 'favicon-negative-cache': { newValue: w.ctx.localStorage['favicon-negative-cache'] } },
+        'local');
+
+    const before = w.state.jsonParses;
+    assert.equal(w.ctx.isNegativeCached(url), true, 'the entry must still be there');
+    assert.equal(w.state.jsonParses, before,
+        'a write of its own must not force the worker to re-parse the cache');
 });

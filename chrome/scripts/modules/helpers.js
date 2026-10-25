@@ -266,6 +266,24 @@ Clipboard.copy = function (data) {
 
 // --- Favicon rendering ---
 
+// How long an <img> is allowed to stay pending before it is given up on.
+//
+// A favicon service that is *unreachable* rather than *broken* — blocked,
+// firewalled, or on a network that blackholes the connection — never fires
+// `error`: the request simply stays open. Chrome's own connect timeout is
+// minutes, so the image sits incomplete for as long as the popup is open.
+// That does not block rendering (the rows are visible in well under 100ms),
+// but it does hold the document's `load` event open, and Chrome sizes the
+// popup — and finishes its open animation — on that event. Measured on a
+// blocked host: `loadEventEnd` stayed 0 and `readyState` stayed
+// `interactive` while the popup was plainly usable on screen.
+//
+// So the image is cut loose on a timer: fall back, then blank, exactly as a
+// real error would. The in-flight request is abandoned rather than cancelled
+// — `img.src = ''` would release it, but it also fires another `error` and
+// Chrome keeps the connection until it times out anyway.
+const FAVICON_TIMEOUT_MS = 4000;
+
 // Setup favicon image element with error and load-based fallback detection
 // Some services (e.g. Google) return a default 16x16 icon with HTTP 404 status.
 // The <img> 'error' event does NOT fire for valid image data even with 404,
@@ -274,28 +292,68 @@ function setupFaviconElement(imgEl, primaryUrl, fallbackUrl) {
     if (!imgEl) return;
     var _checked = false;
     var _retryCount = 0;
-    
-    imgEl.addEventListener('error', function () {
-        _retryCount++;
-        // Only attempt fallback once; subsequent errors just show blank
-        if (_retryCount === 1 && fallbackUrl) {
-            this.src = fallbackUrl;
-        } else {
-            this.src = 'images/blank.png';
+    var _timer = null;
+
+    // Cancel whatever deadline is pending. Called before a new `src` is set
+    // and on every terminal event, so exactly one timer is ever live.
+    function settle() {
+        if (_timer !== null) {
+            clearTimeout(_timer);
+            _timer = null;
         }
+    }
+
+    /** Arm the deadline for whatever `img` is currently loading. */
+    function arm(img) {
+        settle();
+        // No `complete` check inside: a finished image has already cleared
+        // this timer through `settle()`, so by the time it fires the image is
+        // still pending by construction.
+        _timer = setTimeout(function () {
+            _timer = null;
+            failed(img);
+        }, FAVICON_TIMEOUT_MS);
+    }
+
+    function failed(img) {
+        _retryCount++;
+        // Only attempt fallback once; subsequent failures just show blank
+        if (_retryCount === 1 && fallbackUrl) {
+            img.src = fallbackUrl;
+            // The fallback is another remote request and can hang the same
+            // way, so it gets a deadline of its own.
+            arm(img);
+        } else {
+            settle();
+            img.src = 'images/blank.png';
+        }
+    }
+
+    imgEl.addEventListener('error', function () {
+        failed(this);
     });
-    
+
     imgEl.addEventListener('load', function () {
+        // The image is on screen, so whatever deadline was armed for it is
+        // spent. This runs *before* the `_checked` gate because the handler
+        // also fires for the fallback's own load: behind the gate, a
+        // successful fallback would leave its timer live and the icon it just
+        // painted would be swapped for the blank one when that timer expired.
+        settle();
         if (_checked) return;
         _checked = true;
         // Google's default 404 icon is 16x16; most real favicons are >= 32x32
         // If the loaded image is suspiciously small, treat as failure
         if (this.naturalWidth <= 16 && this.naturalHeight <= 16 && fallbackUrl) {
-            this.src = fallbackUrl;
+            failed(this);
         }
     });
-    
+
     if (primaryUrl) {
+        // Armed before `src` is set: a cached icon can fire `load` early
+        // enough that the timer would otherwise be started against an image
+        // that has already finished.
+        arm(imgEl);
         imgEl.src = primaryUrl;
     }
 }

@@ -11,6 +11,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 
 import { installStubs, importModule, importModuleFresh } from './stubs.mjs';
 import { createDom, htmlIds } from './dom.mjs';
@@ -335,6 +336,17 @@ function fakeImg() {
     };
 }
 
+/** `fakeImg()` that also records every `src` assignment. */
+function countingImg() {
+    const img = fakeImg();
+    img.writes = [];
+    Object.defineProperty(img, 'src', {
+        get() { return this._src; },
+        set(v) { this._src = v; img.writes.push(v); },
+    });
+    return img;
+}
+
 test('setupFaviconElement tries the fallback service once, then goes blank', () => {
     const img = fakeImg();
     helpers.setupFaviconElement(img, 'primary', 'fallback');
@@ -359,6 +371,170 @@ test('setupFaviconElement treats a 16x16 load as a failed Google lookup', () => 
 
     img.handlers.load.call(img);
     assert.equal(img.src, 'fallback', 'the size check must not re-run once it fired');
+});
+
+// The favicon deadline. `helpers.js` keeps it private, so it is re-derived
+// here from the source rather than exported just for the tests: the number
+// itself is not what these assert, the "there is one and it fires" is.
+const FAVICON_TIMEOUT = Number(
+    /const FAVICON_TIMEOUT_MS = (\d+);/.exec(
+        fs.readFileSync(new URL('../chrome/scripts/modules/helpers.js', import.meta.url), 'utf8'),
+    )[1],
+);
+
+test('a favicon that never answers is given up on, so the page can finish loading', (t) => {
+    // A favicon service that is blocked rather than broken — firewalled, or on
+    // a network that blackholes the connection — never fires `error`: the
+    // request just stays open. Measured on such a host, `readyState` stayed
+    // `interactive` and `loadEventEnd` stayed 0 while the popup was plainly
+    // usable, because Chrome sizes the popup on the `load` event.
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const img = countingImg();
+    try {
+        helpers.setupFaviconElement(img, 'primary', 'fallback');
+        assert.equal(img.src, 'primary', 'nothing has failed yet');
+
+        t.mock.timers.tick(FAVICON_TIMEOUT + 1);
+        assert.equal(img.src, 'fallback', 'the hang must end in the fallback service');
+
+        // And the fallback can hang too — it is another remote request.
+        t.mock.timers.tick(FAVICON_TIMEOUT + 1);
+        assert.equal(img.src, 'images/blank.png', 'a second hang must end in the blank icon');
+
+        // The blank icon is the end of the road: no further timer may be left
+        // running against it, or it keeps firing into an image that is already
+        // settled.
+        img.writes.length = 0;
+        t.mock.timers.tick(FAVICON_TIMEOUT * 3);
+        assert.deepEqual(img.writes, [], 'nothing may fire after the blank icon');
+    } finally {
+        t.mock.timers.reset();
+    }
+});
+
+test('a second real failure leaves no deadline behind it', (t) => {
+    // Reached through `error`, not through the timer: the timer clears its own
+    // handle before it calls `failed()`, so the blank branch's `settle()` is
+    // only load-bearing when a *real* failure lands while the fallback's
+    // deadline is still live. Without it that deadline fires on an image that
+    // is already blank, and `failed()` runs again.
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const img = countingImg();
+    try {
+        helpers.setupFaviconElement(img, 'primary', 'fallback');
+        img.writes.length = 0;
+
+        // The fallback service fails too, while its own deadline is pending.
+        img.handlers.error.call(img);
+        img.handlers.error.call(img);
+        assert.deepEqual(img.writes, ['fallback', 'images/blank.png']);
+
+        t.mock.timers.tick(FAVICON_TIMEOUT * 2);
+        assert.deepEqual(img.writes, ['fallback', 'images/blank.png'],
+            'nothing may fire once the icon is already blank');
+    } finally {
+        t.mock.timers.reset();
+    }
+});
+
+test('a fallback that arrives keeps its icon', (t) => {
+    // The `load` handler fires for the fallback too, and the `_checked` gate
+    // was written for the size check — put the settle behind it and a
+    // fallback that loads successfully is still swapped for the blank icon
+    // when its own deadline expires, i.e. the one path that still has an icon
+    // once the primary service is unreachable ends up with none.
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const img = fakeImg();
+    img.naturalWidth = 16;
+    img.naturalHeight = 16;
+    try {
+        helpers.setupFaviconElement(img, 'primary', 'fallback');
+
+        // The primary comes back as Google's 16x16 placeholder: a real
+        // `load`, so the fallback is reached through the size check.
+        img.handlers.load.call(img);
+        assert.equal(img.src, 'fallback');
+
+        // The fallback answers properly this time.
+        img.naturalWidth = 32;
+        img.naturalHeight = 32;
+        img.handlers.load.call(img);
+        t.mock.timers.tick(FAVICON_TIMEOUT * 2);
+        assert.equal(img.src, 'fallback', 'a fallback that loaded must not be swapped out');
+    } finally {
+        t.mock.timers.reset();
+    }
+});
+
+test('a favicon that answers ahead of the deadline keeps its icon', (t) => {
+    // The deadline must not race a slow-but-working service: the icon lands
+    // just inside its own deadline, and `load` settles the timer before it
+    // can fire.
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const img = fakeImg();
+    try {
+        helpers.setupFaviconElement(img, 'primary', 'fallback');
+        t.mock.timers.tick(FAVICON_TIMEOUT - 1);
+        img.handlers.load.call(img);
+        t.mock.timers.tick(FAVICON_TIMEOUT * 2);
+        assert.equal(img.src, 'primary', 'an icon that loaded must not be swapped out');
+    } finally {
+        t.mock.timers.reset();
+    }
+});
+
+test('the deadline does not fire for an icon that already arrived', (t) => {
+    // `load` settles the armed deadline on the way in. Without that settle, a
+    // popup that renders icons from the Cache API — the common case, every
+    // repeat visit — has every one of them swapped out for the fallback
+    // service when its timer expires.
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const img = fakeImg();
+    try {
+        helpers.setupFaviconElement(img, 'primary', 'fallback');
+        // Finished almost immediately, from cache.
+        img.handlers.load.call(img);
+        t.mock.timers.tick(FAVICON_TIMEOUT * 3);
+        assert.equal(img.src, 'primary', 'a cached icon must survive its own deadline');
+    } finally {
+        t.mock.timers.reset();
+    }
+});
+
+test('a real favicon failure cancels the pending deadline', (t) => {
+    // Otherwise a fast `error` and the timer both take the "first failure"
+    // branch: two more `src` writes land where one should, and the icon races
+    // straight past the fallback service to blank.
+    //
+    // Asserted by counting `src` writes, not by the final value: both the
+    // correct and the buggy version end up on the blank icon, so the value
+    // alone cannot tell them apart.
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const img = countingImg();
+    const writes = img.writes;
+    try {
+        helpers.setupFaviconElement(img, 'primary', 'fallback');
+
+        // Fail partway through the primary's deadline. That is the shape that
+        // distinguishes the two: the primary's timer is still pending when the
+        // error lands, so a `settle()` that does not clear it leaves a second
+        // deadline running — and it fires *earlier* than the fallback's own.
+        t.mock.timers.tick(FAVICON_TIMEOUT / 2);
+        img.handlers.error.call(img);
+        assert.equal(img.src, 'fallback');
+        writes.length = 0;
+
+        // The primary's deadline would have expired by now. It must not fire:
+        // the fallback has only been loading for half that time.
+        t.mock.timers.tick(FAVICON_TIMEOUT / 2 + 1);
+        assert.deepEqual(writes, [], 'the cancelled deadline must not fire');
+
+        // The fallback's own deadline is what ends it, a full interval later.
+        t.mock.timers.tick(FAVICON_TIMEOUT);
+        assert.deepEqual(writes, ['images/blank.png'], 'the fallback still gets its own deadline');
+    } finally {
+        t.mock.timers.reset();
+    }
 });
 
 // ---------------------------------------------------------------------------

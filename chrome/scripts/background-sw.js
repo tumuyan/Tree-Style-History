@@ -315,22 +315,174 @@ function extractHostnameFromFaviconUrl(url) {
 // repeating network requests within a configurable time window.
 const NEGATIVE_CACHE_TTL = 3600000; // 1 hour
 
+// Hard cap on how many URLs the cache remembers.
+//
+// The cache lived in `chrome.storage.local` as one JSON string, and nothing
+// ever removed an entry that was still inside its TTL. Every popup open adds
+// one per row whose icon failed, so a browser pointed at an unreachable
+// favicon service grew it for as long as that stayed true: measured 20k
+// entries is 1.3MB, and the numbers below are what that costs.
+//
+// `getNegativeCache()` is a `JSON.parse()` of the whole string and
+// `setNegativeCache()` a `JSON.stringify()` of it, so *every* add is a
+// full read-modify-write of the entire cache. Per add, measured in the
+// service worker:
+//
+//     0 entries      0.03ms read    0.16ms write
+//     2k entries     0.53ms read    1.88ms write
+//     10k entries    2.18ms read   10.6ms  write
+//     40k entries   12.15ms read   51.4ms  write
+//
+// A 16-row popup whose icons all fail is 16 adds, i.e. ~180ms of solid
+// service-worker CPU at 10k entries and ~800ms at 40k. That runs on the
+// worker that is simultaneously answering those very requests, and on a
+// cold start it competes with the startup crawl.
+//
+// Capping it is the whole fix for the growth; the TTL sweep alone never
+// fires while entries keep arriving faster than they expire.
+//
+// It is not the fix for the *per-add* cost: once the cache sits at the cap,
+// each add still costs a full parse plus a full stringify, which is where
+// the ~0.9ms/entry measured at 5000 entries comes from. That is what the
+// batched write below is for.
+const NEGATIVE_CACHE_MAX = 2000;
+
+// How long a batch of failures is held before it is written back.
+//
+// One popup open used to mean one read-modify-write per failed icon, because
+// each `addNegativeCache()` call stands alone. Holding them for a tick turns
+// that into one read-modify-write for the whole burst, which is the shape
+// the cost above actually has.
+//
+// Short on purpose: a worker that is recycled before the timer fires loses
+// the batch, and the worst case for a lost batch is one extra fetch per URL.
+// It is not periodic work, so `setTimeout` is fine here — unlike the alarms
+// below, this one never has to survive a recycle.
+const NEGATIVE_CACHE_FLUSH_MS = 100;
+
+// Hold the parsed object instead of re-parsing on every single lookup: the
+// parse is O(size of cache) and `handleFaviconRequest()` calls this twice per
+// icon (once for the URL, once for the fallback).
+//
+// It lives in module scope, so it dies with the worker — one extra parse per
+// restart, which is nothing. Staleness is the risk, and there are exactly two
+// writers: this worker (every path goes through `setNegativeCache()`, which
+// refreshes the copy) and the options page's "clear icon cache", which
+// removes the key outright and is handled by the `onChanged` listener below.
+var _negativeCache = null;
+
+// Failures that have been recorded but not written back yet. Consulted by
+// `isNegativeCached()` so a batch still suppresses its own URLs before it
+// lands in storage.
+var _negativePending = {};
+var _negativeFlushTimer = null;
+
 function getNegativeCache() {
+    if (_negativeCache) return _negativeCache;
     try {
-        return JSON.parse(localStorage['favicon-negative-cache'] || '{}');
+        _negativeCache = JSON.parse(localStorage['favicon-negative-cache'] || '{}');
     } catch {
-        return {};
+        _negativeCache = {};
     }
+    return _negativeCache;
 }
 
 function setNegativeCache(cache) {
+    _negativeCache = cache;
     try {
         localStorage['favicon-negative-cache'] = JSON.stringify(cache);
     } catch {}
 }
 
+/**
+ * Drop the oldest entries until the cache is back under the cap.
+ *
+ * `Object.keys()` walks string keys in insertion order, so the front of the
+ * map *is* the oldest entry — no timestamps need comparing.
+ */
+function evictNegativeCache(cache) {
+    var keys = Object.keys(cache);
+    var excess = keys.length - NEGATIVE_CACHE_MAX;
+    for (var i = 0; i < excess; i++) {
+        delete cache[keys[i]];
+    }
+}
+
+/**
+ * Drop entries that are past their TTL.
+ *
+ * Deliberately not part of the write path: it is O(size of cache) on top of
+ * a write that is already O(size of cache), and the cap eviction above keeps
+ * the size bounded anyway — so sweeping on every add buys nothing that the
+ * eviction does not, and costs a second pass over the whole map. It rides
+ * the existing most-visited alarm instead, which costs no extra wake-up: an
+ * alarm wakes the worker, and a worker that wakes runs the startup crawl.
+ */
+function sweepNegativeCache() {
+    var cache = getNegativeCache();
+    var now = Date.now();
+    var keys = Object.keys(cache);
+    var expired = 0;
+    for (var i = 0; i < keys.length; i++) {
+        if (now - cache[keys[i]] > NEGATIVE_CACHE_TTL) {
+            delete cache[keys[i]];
+            expired++;
+        }
+    }
+    if (expired) setNegativeCache(cache);
+}
+
+/**
+ * Write every pending failure back in one pass: one parse, one prune, one
+ * stringify for the whole batch instead of one round trip per URL.
+ */
+function flushNegativeCache() {
+    _negativeFlushTimer = null;
+    var urls = Object.keys(_negativePending);
+    _negativePending = {};
+    if (urls.length === 0) return;
+    var cache = getNegativeCache();
+    var now = Date.now();
+    for (var i = 0; i < urls.length; i++) {
+        cache[urls[i]] = now;
+    }
+    // After the insert, so the new entries cannot be the ones evicted and
+    // the cache comes out at exactly the cap rather than one over.
+    if (Object.keys(cache).length > NEGATIVE_CACHE_MAX) {
+        evictNegativeCache(cache);
+    }
+    setNegativeCache(cache);
+}
+
+function addNegativeCache(url) {
+    if (!url) return;
+    _negativePending[url] = true;
+    if (_negativeFlushTimer === null) {
+        _negativeFlushTimer = setTimeout(flushNegativeCache, NEGATIVE_CACHE_FLUSH_MS);
+    }
+}
+
+// The options page's "clear icon cache" removes the key from another context,
+// which does not go through `setNegativeCache()`. Drop the parsed copy when
+// that happens, or the worker keeps suppressing URLs the user just unblocked.
+//
+// Only a *removal* invalidates. `setNegativeCache()` — the only other writer,
+// and it lives here — also arrives on this listener, as a change with a
+// `newValue`; treating that as foreign would discard the copy this worker
+// just wrote and re-parse the cache on the very next lookup, i.e. undo the
+// caching on every single add.
+chrome.storage.onChanged.addListener(function (changes, areaName) {
+    if (areaName !== 'local') return;
+    var change = changes['favicon-negative-cache'];
+    if (change && !('newValue' in change)) {
+        _negativeCache = null;
+        _negativePending = {};
+    }
+});
+
 function isNegativeCached(url) {
     if (!url) return false;
+    if (_negativePending[url]) return true;
     var cache = getNegativeCache();
     var ts = cache[url];
     if (!ts) return false;
@@ -341,23 +493,6 @@ function isNegativeCached(url) {
         return false;
     }
     return true;
-}
-
-function addNegativeCache(url) {
-    if (!url) return;
-    var cache = getNegativeCache();
-    // Periodically clean expired entries (~every 20 entries)
-    var keys = Object.keys(cache);
-    if (keys.length >= 20) {
-        var now = Date.now();
-        keys.forEach(function(key) {
-            if (now - cache[key] > NEGATIVE_CACHE_TTL) {
-                delete cache[key];
-            }
-        });
-    }
-    cache[url] = Date.now();
-    setNegativeCache(cache);
 }
 
 // Best-effort cache write. cache.put() is deliberately not awaited (writing must
@@ -618,6 +753,10 @@ function initializeExistingTabs() {
 chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === 'mostVisited') {
         mostVisitedInit();
+        // Piggybacked on a wake-up that is already paid for: a new alarm of
+        // its own would wake the worker — and re-run the startup crawl — for
+        // nothing but a map sweep.
+        sweepNegativeCache();
     }
 });
 
@@ -1504,7 +1643,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 }
                 sendResponse({ result: deleted });
             });
-            // Also clear negative cache
+            // Also clear negative cache, pending batch included: a batch that
+            // survives this would be written straight back by its timer.
+            _negativePending = {};
+            _negativeCache = null;
             localStorage.removeItem('favicon-negative-cache');
             return true; // Keep channel open for async response
 
