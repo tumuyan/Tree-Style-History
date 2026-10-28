@@ -16,6 +16,12 @@ var _tSW_init, _tSW_db, _tSW_load;  // timing markers for startup summary
 // Idempotent flag: prevent double initialization from onStorageReady + onInstalled/onStartup
 var _storageInitialized = false;
 
+// The crawl alarm's name, declared here rather than with the crawl's other
+// constants further down: `const` sits in the temporal dead zone until
+// execution reaches it, and the alarms.onAlarm listener registered near the top
+// of this file reads this one — at registration time, not at firing time.
+const CRAWL_ALARM = 'crawlHistory';
+
 // Set global vars
 var openedTabs = {};
 var recentTabs = [];
@@ -32,8 +38,10 @@ var calendar_r = {};
 
 var urls_wait_load = new Array();
 
-// `{ <dayKey>: <visit count> }` gathered by the crawl as it walks;
-// flushed into `calendar_storage2` by saveCrawledHeat() when it finishes.
+// `{ <dayKey>: <visit count> }` gathered by the crawl as it walks. Accumulated
+// across the passes of one window and flushed into `calendar_storage2` by
+// saveCrawledHeat() only once that window is finished — a pass that stops at
+// its budget has counted only part of the window.
 var heatDays = {};
 
 // Tab tracking data
@@ -677,6 +685,11 @@ function initializeStorageState() {
     // minutes that meant dozens of full re-initialisations an hour. "Most
     // visited" changes slowly, so half an hour is plenty.
     chrome.alarms.create('mostVisited', { periodInMinutes: 30 });
+
+    // The crawl's own paced passes. The startup crawl below is the first one;
+    // this is what keeps the window warm afterwards, so a long browsing session
+    // is not left waiting for the next worker start.
+    scheduleCrawl();
     
     // Initialize DB
     if (typeof dbManager !== 'undefined') {
@@ -757,6 +770,21 @@ chrome.alarms.onAlarm.addListener((alarm) => {
         // its own would wake the worker — and re-run the startup crawl — for
         // nothing but a map sweep.
         sweepNegativeCache();
+    } else if (alarm.name === CRAWL_ALARM) {
+        // A pass, not the whole window: processVisits() stops when it has spent
+        // its budget and the next alarm resumes from the cursor. Nothing here is
+        // awaited by an event handler, so the pass simply runs.
+        //
+        // The crawl reads `load-range` out of the storage cache, so it starts
+        // from the same hook the startup path does instead of assuming the
+        // cache is there.
+        //
+        // No catch: loadHistory() logs its own failure and swallows it, and it
+        // is also what serialises this pass against the startup one — calling
+        // it is all this listener has to do.
+        onStorageReady(function () {
+            loadHistory();
+        });
     }
 });
 
@@ -1178,41 +1206,169 @@ function setBadge(text, force) {
     chrome.action.setBadgeText({ text: text });
 }
 
-// Load history function
-function loadHistory() {
-    dbManager.queryURLs({
-        index: 'lastVisitTime',
-        range: IDBKeyRange.lowerBound((new Date()).getTime() - DAY * Number(localStorage["load-range"])),
-        direction: 'next'
-    }).then(urls => {
-        urls_wait_load = urls.filter(url => {
-            return !url.loadto || url.loadto < url.lastVisitTime;
-        });
-        processVisits();
-    }).catch(error => {
-        console.error('loadHistory() Error:', error);
-    });
-}
-
-// --- Crawl tuning ---------------------------------------------------------
+// --- Crawl pacing ---------------------------------------------------------
 //
-// All of the crawl's constants are declared before any function reaches for
-// them, `loadHistory()` included — it calls `processVisits()` and is defined
-// further down this file. `const` is in the temporal dead zone until execution
-// reaches it, so a declaration placed after a caller is not merely untidy: it
-// throws on the path that caller starts, and only there.
+// The crawl is the job that fills the tree and the heat map. It used to be one
+// pass over the whole window, started once. Raising the frequency without
+// lowering the cost of a pass would just run that pass more often, so a pass is
+// now bounded: a window too large to finish in one is covered by several
+// consecutive ones, each resuming from the position the last persisted.
 //
+// Every constant here is declared before any function below reaches for it,
+// `loadHistory()` included. `const` sits in the temporal dead zone until
+// execution reaches the declaration, so one placed after its caller throws —
+// and only on the path that caller starts.
+//
+// How many URLs one pass may look at. This is the point of the change: a pass
+// costs at most this many getVisits() round trips whatever the window holds.
+const CRAWL_BUDGET_URLS = 300;
+// Sweeping the window in passes is not free — each pass re-reads the URL list
+// and re-derives the queue — so the period is a floor, not a target. A pass
+// costs one `chrome.history.search`, one IndexedDB scan and at most
+// `CRAWL_BUDGET_URLS` getVisits() round trips; at 15 minutes that is a
+// rounding error next to the browsing that produced the history.
+//
+// Not configurable: an option would have to be validated against Chrome's own
+// floor (alarms below ~30s are throttled to it), and the value that matters is
+// the one that keeps a pass short, which is the budget above.
+const CRAWL_PERIOD_MINUTES = 15;
 // How many URLs to ask chrome.history.getVisits() about at once. Six keeps
 // the crawl moving without tripping the history API's own throttling.
 const VISIT_CONCURRENCY = 6;
 const CRAWL_CURSOR_KEY = 'crawl-cursor';
+// The heat counts gathered by the passes of one window, added up until the
+// window is finished. Session storage for the same reason as the cursor: the
+// accumulator only means something next to the position it belongs to, and a
+// recycled worker must resume both together.
+const CRAWL_HEAT_KEY = 'crawl-heat';
 // How often the crawl is flushed and its position persisted. ~500 URLs keeps
 // the worst case for a recycled worker at half a chunk of wasted work while
 // still committing one transaction per several hundred rows.
-const CRAWL_CHECKPOINT_URLS = 500;
+// Deliberately below `CRAWL_BUDGET_URLS`: a checkpoint is what survives a
+// worker recycled mid-pass, so it has to be due at least once *within* a pass.
+const CRAWL_CHECKPOINT_URLS = 200;
 // A cursor older than this describes a URL list from a different sitting; new
 // visits have changed it, so start over rather than trust the position.
 const CRAWL_CURSOR_TTL = 6 * 3600 * 1000;
+// When a finished sweep stops being authoritative. A sweep says "every URL in
+// the window has been walked"; an hour later, the window holds URLs that were
+// never walked, so the claim is dropped and the next pass covers the lot.
+const CRAWL_SWEEP_KEY = 'crawl-sweep';
+const CRAWL_SWEEP_TTL = 60 * 60 * 1000;
+
+/**
+ * Arm the crawl alarm for this browser session, once.
+ *
+ * The alarm outlives the worker, so it only has to be created when it is not
+ * there yet. Re-creating it on every start would restart its countdown every
+ * time — and a worker that is woken by browsing is woken far more often than
+ * once a period, so an alarm re-armed on each start would never fire at all.
+ */
+function scheduleCrawl() {
+    chrome.alarms.get(CRAWL_ALARM, function (existing) {
+        if (existing) return;
+        chrome.alarms.create(CRAWL_ALARM, { periodInMinutes: CRAWL_PERIOD_MINUTES });
+    });
+}
+
+/**
+ * When the window was last walked end to end — 0 when that was never, or too
+ * long ago to still be true.
+ *
+ * Session storage: the claim is about the URLs in this window, which is exactly
+ * as long-lived as the browser session holding them.
+ */
+async function readSweepCursor() {
+    const area = sessionArea();
+    if (!area) return 0;
+    try {
+        const result = await area.get(CRAWL_SWEEP_KEY);
+        const at = result && result[CRAWL_SWEEP_KEY];
+        if (!Number.isFinite(at)) return 0;
+        return (Date.now() - at <= CRAWL_SWEEP_TTL) ? at : 0;
+    } catch (error) {
+        console.warn('SW: could not read the crawl sweep', error);
+        return 0;
+    }
+}
+
+function saveSweepCursor(at) {
+    const area = sessionArea();
+    if (!area) return Promise.resolve();
+    return Promise.resolve().then(function () {
+        return area.set({ [CRAWL_SWEEP_KEY]: at });
+    }).catch(function (error) {
+        console.warn('SW: could not persist the crawl sweep', error);
+    });
+}
+
+// Load history function
+//
+// Reads the window's URLs out of IndexedDB and walks them. Called on every
+// start, which is what raises the frequency: a pass is bounded by
+// `CRAWL_BUDGET_URLS`, so several short passes (one per start) cover a window
+// that no single one of them could.
+//
+// One pass at a time. A worker woken by the crawl alarm runs two of them: the
+// startup crawl (loadDate() -> loadHistory()) and the alarm's own, and the two
+// interleave rather than queue. Both rebuild `urls_wait_load` from under each
+// other, both reset `heatDays` (so the surviving walk writes a visit count that
+// is missing the other's half — and that count is a never-overwritten cache, so
+// nothing corrects it later), and every URL in the overlap reaches getVisits()
+// twice. The pass already running covers both callers: if it does not finish,
+// the next alarm resumes from the cursor it left behind.
+//
+// The guard is here rather than in processVisits() because a workflow that
+// deliberately calls processVisits() directly is not a pass — it has already
+// decided what the queue is.
+var _crawlPass = null;
+
+function loadHistory() {
+    if (_crawlPass) {
+        console.debug('loadHistory(): a pass is already running');
+        return _crawlPass;
+    }
+    const pass = runCrawlPass().then(function (result) {
+        _crawlPass = null;
+        return result;
+    }, function (error) {
+        // Cleared on this path too, and swallowed: the two callers are an alarm
+        // listener and loadDate()'s day loop, neither of which can recover.
+        // Propagated instead, it would only reappear as an unhandled rejection
+        // saying the same thing. Leaving the flag up would be worse than the
+        // failure: it would stop the crawl for the life of the worker.
+        _crawlPass = null;
+        console.error('loadHistory() pass failed:', error);
+    });
+    // Assigned after the call and before anything can await, so there is no
+    // window in which a second caller sees the flag down and starts a pass.
+    _crawlPass = pass;
+    return pass;
+}
+
+/** The body of one crawl pass. Called through `loadHistory()`, never directly. */
+async function runCrawlPass() {
+    let urls;
+    try {
+        urls = await dbManager.queryURLs({
+            index: 'lastVisitTime',
+            range: IDBKeyRange.lowerBound((new Date()).getTime() - DAY * Number(localStorage["load-range"])),
+            direction: 'next'
+        });
+    } catch (error) {
+        console.error('loadHistory() Error:', error);
+        return;
+    }
+
+    // Un-crawled, or crawled before their most recent visit: the same filter as
+    // before, now deferred to here so the sweep below can narrow it further.
+    urls_wait_load = urls.filter(function (url) {
+        return !url.loadto || url.loadto < url.lastVisitTime;
+    });
+
+    const sweepAt = await readSweepCursor();
+    await processVisits(sweepAt);
+}
 
 // Process visits - async/await refactored from getVisits/add_history/update_urls
 //
@@ -1222,9 +1378,40 @@ const CRAWL_CURSOR_TTL = 6 * 3600 * 1000;
 // finished, and a restart began again from zero, so a large history could
 // never be crawled at all. It now goes in chunks, and the position is
 // persisted so a restart picks up where it stopped.
-async function processVisits() {
-    const start = await restoreCrawlCursor();
-    console.debug("getVisits() start=" + start + "/" + urls_wait_load.length);
+//
+// It also stops after `CRAWL_BUDGET_URLS` URLs instead of crawling to the end.
+// A bounded pass is what lets the crawl run on every worker start rather than
+// once a day: whatever a pass does not reach, the next one resumes from the
+// cursor it left behind. Nothing is lost, and no single pass is long enough to
+// be worth noticing.
+//
+// @param {number} [sweepAt] when the window was last walked end to end. URLs
+//   last visited before then were already crawled, so they are skipped — a pass
+//   after a completed sweep only looks at what arrived since. 0 walks
+//   everything.
+async function processVisits(sweepAt) {
+    const sweep = Number(sweepAt) || 0;
+    // The cursor indexes `urls_wait_load` — the whole window — so it is read
+    // before anything is filtered out. A position into a filtered list would
+    // point at a different URL as soon as the next pass filters differently.
+    const cursor = await restoreCrawlCursor();
+    const start = cursor.start;
+    // Only from the beginning of the walk, and only when nothing is being
+    // resumed: a resume means the last pass did not finish, and "everything
+    // older than the sweep is already crawled" would then drop precisely the
+    // URLs that pass never reached.
+    //
+    // Keyed on `resumed`, not on `start === 0`: a cursor that no longer resolves
+    // also starts at 0, and filtering *that* pass down to "new since the sweep"
+    // would skip the older half of a window nobody has walked yet.
+    const incremental = !cursor.resumed && sweep > 0;
+    // `lastVisitTime` older than the sweep: that sweep crawled it, and nothing
+    // has happened to it since.
+    const queue = incremental
+        ? urls_wait_load.filter(function (url) { return url.lastVisitTime > sweep; })
+        : urls_wait_load;
+    console.debug("getVisits() start=" + start + "/" + queue.length +
+        (incremental ? " (sweep=" + sweep + ")" : " (full)"));
 
     // The crawl is also where the heat map's back-fill comes from: it is
     // already walking every visit of every URL in the window, so counting them
@@ -1236,12 +1423,35 @@ async function processVisits() {
     // On the module, not a local: crawlUrlVisits() runs concurrent chunks and
     // cannot borrow the loop's variables, and this is the same shape as the
     // other crawl accumulators (visitBatch / urlBatch).
-    heatDays = {};
+    //
+    // Continued, not reset, when this pass resumes another one: a window too big
+    // for one pass is counted in pieces, and a piece thrown away here is not
+    // recoverable later — saveCrawledHeat() keeps the first number a day gets.
+    //
+    // Nothing to resume means a new window (nothing to continue): any
+    // accumulator still stored belongs to a window that is gone — a cursor that
+    // expired, or one cleared by a pass that finished — and it has to be
+    // dropped, not just ignored: a later checkpoint in *this* window writes a
+    // cursor, and the pass resuming it would read the stale counts back in and
+    // add them to the sum.
+    //
+    // `resumed`, not `start > 0`, for the reason spelled out on
+    // restoreCrawlCursor(): a window whose head has already been walked and
+    // stamped resumes at 0, and dropping the accumulator there throws away
+    // exactly the counts that window is still owed.
+    if (cursor.resumed) {
+        heatDays = await restoreCrawlHeat();
+    } else {
+        heatDays = {};
+        await clearCrawlHeat();
+    }
     let sinceCheckpoint = 0;
-    for (let urls_p = start; urls_p < urls_wait_load.length; urls_p += VISIT_CONCURRENCY) {
-        setBadge((urls_wait_load.length - urls_p).toString());
+    let urls_p = start;
+    let walked = 0;
+    for (; urls_p < queue.length && walked < CRAWL_BUDGET_URLS; urls_p += VISIT_CONCURRENCY) {
+        setBadge((queue.length - urls_p).toString());
 
-        const chunk = urls_wait_load.slice(urls_p, urls_p + VISIT_CONCURRENCY);
+        const chunk = queue.slice(urls_p, urls_p + VISIT_CONCURRENCY);
         // allSettled, not all: a URL that throws must not abandon the URLs
         // queued next to it.
         const results = await Promise.allSettled(chunk.map(crawlUrlVisits));
@@ -1249,6 +1459,7 @@ async function processVisits() {
             if (r.status === 'rejected') console.error("crawlUrlVisits() failed", r.reason);
         }
 
+        walked += chunk.length;
         sinceCheckpoint += chunk.length;
         // Checkpointed by URL count rather than by batch size: crawlUrlVisits()
         // flushes on its own once a batch fills, so waiting for a full batch
@@ -1259,15 +1470,55 @@ async function processVisits() {
         if (sinceCheckpoint >= CRAWL_CHECKPOINT_URLS) {
             sinceCheckpoint = 0;
             await flushCrawlBatch();
-            await saveCrawlCursor(chunk[chunk.length - 1].id, urls_p + chunk.length - 1);
+            await saveCrawlState(chunk[chunk.length - 1].id, urls_p + chunk.length, heatDays);
         }
     }
 
     await flushCrawlBatch();
-    await clearCrawlCursor();
-    saveCrawledHeat(heatDays);
+    const complete = urls_p >= queue.length;
+    if (walked === 0 && !cursor.resumed) {
+        // An empty pass is the steady state now that passes are periodic: after
+        // a completed sweep, a pass with nothing new to walk is the *expected*
+        // outcome, not an accident. Every path that reaches here has already
+        // written `Url` (loadDate() hands the badge over when its day loop ends)
+        // or a `D<n>`, so returning without clearing it parks that marker on the
+        // toolbar until the next non-empty pass — one leftover per period, i.e.
+        // permanently, since nothing else ever touches the badge.
+        //
+        // Told apart from a resumed pass that finds nothing left by `resumed`,
+        // not by `walked`: with a window in hand there is something to close,
+        // and the accumulated counts of the passes that walked it are still owed
+        // to the map. A resume can land here with a position of 0 — the window
+        // shrank to nothing, or its head was already walked — which is why the
+        // distinction cannot be read off the position.
+        setBadge('', true);
+        return;
+    }
+    if (complete) {
+        // The map before the bookkeeping: it is where the counts belong, and
+        // everything above already reached the database (see flushCrawlBatch()).
+        //
+        // Keyed on `complete`, not on `walked`. A pass that stops at its budget
+        // has counted part of the window, and a partial count written to the map
+        // is never corrected: saveCrawledHeat() only fills days that are empty,
+        // so the first number a day gets is the one that stays. `heatDays` here
+        // is the sum over every pass of this window, not just this pass's share.
+        saveCrawledHeat(heatDays);
+        await clearCrawlState();
+        // Last, and after the flush: the sweep is the promise "every URL that
+        // existed when this ran is in the database". Recorded earlier, a sweep
+        // could claim URLs that did not reach it.
+        await saveSweepCursor(Date.now());
+    } else {
+        // Budget spent, not a finished walk. Cursor and counts in one write, so
+        // a worker recycled between them cannot resume one without the other.
+        // The id is what the next pass resumes from; the position is its
+        // fallback for when the rebuilt list no longer holds that id.
+        await saveCrawlState(queue[urls_p - 1].id, urls_p, heatDays);
+    }
     setBadge('', true); // forced: the badge must end up cleared
-    console.debug("getVisits() done.");
+    console.debug("getVisits() done. " + walked + " url(s)" +
+        (complete ? ", window complete" : ", resuming next pass"));
 }
 
 /**
@@ -1407,48 +1658,142 @@ async function crawlUrlVisits(url_item) {
  * keeps both the id of the last URL written and its position: the id is
  * stable and exact, the position is the fallback for when the rebuilt list no
  * longer contains that id (it finished, or its visits are gone).
+ *
+ * `pos` is the *next* index, i.e. how many URLs of the list were walked — the
+ * same thing the id path returns. The two used to disagree by one (the id path
+ * returned `i + 1`, the stored position was the index of the last URL walked),
+ * so a resume that fell back to the position re-walked it. One extra round trip
+ * is not what that costs any more: the heat accumulator counts the visit again
+ * and the day lands one too high, in a cache nothing recomputes.
+ *
+ * Returns `{ start, resumed }` rather than a bare position. The two are not the
+ * same question: a position of 0 means "walk from the top", which is the right
+ * answer both for a pass that has nothing to resume *and* for one whose cursor
+ * no longer resolves — and the difference decides whether the pass may treat
+ * the counts already gathered as belonging to a window that is gone. `resumed`
+ * is "there is an unfinished window", the position is "how much of it looks
+ * already walked". Collapsing them is what made a resume look like a fresh
+ * start: `crawlUrlVisits()` stamps `loadto`, `loadHistory()` filters stamped
+ * URLs out of the next list, so by the second pass of a window the cursor's id
+ * is gone and its position (299) is past the end of what is left (50). Both
+ * fallbacks fail, the position comes back 0, and the accumulator holding the
+ * first pass's 300 counts is thrown away as stale — after which the pass that
+ * finishes the window publishes only its own tail.
  */
 function restoreCrawlCursor() {
+    const gone = { start: 0, resumed: false };
     const area = sessionArea();
-    if (!area) return Promise.resolve(0);
+    if (!area) return Promise.resolve(gone);
     // Same shape as saveSessionState(): get() can throw synchronously.
     return Promise.resolve().then(function () {
         return area.get(CRAWL_CURSOR_KEY);
     }).then(function (result) {
         const cursor = result && result[CRAWL_CURSOR_KEY];
-        if (!cursor) return 0;
-        if (!Number.isFinite(cursor.at) || Date.now() - cursor.at > CRAWL_CURSOR_TTL) return 0;
+        if (!cursor) return gone;
+        if (!Number.isFinite(cursor.at) || Date.now() - cursor.at > CRAWL_CURSOR_TTL) return gone;
 
         const i = urls_wait_load.findIndex(function (u) {
             return String(u.id) === String(cursor.id);
         });
-        if (i >= 0) return i + 1;
-        // Not in the list any more. The position drifts only by the entries
-        // removed ahead of it, so it costs a few re-crawled URLs at worst.
-        return (cursor.pos > 0 && cursor.pos < urls_wait_load.length) ? cursor.pos : 0;
+        if (i >= 0) return { start: i + 1, resumed: true };
+        // Not in the list any more — normal: those URLs were walked, stamped,
+        // and filtered out. The position is only usable while the list is still
+        // long enough for it to mean something.
+        if (cursor.pos > 0 && cursor.pos <= urls_wait_load.length) {
+            return { start: cursor.pos, resumed: true };
+        }
+        // Neither anchor resolves. Walk what is left from the top and keep the
+        // counts: in this shape the URLs that were walked are the ones that left
+        // the list, so starting over skips them rather than re-walking them. (A
+        // URL whose write failed never got stamped, so it is re-walked and
+        // recounted — a handful against a whole head of the window.)
+        return { start: 0, resumed: true };
     }).catch(function (error) {
         console.warn('SW: could not read crawl cursor', error);
-        return 0;
+        return gone;
     });
 }
 
-function saveCrawlCursor(id, pos) {
+/**
+ * Persist where this pass stopped and what the passes so far have counted.
+ *
+ * One `set()` for both, deliberately: a cursor without its counts is a window
+ * whose head is silently dropped (the pass resuming it publishes only the tail),
+ * and counts without a cursor are counts for a walk that will start over
+ * anyway. Writing them together is what makes "one without the other" a state
+ * that cannot exist rather than one the code has to avoid by ordering its
+ * awaits correctly.
+ */
+function saveCrawlState(id, pos, days) {
     const area = sessionArea();
     if (!area) return Promise.resolve();
+    const heat = {};
+    for (const key of Object.keys(days || {})) heat[key] = days[key];
     return Promise.resolve().then(function () {
-        return area.set({ [CRAWL_CURSOR_KEY]: { id: String(id), pos: pos, at: Date.now() } });
+        return area.set({
+            [CRAWL_CURSOR_KEY]: { id: String(id), pos: pos, at: Date.now() },
+            [CRAWL_HEAT_KEY]: heat,
+        });
     }).catch(function (error) {
         console.warn('SW: could not persist crawl cursor', error);
     });
 }
 
-function clearCrawlCursor() {
+function clearCrawlState() {
     const area = sessionArea();
     if (!area) return Promise.resolve();
     return Promise.resolve().then(function () {
-        return area.remove(CRAWL_CURSOR_KEY);
+        return area.remove([CRAWL_CURSOR_KEY, CRAWL_HEAT_KEY]);
     }).catch(function (error) {
         console.warn('SW: could not clear crawl cursor', error);
+    });
+}
+
+function clearCrawlHeat() {
+    const area = sessionArea();
+    if (!area) return Promise.resolve();
+    return Promise.resolve().then(function () {
+        return area.remove(CRAWL_HEAT_KEY);
+    }).catch(function (error) {
+        console.warn('SW: could not clear the crawl heat', error);
+    });
+}
+
+/**
+ * The heat counts gathered by the passes of the window being walked.
+ *
+ * A window larger than one pass is counted in pieces, and the map cannot take
+ * the pieces separately: saveCrawledHeat() fills only empty days, so the first
+ * piece written is the one that stays and every later piece is discarded. The
+ * pieces therefore have to be added up somewhere and written once, when the
+ * window is finished — and that somewhere has to outlive the worker, since the
+ * passes of one window routinely land in different workers.
+ *
+ * Session storage, written by saveCrawlState() together with the cursor in a
+ * single `set()`: the two describe the same walk, and either one on its own is
+ * a window half counted. restoreCrawlHeat() is only meaningful right after
+ * restoreCrawlCursor() reported `resumed` — a cursor that came back as "no
+ * unfinished window" purges it instead.
+ */
+function restoreCrawlHeat() {
+    const area = sessionArea();
+    if (!area) return Promise.resolve({});
+    return Promise.resolve().then(function () {
+        return area.get(CRAWL_HEAT_KEY);
+    }).then(function (result) {
+        const days = result && result[CRAWL_HEAT_KEY];
+        // A hand-edited or half-written value must not become the base of the
+        // next sum; start over rather than propagate a NaN into the map.
+        if (!days || typeof days !== 'object') return {};
+        const out = {};
+        for (const key of Object.keys(days)) {
+            const n = Number(days[key]);
+            if (Number.isFinite(n) && n > 0) out[key] = n;
+        }
+        return out;
+    }).catch(function (error) {
+        console.warn('SW: could not read the crawl heat', error);
+        return {};
     });
 }
 

@@ -28,6 +28,11 @@ const UTILS_SRC = fs.readFileSync(new URL('background-utils.js', SCRIPTS), 'utf8
 // drift apart silently.
 const SESSION_ID_LIMIT = Number(/const SESSION_ID_LIMIT = (\d+)/.exec(SW_SRC)[1]);
 const CRAWL_CHECKPOINT_URLS = Number(/const CRAWL_CHECKPOINT_URLS = (\d+)/.exec(SW_SRC)[1]);
+// Read out of the source, like the two above: the budget is the thing that
+// bounds a pass, so a test that hard-codes it would pass whatever it says.
+const CRAWL_BUDGET_URLS = Number(/const CRAWL_BUDGET_URLS = (\d+)/.exec(SW_SRC)[1]);
+const CRAWL_SWEEP_KEY = /const CRAWL_SWEEP_KEY = '([^']+)'/.exec(SW_SRC)[1];
+const CRAWL_PERIOD_MINUTES = Number(/const CRAWL_PERIOD_MINUTES = ([\d.]+)/.exec(SW_SRC)[1]);
 
 function makeArea(map) {
     return {
@@ -106,6 +111,7 @@ function loadWorker(opts = {}) {
     const sessionStore = opts.sessionStore || new Map();
     const events = new Map();
     const readyCallbacks = [];
+    let storageReady = false;
 
     const state = {
         tabs: opts.tabs || [],
@@ -113,6 +119,11 @@ function loadWorker(opts = {}) {
         urls: [],
         closed: [],
         badges: [],
+        // Shared between workers when a case needs the alarm to outlive one:
+        // the alarm lives in the browser, not in the worker, and a fresh array
+        // per worker is how the "don't re-arm an existing alarm" case used to
+        // pass without proving anything.
+        alarms: opts.alarmStore || [],
         queried: [],
         errors: [],
         warnings: [],
@@ -185,7 +196,14 @@ function loadWorker(opts = {}) {
                 getVisits(state, q, cb);
             },
         },
-        alarms: { create() {}, onAlarm: ev('alarms.onAlarm') },
+        alarms: {
+            // Recorded rather than ignored: the crawl is paced by an alarm now,
+            // and two cases below answer questions about how it is armed.
+            create: (name, info) => { state.alarms.push({ name, info }); },
+            get: (name, cb) => cb(state.alarms.find((a) => a.name === name) || null),
+            clear: () => {},
+            onAlarm: ev('alarms.onAlarm'),
+        },
         action: { setBadgeText: (o) => state.badges.push(o.text) },
         contextMenus: {
             removeAll: (cb) => cb(),
@@ -203,7 +221,10 @@ function loadWorker(opts = {}) {
         putVisitItems: (rs) => { state.visits.push(...rs); return Promise.resolve(rs); },
         putURL: (r) => { state.urls.push(r); return Promise.resolve(r); },
         putURLs: (rs) => { state.urls.push(...rs); return Promise.resolve(rs); },
-        queryURLs: () => Promise.resolve([]),
+        // The window's URL list. Default is empty: most cases drive the crawl
+        // through `urls_wait_load` and only a few need `loadHistory()` to build
+        // its own queue.
+        queryURLs: opts.queryURLs || (() => Promise.resolve([])),
         deleteDB: () => Promise.resolve(),
     };
 
@@ -231,8 +252,13 @@ function loadWorker(opts = {}) {
         localStorage: negLocalStorage(state),
         caches: { open: async () => ({ match: async () => undefined, put: async () => {} }), delete: async () => true },
         Response: { error: () => ({}) },
-        // The worker's own onStorageReady hook; nothing runs until boot().
-        onStorageReady: (cb) => { readyCallbacks.push(cb); },
+        // The worker's own onStorageReady hook. Nothing runs until boot(), and
+        // afterwards it fires straight away — which is what the real adapter
+        // does, and the only reason an alarm arriving later can start a pass.
+        onStorageReady: (cb) => {
+            if (storageReady) cb();
+            else readyCallbacks.push(cb);
+        },
         addEventListener() {},
         importScripts: (...names) => {
             for (const name of names) {
@@ -256,7 +282,10 @@ function loadWorker(opts = {}) {
         state,
         sessionStore,
         /** Start the worker the way onStorageReady does. */
-        boot() { for (const cb of readyCallbacks.splice(0)) cb(); },
+        boot() {
+            storageReady = true;
+            for (const cb of readyCallbacks.splice(0)) cb();
+        },
         /** Let pending promise chains and timers run. */
         async settle(turns = 12) {
             for (let i = 0; i < turns; i++) await new Promise((r) => setTimeout(r, 0));
@@ -426,10 +455,11 @@ test('a session call that throws synchronously is caught rather than propagated'
     // None of these may reject: a rejected save would take down whatever
     // called it, which is the tab event handler or the startup chain.
     await w.ctx.saveSessionState();
-    await w.ctx.saveCrawlCursor('id0', 0);
-    await w.ctx.clearCrawlCursor();
+    await w.ctx.saveCrawlState('id0', 0, { 1: 2 });
+    await w.ctx.clearCrawlState();
+    await w.ctx.clearCrawlHeat();
     assert.equal(await w.ctx.restoreSessionState(), false);
-    assert.equal(await w.ctx.restoreCrawlCursor(), 0);
+    assert.deepEqual({ ...await w.ctx.restoreCrawlCursor() }, { start: 0, resumed: false });
 
     assert.ok(w.state.warnings.length >= 4,
         `every failure should be reported, saw: ${JSON.stringify(w.state.warnings)}`);
@@ -543,12 +573,24 @@ test('add_tab_history() keeps the visit-id maps bounded as it records them', asy
 // The crawl
 // ---------------------------------------------------------------------------
 
-/** Point the worker at `urls` and run processVisits() against them. */
+/**
+ * Point the worker at `urls` and run one pass of the crawl against them.
+ *
+ * @param {object} opts
+ * @param {Array}  opts.urls the window's URL list.
+ * @param {boolean} [opts.sweep] read the sweep watermark the way `loadHistory()`
+ *   does, i.e. pass it to processVisits(). Off by default because most cases
+ *   are about the walk itself, and an unseeded session has no watermark.
+ */
 async function crawlUrls(opts) {
     const w = loadWorker(opts);
     w.ctx.localStorage['load-range'] = '7';
     w.ctx.urls_wait_load = opts.urls;
-    await w.ctx.processVisits();
+    if (opts.sweep) {
+        await w.ctx.processVisits(await w.ctx.readSweepCursor());
+    } else {
+        await w.ctx.processVisits();
+    }
     return w;
 }
 
@@ -631,14 +673,439 @@ test('a long crawl checkpoints its position before it finishes', async () => {
     assert.equal(w.state.queried.length, total);
 });
 
-test('a stale cursor is ignored rather than trusted', async () => {
+// ---------------------------------------------------------------------------
+// Pacing
+//
+// The crawl used to be one job per worker start: walk the whole window,
+// however long that takes. It is bounded now, so the window can be swept in
+// several short passes — which is what makes running it more often affordable.
+// ---------------------------------------------------------------------------
+
+test('a pass stops at its budget and leaves a cursor behind', async () => {
+    // The change itself. A window larger than one pass has to be coverable by
+    // several of them, and the only thing standing between "several" and
+    // "always the first 300" is the cursor written on the way out.
     const session = new Map();
-    // Written six hours ago: new visits have changed the URL list since.
-    session.set('crawl-cursor', { id: 'id1', pos: 1, at: Date.now() - 7 * 3600 * 1000 });
+    const total = CRAWL_BUDGET_URLS + 50;
+    const w = await crawlUrls({ sessionStore: session, urls: urlList(total) });
 
-    const w = await crawlUrls({ sessionStore: session, urls: urlList(4) });
+    assert.equal(w.state.queried.length, CRAWL_BUDGET_URLS,
+        `a pass must not walk more than its budget (${CRAWL_BUDGET_URLS})`);
+    const cursor = session.get('crawl-cursor');
+    assert.ok(cursor, 'an unfinished window must leave a position to resume from');
+    // "How many of the list were walked", which is what the id path returns and
+    // what the position has to agree with — off by one here and a resume that
+    // falls back to it re-walks a URL, which the heat accumulator then counts
+    // twice.
+    assert.equal(cursor.pos, CRAWL_BUDGET_URLS,
+        'the stored position is the count walked, not the index of the last URL');
 
-    assert.equal(w.state.queried.length, 4, 'an expired cursor must not skip anything');
+    // The point of the cursor: the next pass picks up there instead of
+    // re-walking the head of the list.
+    const next = await crawlUrls({ sessionStore: session, urls: urlList(total) });
+    assert.equal(next.state.queried.length, total - CRAWL_BUDGET_URLS,
+        'the second pass must start where the first stopped');
+    assert.equal(session.get('crawl-sweep') !== undefined, true,
+        'and together they must finish the window, which is what records the sweep');
+});
+
+test('a window walked in several passes is counted as a whole', async () => {
+    // The reason the accumulator exists. A day's square is filled once and then
+    // left alone (the map is a cache), so whichever pass writes it first decides
+    // the number for good. Writing a pass's own share would therefore record the
+    // head of the window and never the tail: 350 URLs, one visit each, must read
+    // 350 — not 300, and not 50.
+    const session = new Map();
+    const total = CRAWL_BUDGET_URLS + 50;
+    const day = dayKeyOf(Date.now() - 3 * DAY_MS);
+
+    const first = await crawlUrls({
+        sessionStore: session,
+        urls: urlList(total),
+        getVisits: visitsFor([visitAt(3, 1)]),
+    });
+    assert.equal(first.ctx.calendar_storage2[day], undefined,
+        'half a window must not be published as the day\'s count');
+
+    const second = await crawlUrls({
+        sessionStore: session,
+        urls: urlList(total),
+        getVisits: visitsFor([visitAt(3, 2)]),
+    });
+    assert.equal(second.state.queried.length, total - CRAWL_BUDGET_URLS,
+        'the second pass must walk only the tail');
+    assert.equal(second.ctx.calendar_storage2[day], total,
+        'the finished window must publish every visit the passes walked');
+});
+
+test('the counted head of a window survives a worker restart', async () => {
+    // The passes of one window routinely land in different workers, and the
+    // counts of the ones that already ran exist only in the accumulator. Losing
+    // them to a recycle is the same bug as never accumulating: the tail's pass
+    // would publish its own share over the whole window's day.
+    const session = new Map();
+    const total = CRAWL_BUDGET_URLS + 50;
+    const day = dayKeyOf(Date.now() - 3 * DAY_MS);
+
+    await crawlUrls({
+        sessionStore: session,
+        urls: urlList(total),
+        getVisits: visitsFor([visitAt(3, 1)]),
+    });
+    assert.ok(session.get('crawl-heat'), 'the counts must reach storage, not just the worker');
+
+    // A fresh worker: nothing of the first pass is in scope except session
+    // storage, which is exactly what a recycle leaves behind.
+    const second = await crawlUrls({
+        sessionStore: session,
+        urls: urlList(total),
+        getVisits: visitsFor([visitAt(3, 2)]),
+    });
+    assert.equal(second.ctx.calendar_storage2[day], total,
+        'the tail of the window must be added to what the head already counted');
+    assert.equal(session.has('crawl-heat'), false,
+        'a finished window must not leave its accumulator behind for the next one');
+});
+
+test('a resume with an empty queue still publishes what was counted', async () => {
+    // The window shrank to nothing between two passes — a retention sweep
+    // deleted the visits, or the user cleared history. The cursor's id is gone
+    // with them, so the position is 0 again; the counts of the passes that did
+    // run are still owed to the map, and the window is finished rather than
+    // merely idle. Returning early on "walked nothing" would park them.
+    const session = new Map();
+    const day = dayKeyOf(Date.now() - 3 * DAY_MS);
+    session.set('crawl-cursor', { id: 'gone', pos: 999, at: Date.now() });
+    session.set('crawl-heat', { [day]: CRAWL_BUDGET_URLS });
+
+    const w = loadWorker({ sessionStore: session });
+    w.ctx.localStorage['load-range'] = '7';
+    w.ctx.urls_wait_load = [];
+
+    await w.ctx.processVisits();
+
+    assert.equal(w.state.queried.length, 0, 'there is nothing left to walk');
+    assert.equal(w.ctx.calendar_storage2[day], CRAWL_BUDGET_URLS,
+        'the counts of the passes that did run must still reach the map');
+    assert.equal(session.has('crawl-heat'), false, 'and the accumulator is done with');
+});
+
+test('the position fallback resumes where the id path would have', async () => {
+    // `pos` and the id answer the same question — "how many of this list were
+    // walked" — and they used to disagree by one: the id path returned `i + 1`
+    // while `pos` was stored as the *index of the last URL walked*. So a resume
+    // that had to fall back to the position re-walked that URL. One wasted
+    // getVisits() is not the cost any more: the heat accumulator counts the
+    // repeat visit, and the day ends up one too high in a cache nothing
+    // recomputes. Kept as a guard on the two paths agreeing.
+    const session = new Map();
+    // The id is gone (its visits were deleted) but the list is still long
+    // enough for the position to mean something: three URLs walked.
+    session.set('crawl-cursor', { id: 'gone', pos: 3, at: Date.now() });
+
+    const w = await crawlUrls({ sessionStore: session, urls: urlList(6) });
+
+    assert.deepEqual(w.state.queried, [
+        'https://example.com/3',
+        'https://example.com/4',
+        'https://example.com/5',
+    ], 'the URL at `pos` was already walked; the resume starts after it');
+});
+
+test('a window counted in passes survives the URLs leaving the queue', async () => {
+    // The shape `loadHistory()` really produces, which every other crawl case
+    // here sidesteps by handing `urls_wait_load` in directly and keeping it
+    // whole across passes.
+    //
+    // `crawlUrlVisits()` stamps `loadto` with each URL's newest visit, and
+    // `loadHistory()` drops every URL whose `loadto` is not older than
+    // `lastVisitTime` — which after a crawl is every URL it just walked. So a
+    // crawled URL is gone from the next pass's list: the cursor's id is no
+    // longer there, and its position is past the end of what is left. Both
+    // halves of `restoreCrawlCursor()` therefore fail, it returns 0, and 0 is
+    // also what it returns when there is nothing to resume — so the pass reads
+    // it as "a brand new window" and throws the first pass's 300 counts away as
+    // stale. The pass that finishes the window then publishes its own 50.
+    const session = new Map();
+    const total = CRAWL_BUDGET_URLS + 50;
+    const day = dayKeyOf(Date.now() - 3 * DAY_MS);
+    const visit = visitAt(3, 1);
+    // `lastVisitTime` is the newest visit, as the database would have it: that
+    // is what makes a walked URL's `loadto` equal to it rather than older.
+    const urls = urlList(total).map((u) => Object.assign({}, u, { lastVisitTime: visit.visitTime }));
+
+    // The URL store as the crawl leaves it: a written URL comes back stamped,
+    // and the filter below is loadHistory()'s own.
+    const w = loadWorker({
+        sessionStore: session,
+        getVisits: visitsFor([visit]),
+        queryURLs: () => Promise.resolve(urls
+            .map((u) => {
+                const stored = w.state.urls.find((r) => r.id === u.id);
+                return Object.assign({}, u, { loadto: stored && stored.loadto });
+            })
+            .filter((u) => !u.loadto || u.loadto < u.lastVisitTime)),
+    });
+    w.ctx.localStorage['load-range'] = '7';
+
+    await w.ctx.loadHistory();
+    assert.equal(w.state.queried.length, CRAWL_BUDGET_URLS, 'the first pass spends its budget');
+    assert.ok(session.get('crawl-heat'), 'and leaves its counts behind');
+
+    // Second pass: the list it rebuilds no longer holds the URLs the first one
+    // walked, so the cursor points at nothing.
+    w.ctx.urls_wait_load = [];
+    await w.ctx.loadHistory();
+
+    assert.equal(w.state.queried.length, total, 'both passes together must walk the window');
+    assert.equal(w.ctx.calendar_storage2[day], total,
+        'the pass that finishes the window must publish the whole of it, not its own tail');
+});
+
+test('a pass that finds the window already walked still publishes what was counted', async () => {
+    // The shape the reviewer spotted: checkpoints are keyed on a count and the
+    // cursor on an id, so a pass can leave a cursor sitting on the last entry of
+    // the queue. The pass resuming it then walks nothing — `walked === 0` — even
+    // though an earlier pass has counts waiting in the accumulator.
+    //
+    // The badge and the heat map want opposite things here, which is why neither
+    // is keyed on `walked`. The badge has to be cleared (nothing is in flight);
+    // the counts have to be published, or the window is thrown away after being
+    // paid for. The window is also marked swept, since there is nothing left of
+    // it to walk.
+    const session = new Map();
+    const total = CRAWL_BUDGET_URLS + 50;
+    const day = dayKeyOf(Date.now() - 3 * DAY_MS);
+
+    await crawlUrls({
+        sessionStore: session,
+        urls: urlList(total),
+        getVisits: visitsFor([visitAt(3, 1)]),
+    });
+    assert.equal(session.get('crawl-heat')[day], CRAWL_BUDGET_URLS);
+
+    session.set('crawl-cursor', { id: 'id' + (total - 1), pos: total - 1, at: Date.now() });
+    const w = loadWorker({ sessionStore: session, getVisits: visitsFor([visitAt(3, 1)]) });
+    w.ctx.localStorage['load-range'] = '7';
+    w.ctx.urls_wait_load = urlList(total);
+    await w.ctx.processVisits();
+
+    assert.equal(w.state.queried.length, 0, 'the cursor sits at the end: nothing left to walk');
+    assert.equal(w.ctx.calendar_storage2[day], CRAWL_BUDGET_URLS,
+        'what the finished part of the window counted must still reach the map');
+    assert.equal(session.has('crawl-heat'), false,
+        'and the accumulator must not outlive the window it belongs to');
+    assert.equal(w.state.badges[w.state.badges.length - 1], '',
+        'a pass that walks nothing must still clear the badge');
+});
+
+test('a window smaller than one pass still records the sweep', async () => {
+    // The budget must not become a permanent "never finished": a small window
+    // is complete in one pass, and that has to be recorded or every later pass
+    // re-walks it.
+    const session = new Map();
+    await crawlUrls({ sessionStore: session, urls: urlList(3) });
+
+    assert.ok(session.get(CRAWL_SWEEP_KEY), 'a completed window must be recorded');
+    assert.equal(session.has('crawl-cursor'), false,
+        'and must not leave a cursor pointing past its own end');
+});
+
+test('a pass after a completed sweep only looks at what arrived since', async () => {
+    // Why a high frequency is affordable: without this, every pass would cost
+    // the whole window again and raising the frequency would only multiply the
+    // cost.
+    const session = new Map();
+    session.set(CRAWL_SWEEP_KEY, Date.now());
+
+    const urls = urlList(4).map(function (u, i) {
+        // Two visited before the sweep, two after.
+        return Object.assign({}, u, { lastVisitTime: Date.now() + (i < 2 ? -1000 : 1000) });
+    });
+    const w = await crawlUrls({ sessionStore: session, urls: urls, sweep: true });
+
+    assert.deepEqual(w.state.queried, [
+        'https://example.com/2',
+        'https://example.com/3',
+    ], 'a URL already crawled by the sweep must not be crawled again');
+});
+
+test('a sweep older than its TTL is not trusted', async () => {
+    // Otherwise the first pass would be the last one for as long as the browser
+    // stayed open, and everything new would wait forever.
+    const session = new Map();
+    session.set(CRAWL_SWEEP_KEY, Date.now() - 2 * 60 * 60 * 1000);
+    const urls = urlList(3).map(function (u) {
+        return Object.assign({}, u, { lastVisitTime: Date.now() - 5000 });
+    });
+
+    const w = await crawlUrls({ sessionStore: session, urls: urls, sweep: true });
+
+    assert.equal(w.state.queried.length, 3, 'an expired sweep must not skip anything');
+});
+
+test('a resumed pass walks the whole window, not just what is new', async () => {
+    // The one case the sweep must NOT narrow: a pass that is resuming from a
+    // cursor is the continuation of a walk that did not finish, so filtering it
+    // down to "new since the sweep" would drop exactly the URLs it was going to
+    // cover.
+    const session = new Map();
+    session.set(CRAWL_SWEEP_KEY, Date.now());
+    session.set('crawl-cursor', { id: 'id0', pos: 0, at: Date.now() });
+    const urls = urlList(3).map(function (u) {
+        return Object.assign({}, u, { lastVisitTime: Date.now() - 5000 });
+    });
+
+    const w = await crawlUrls({ sessionStore: session, urls: urls, sweep: true });
+
+    assert.deepEqual(w.state.queried, [
+        'https://example.com/1',
+        'https://example.com/2',
+    ], 'a resumed walk must not be filtered by the sweep');
+});
+
+test('a cursor whose URL has left the list is still a resumed window', async () => {
+    // The sweep filter is safe only on a walk that starts from nothing: it
+    // throws away everything older than the sweep, which is precisely the URLs
+    // an unfinished walk still owes. So "should the sweep narrow this pass" and
+    // "is there a window to finish" have to be the same question — and a cursor
+    // that no longer resolves still answers yes to the second one.
+    const session = new Map();
+    session.set(CRAWL_SWEEP_KEY, Date.now());
+    session.set('crawl-cursor', { id: 'walked-and-gone', pos: 999, at: Date.now() });
+    const urls = urlList(3).map(function (u) {
+        return Object.assign({}, u, { lastVisitTime: Date.now() - 5000 });
+    });
+
+    const w = await crawlUrls({ sessionStore: session, urls: urls, sweep: true });
+
+    assert.equal(w.state.queried.length, 3,
+        'an unresolvable cursor resumes a walk; the sweep must not narrow it');
+});
+
+test('the crawl alarm is armed once and repeats', async () => {
+    // Pacing is what raised the frequency, so the alarm has to exist — and it
+    // has to survive a restart of the worker without being re-armed every time,
+    // which would keep pushing its next firing into the future.
+    const w = loadWorker({ tabs: [] });
+    w.boot();
+    await w.settle();
+
+    const armed = w.state.alarms.filter((a) => a.name === 'crawlHistory');
+    assert.equal(armed.length, 1, 'the crawl alarm must be created on start');
+    assert.equal(armed[0].info.periodInMinutes, CRAWL_PERIOD_MINUTES,
+        'and it must repeat, or there is no second pass');
+
+    // The restart half, and the reason it used to prove nothing: `loadWorker()`
+    // builds a fresh `state.alarms` array per worker, so a second worker that
+    // re-armed the alarm still "finds one" in its own empty list. The alarm
+    // lives in the browser, not in the worker, so the test has to put it there:
+    // the store is shared, and it starts out armed.
+    //
+    // Mutation-checked: change scheduleCrawl() to create unconditionally and
+    // this goes red (the shared store then holds two entries).
+    const store = w.state.alarms;
+    const again = loadWorker({ tabs: [], alarmStore: store });
+    again.boot();
+    await again.settle();
+
+    assert.equal(store.filter((a) => a.name === 'crawlHistory').length, 1,
+        'an existing alarm must be left alone, or a worker that wakes often never lets it fire');
+    assert.deepEqual(again.state.alarms, store, 'the second worker must read the same alarm store');
+});
+
+test('a crawl alarm runs a pass', async () => {
+    // The listener half: an alarm that is armed but never starts anything is
+    // worse than no alarm, because nothing reports the difference.
+    //
+    // The queue is built by `loadHistory()` from the database stub rather than
+    // handed to `urls_wait_load`, so this covers the whole path an alarm
+    // triggers. `loadHistory` is replaced by a recorder for the same reason the
+    // other cases replace `chrome.history`: the crawl's own contract is tested
+    // elsewhere, and what is under test here is that the alarm reaches it.
+    const w = loadWorker({ tabs: [] });
+    w.boot();
+    await w.settle();
+
+    const calls = [];
+    const real = w.ctx.loadHistory;
+    w.ctx.loadHistory = async function () { calls.push(1); return real.apply(this, arguments); };
+
+    w.fire('alarms.onAlarm', { name: 'crawlHistory' });
+    for (let i = 0; i < 30 && calls.length === 0; i++) await w.settle(1);
+
+    assert.equal(calls.length, 1, 'the crawl alarm must start a pass');
+});
+
+test('two passes started at once walk the window once', async () => {
+    // The shape that made this a real double-crawl rather than a theoretical
+    // one: a worker woken by the crawl alarm runs loadDate() -> loadHistory()
+    // from onStorageReady(), and the alarm branch starts its own loadHistory()
+    // in the same turn. Both interleave, so the second one rebuilds
+    // `urls_wait_load` under the first and every URL in the overlap is asked
+    // for its visits twice. `heatDays` gets reset by both, so the surviving
+    // walk writes a count missing the other half — and a heat map entry is
+    // never overwritten, so nothing corrects it afterwards.
+    let queries = 0;
+    const urls = urlList(6);
+    const w = loadWorker({
+        tabs: [],
+        queryURLs: () => { queries++; return Promise.resolve(urls.slice()); },
+    });
+    w.ctx.localStorage['load-range'] = '7';
+
+    await Promise.all([w.ctx.loadHistory(), w.ctx.loadHistory()]);
+
+    assert.equal(queries, 1,
+        'the URL list must be read once, not once per caller');
+    assert.deepEqual(w.state.queried, urls.map((u) => u.url),
+        'every URL must reach getVisits() exactly once');
+});
+
+test('a failed pass does not wedge the crawl', async () => {
+    // The guard is a flag, so the one way it can do real damage is by staying
+    // up: a pass that rejects would then stop the crawl for the life of the
+    // worker, and the worker is recycled long before anything would notice.
+    // (A pass that merely *fails* is not enough to show this — the reads
+    // inside it catch their own errors — so this one throws out of the walk.)
+    let passes = 0;
+    const w = loadWorker({
+        tabs: [],
+        queryURLs: () => Promise.resolve(urlList(2)),
+    });
+    w.ctx.localStorage['load-range'] = '7';
+
+    const realProcess = w.ctx.processVisits;
+    w.ctx.processVisits = function () {
+        passes++;
+        if (passes === 1) throw new Error('the walk exploded');
+        return realProcess.apply(this, arguments);
+    };
+
+    await w.ctx.loadHistory();
+    assert.ok(w.state.errors.some((e) => /pass failed/.test(e)),
+        'a pass that throws must be logged, not left as an unhandled rejection');
+    await w.ctx.loadHistory();
+
+    assert.equal(passes, 2, 'the next pass must get its own attempt');
+    assert.equal(w.state.queried.length, 2, 'and it must actually crawl');
+});
+
+test('a pass with nothing to walk still clears the badge', async () => {
+    // An empty pass is the steady state once passes are periodic: after a
+    // completed sweep, "nothing new since then" is the normal outcome. Every
+    // path here has already written `Url` (loadDate() handing the badge over)
+    // or a `D<n>`, so a pass that returns early leaves that marker on the
+    // toolbar until the next non-empty pass — and since each period is one more
+    // empty pass, that is where it stays.
+    const w = loadWorker({ tabs: [] });
+    w.ctx.urls_wait_load = [];
+    w.ctx.setBadge('Url', true);
+
+    await w.ctx.processVisits();
+
+    assert.equal(w.state.badges[w.state.badges.length - 1], '',
+        'an empty pass must end with the badge cleared');
 });
 
 // ---------------------------------------------------------------------------
@@ -1105,4 +1572,27 @@ test('the worker\'s own writes do not invalidate the copy it just made', async (
     assert.equal(w.ctx.isNegativeCached(url), true, 'the entry must still be there');
     assert.equal(w.state.jsonParses, before,
         'a write of its own must not force the worker to re-parse the cache');
+});
+
+test('the crawl alarm does not sweep the negative cache', async () => {
+    // Both branches share one listener, so "fell through to the other one" is
+    // the cheapest way to merge them; it would smuggle an O(cache) sweep into
+    // every paced crawl pass and go unreported, since the sweep's own case only
+    // ever fires the mostVisited alarm.
+    const w = loadWorker({ tabs: [] });
+    w.boot();
+    await w.settle();
+
+    const stale = 'https://icons.duckduckgo.com/ip3/stale.test.ico';
+    w.ctx.setNegativeCache({ [stale]: Date.now() - NEGATIVE_CACHE_TTL - 1 });
+
+    const swept = [];
+    const real = w.ctx.sweepNegativeCache;
+    w.ctx.sweepNegativeCache = function () { swept.push(1); return real.apply(this, arguments); };
+
+    w.fire('alarms.onAlarm', { name: 'crawlHistory' });
+    for (let i = 0; i < 30; i++) await w.settle(1);
+
+    assert.equal(swept.length, 0, 'a crawl pass must not pay for the negative-cache sweep');
+    assert.ok(stale in negCache(w), 'and the entry it would have dropped must still be there');
 });

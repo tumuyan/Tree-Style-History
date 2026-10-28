@@ -196,6 +196,67 @@ test('service worker checks the sender before running a callFunction request', (
     assert.match(sw, /sender\.id\s*!==\s*chrome\.runtime\.id/);
 });
 
+test('the crawl is paced, and its constants are declared before their callers', () => {
+    // Two halves of one change. Raising the frequency only helps if a single
+    // pass is bounded, and a bounded pass only covers the window if a pass that
+    // stops is resumed by the next one — so the budget, the cursor and the
+    // alarm have to all be present.
+    const sw = stripJsComments(fs.readFileSync(path.join(CHROME_DIR, 'scripts/background-sw.js'), 'utf8'));
+
+    for (const name of ['CRAWL_BUDGET_URLS', 'CRAWL_PERIOD_MINUTES', 'CRAWL_ALARM', 'CRAWL_SWEEP_KEY']) {
+        assert.match(sw, new RegExp('const\\s+' + name + '\\s*='), `the crawl needs ${name}`);
+    }
+    // The alarm is the frequency half, and it has to be armed from somewhere.
+    assert.match(sw, /chrome\.alarms\.create\(\s*CRAWL_ALARM/);
+    assert.match(sw, /alarm\.name\s*===\s*CRAWL_ALARM/, 'the alarm must reach the crawl');
+
+    // `const` is in the temporal dead zone until execution reaches it. The
+    // alarms listener is registered near the top of the file and reads
+    // CRAWL_ALARM when it runs, so a declaration further down throws — and only
+    // on the path that listener starts, which no crawl test would notice.
+    const listener = sw.indexOf('chrome.alarms.onAlarm.addListener');
+    assert.ok(listener > 0, 'expected an alarm listener');
+    for (const name of ['CRAWL_ALARM']) {
+        const decl = sw.indexOf(`const ${name} `);
+        assert.ok(decl > 0 && decl < listener,
+            `${name} must be declared before the alarm listener that reads it`);
+    }
+});
+
+test('the crawl publishes the heat map only for a finished window', () => {
+    // The rule the accumulator exists for, and the one a "just clear the badge"
+    // tidy-up would silently undo: a day's square is a cache that is filled once
+    // and never recomputed, so a pass holding half a window must not write it.
+    //
+    // Checked on the source because the failure mode is a *missing* write on a
+    // path the behaviour tests reach through a stubbed storage area: what they
+    // would show is a wrong number, several layers away from the line that
+    // caused it.
+    const sw = stripJsComments(fs.readFileSync(path.join(CHROME_DIR, 'scripts/background-sw.js'), 'utf8'));
+    const body = sw.slice(sw.indexOf('async function processVisits('));
+
+    // A call statement, not a mention: the comments above this line talk about
+    // saveCrawledHeat() a dozen times, and a bare /saveCrawledHeat\(/ counts
+    // those too.
+    const writes = body.match(/^\s*saveCrawledHeat\(/gm) || [];
+    assert.equal(writes.length, 1,
+        'saveCrawledHeat() must be called exactly once, from the finished-window branch');
+
+    // *Where* it is called, not just how often. "Call it whenever a pass ends"
+    // is the bug this replaced, and it still reads as one call: the write has to
+    // sit inside `if (complete)`, which is what says the window is whole.
+    const branch = body.slice(body.indexOf('if (complete) {'), body.indexOf('} else {', body.indexOf('if (complete) {')));
+    assert.match(branch, /^\s*saveCrawledHeat\(/m,
+        'the heat map must be written from the `complete` branch, where the window is whole');
+
+    // Both the accumulator and its storage key, or a window counted in passes
+    // would publish only the last pass's share.
+    for (const fn of ['restoreCrawlHeat', 'saveCrawlState', 'clearCrawlState']) {
+        assert.match(sw, new RegExp('function\\s+' + fn + '\\s*\\('), `the crawl needs ${fn}()`);
+    }
+    assert.match(sw, /const\s+CRAWL_HEAT_KEY\s*=/);
+});
+
 test('service worker imports its dependencies via importScripts', () => {
     const sw = fs.readFileSync(path.join(CHROME_DIR, 'scripts/background-sw.js'), 'utf8');
     // storage-adapter is mandatory: without it `localStorage` is undefined in a SW.
