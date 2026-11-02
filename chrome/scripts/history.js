@@ -3,7 +3,7 @@
 // An ES module: every function it calls is imported, not read off `window`.
 
 import { $, $$, getStyle } from './dom-helper.js';
-import { returnLang, dateFormat } from './modules/helpers.js';
+import { returnLang, dateFormat, monthOptionsHtml } from './modules/helpers.js';
 import { calendar, showCalendar } from './modules/calendar.js';
 import {
     history as historyView, getActiveHistory, selectHistoryItem, deleteHistoryItem
@@ -157,7 +157,7 @@ document.addEventListener('DOMContentLoaded', function(){
     derhdf = derhdf.replace('dd', 'dsdi').replace('mm', 'dsmi').replace('yyyy', 'dsyi');
     derhdf = derhdf.split('/');
     $(derhdf[0]).innerHTML = '<select class="select" id="date-select-day"></select>';
-    $(derhdf[1]).innerHTML = '<select class="select" id="date-select-month"><option value="01">01</option><option value="02">02</option><option value="03">03</option><option value="04">04</option><option value="05">05</option><option value="06">06</option><option value="07">07</option><option value="08">08</option><option value="09">09</option><option value="10">10</option><option value="11">11</option><option value="12">12</option></select>';
+    $(derhdf[1]).innerHTML = '<select class="select" id="date-select-month">' + monthOptionsHtml() + '</select>';
     $(derhdf[2]).innerHTML = '<select class="select" id="date-select-year"></select>';
     
     $('date-select-day').addEventListener('change', function(){
@@ -178,31 +178,37 @@ document.addEventListener('DOMContentLoaded', function(){
     calendar('current', '');
 
 
-            //获取Location对象的search属性值
-            var searchStr = location.search;
-
-            if(searchStr.length>1){
-                //由于searchStr属性值包括“?”，所以除去该字符
-                console.log("searchStr"+searchStr);
-                let site = new URL(searchStr.substr(1), window.location.href).hostname;
-                if(site != undefined ){
-                    searchStr = site.split('?')[0];
-                    if(searchStr.length>0){
-                           $('rh-what').value ="all";
-//                         $('rh-what').getSelected().get('value');
-//                             $jq('#rh-what').val("current");
-                                $("rh-search").value =searchStr;
-                                historyView('search', searchStr);
-                    }
-                }else{
-                 searchStr='';
-                 }
-            }else{
-                searchStr='';
+            // `history.html?<url>` — written by the service worker's context
+            // menu, so this page can open pre-searched on a host.
+            //
+            // `new URL()` THROWS on a malformed input, and the throw would
+            // escape this callback: everything registered after it — including
+            // the range-delete toggle further down — never gets its listener.
+            // `?http://[bad` used to do exactly that, from a URL a user can
+            // reach by hand. An unparseable query is simply "no search".
+            var searchStr = '';
+            if (location.search.length > 1) {
+                try {
+                    // `substr(1)` drops the '?'. The query is a full URL in
+                    // practice: the service worker writes `info.linkUrl` /
+                    // `info.pageUrl`. A bare host typed into the address bar
+                    // ('?example.com') resolves RELATIVE to this page, so its
+                    // hostname is the extension id, not example.com — a known
+                    // wart of the base argument, left as is because the only
+                    // caller that matters never produces a relative input.
+                    searchStr = new URL(location.search.substr(1), window.location.href).hostname;
+                } catch (e) {
+                    console.warn('Ignoring an unparseable search query:', location.search, e);
+                }
             }
 
-            if(searchStr=='')
-                 historyView('current', '');
+            if (searchStr) {
+                $('rh-what').value = 'all';
+                $('rh-search').value = searchStr;
+                historyView('search', searchStr);
+            } else {
+                historyView('current', '');
+            }
     
     // Calendar range toggle
     

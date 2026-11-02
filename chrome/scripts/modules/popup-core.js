@@ -3,7 +3,7 @@ import {
     DAY, returnLang, escapeHtmlAttr, escapeHtmlText, timeNow, formatDate,
     getFaviconUrl, isBookmarkletUrl, executeBookmarklet,
     getFaviconOnerror, setupFaviconElement,
-    Clipboard
+    Clipboard, tooltipText
 } from './helpers.js';
 import { filtUrl } from './config.js';
 // Straight from the shared layer, like config.js does: only module code uses
@@ -127,24 +127,9 @@ function formatItem(data) {
         extsep = '';
     }
 
-    var tipParts = [];
-
-    if (title && title !== '') {
-        tipParts.push(title);
-    }
-
-    if (!isBookmarkletUrl(url) && url && title !== url) {
-        tipParts.push(url);
-    }
-
-    if (time !== undefined && time !== null) {
-        tipParts.push(time);
-    }
-
-    var tip = tipParts.join(' | ');
-    if (!tip) {
-        tip = isBookmarkletUrl(url) ? '[Bookmarklet]' : (url || '');
-    }
+    // One implementation, shared with the bookmark page: its copy differed on
+    // whether a URL equal to the title is repeated, and showed it twice.
+    var tip = tooltipText(title, url, time);
 
     // A per-row "delete from history" button used to be drawn here (two spans,
     // `.ui-pin` / `.ui-delete`), but nothing ever bound a handler to them: the
@@ -190,12 +175,11 @@ function formatItem(data) {
         faviconSrc = 'images/Extension-icon-vector-04.svg';
     }
 
-    if (faviconSrc) {
-        item += '<img class="favicon" alt="Favicon">';
-    }
-    else {
-        item += '<img class="favicon" alt="Favicon">';
-    }
+    // The row always gets a favicon slot, even when no source could be worked
+    // out above: setupFaviconElement() below fills it with the fallback, and
+    // the caller's `querySelector('img.favicon')` needs the element to exist.
+    // The if/else that used to stand here had two identical arms.
+    item += '<img class="favicon" alt="Favicon">';
 
     // `tip` and `url` sit in attributes (escapeHtmlAttr); `title` is text
     // content and takes escapeHtmlText. It was interpolated raw here, relying
@@ -223,8 +207,18 @@ function formatItem(data) {
         }
     } else if (data.sessionId != undefined) {
         click = function () {
-            chrome.sessions.restore(data.sessionId, function (session) { })
-        }
+            // A sessionId goes stale the moment the extension page stays open:
+            // the tab it names may be gone before the row is clicked. Silently
+            // swallowing that meant a click that did nothing at all, which is
+            // indistinguishable from a dead popup.
+            chrome.sessions.restore(data.sessionId, function () {
+                if (chrome.runtime.lastError) {
+                    console.warn('Could not restore the closed tab:', data.title || data.sessionId,
+                        chrome.runtime.lastError.message);
+                    alertUser(returnLang('restoreFailed'), 'open');
+                }
+            });
+        };
     }
 
 
@@ -606,7 +600,19 @@ function mostVisited() {
     // It used to fall through to JSON.parse(undefined) and throw.
     if (mvc !== 'false' && mvc !== undefined) {
 
-        var mvd = JSON.parse(mvc);
+        // A cache that fails to parse must not take the popup down with it.
+        // popup.js runs the blocks in a `for` loop with no try/catch, so one
+        // throw here silently skips every block after this one — and the
+        // worker is the writer, i.e. the one place a half-written value can
+        // come from. The Service Worker already guards its own JSON.parse.
+        var mvd;
+        try {
+            mvd = JSON.parse(mvc);
+        } catch (e) {
+            console.warn('mv-cache is not valid JSON, ignoring it:', e);
+            mvd = [];
+        }
+        if (!Array.isArray(mvd)) mvd = [];
         var itemsno = Number(localStorage['mv-itemsno']);
         var mvrl = localStorage['mv-blocklist'];
         var r = 0;
@@ -694,7 +700,14 @@ function pinned() {
 
     if (pc !== 'false' && pc !== undefined) {
 
-        var pd = JSON.parse(pc);
+        var pd;
+        try {
+            pd = JSON.parse(pc);
+        } catch (e) {
+            console.warn('rh-pinned is not valid JSON, ignoring it:', e);
+            pd = [];
+        }
+        if (!Array.isArray(pd)) pd = [];
 
         for (var i = 0; i < pd.length; i++) {
 

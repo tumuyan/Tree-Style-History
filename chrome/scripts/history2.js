@@ -3,7 +3,7 @@
 // An ES module: every function it calls is imported, not read off `window`.
 
 import { $, $$ } from './dom-helper.js';
-import { TimeToStr, dateFormat, getFaviconUrl } from './modules/helpers.js';
+import { TimeToStr, dateFormat, getFaviconUrl, monthOptionsHtml, returnLang } from './modules/helpers.js';
 import { filtUrl } from './modules/config.js';
 import { calendar, showCalendar } from './modules/calendar.js';
 import { alertLoadingHistory } from './modules/history-core.js';
@@ -54,7 +54,7 @@ document.addEventListener('DOMContentLoaded', function () {
     derhdf = derhdf.replace('dd', 'dsdi').replace('mm', 'dsmi').replace('yyyy', 'dsyi');
     derhdf = derhdf.split('/');
     $(derhdf[0]).innerHTML = '<select class="select" id="date-select-day"></select>';
-    $(derhdf[1]).innerHTML = '<select class="select" id="date-select-month"><option value="01">01</option><option value="02">02</option><option value="03">03</option><option value="04">04</option><option value="05">05</option><option value="06">06</option><option value="07">07</option><option value="08">08</option><option value="09">09</option><option value="10">10</option><option value="11">11</option><option value="12">12</option></select>';
+    $(derhdf[1]).innerHTML = '<select class="select" id="date-select-month">' + monthOptionsHtml() + '</select>';
     $(derhdf[2]).innerHTML = '<select class="select" id="date-select-year"></select>';
 
     $('date-select-day').addEventListener('change', function () {
@@ -113,13 +113,19 @@ document.addEventListener('DOMContentLoaded', function () {
     // 待插入的部分数据
     var yNodes = [];
 
+    // The two placeholders used to be hard-coded Chinese, so an English user
+    // saw them in Chinese. They are i18n keys now. A locale that is missing one
+    // has no fallback: `chrome.i18n.getMessage` answers '' (not the key name),
+    // so the node renders as a blank line. No test can see that — the stub in
+    // tests/stubs.mjs echoes the key back — and the only guard is the
+    // both-locales assertion in tests/static.test.mjs.
     var nNodes = [
-        { id: 1, pId: 0, name: "正在解析数据中", t: "😴", open: true },
-        { id: 2, pId: 1, name: "请稍后再试...", t: "🤣", open: true }
+        { id: 1, pId: 0, name: returnLang('parsingData'), t: "😴", open: true },
+        { id: 2, pId: 1, name: returnLang('pleaseWait'), t: "🤣", open: true }
     ];
 
     var mNodes = [
-        { id: 3, pId: 1, name: "没有找到浏览历史", t: "😴", open: true }
+        { id: 3, pId: 1, name: returnLang('noHistoryFound'), t: "😴", open: true }
     ];
 
     var tag = {};
@@ -169,7 +175,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
     };
 
-    console.log("loading...");
     var DAY = 24 * 3600 * 1000;
     var date_e = new Date();
     date_e.setHours(23); date_e.setMinutes(59); date_e.setSeconds(59); date_e.setMilliseconds(999);
@@ -244,11 +249,9 @@ document.addEventListener('DOMContentLoaded', function () {
         pIDs = {};
 
         if (loadfrom > 0 && loadto > 0) {
-            console.log("loadHistory time from " + loadfrom.toString() + " to " + loadto.toString());
             feach_History(loadfrom, loadto, 0);
         } else {
             let time = (date).getTime() - DAY * Number(localStorage["load-range2"]);
-            console.log("loadHistory time from " + new Date(time).toString());
             feach_History(time, (date_e).getTime(), 0);
         }
 
@@ -265,15 +268,16 @@ document.addEventListener('DOMContentLoaded', function () {
         // 索引，最后的访问时间大于日期上限
         let result = objectStore.index('visitTime');
         yNodes = [];
-        let c;
-
-        if (t == 0) {
-            console.log("feach_History " + t + " from " + loadfrom.toString() + " to " + loadto.toString());
-            c = result.openCursor(IDBKeyRange.bound(loadfrom, loadto), "prev");    //倒序条件查询
-        } else {
-            console.log("feach_History " + t + " from " + loadfrom.toString() + " to " + loadto.toString());
-            c = result.openCursor(IDBKeyRange.bound(loadfrom - DAY * t, loadfrom - DAY * (t - 1)), "prev");    //倒序条件查询
-        }
+        // t == 0 is the window asked for; each further step walks one more day
+        // back. The two branches were the same call with a different range, so
+        // they collapse to one bound. (A single cursor cannot cover several
+        // disjoint ranges — one cursor, one interval — so "one transaction for
+        // all the days" is not available here; sweeping the whole span once and
+        // bucketing by day in JS would be, but that is a rewrite of the loop
+        // below and belongs with its own tests.)
+        var from = t == 0 ? loadfrom : loadfrom - DAY * t;
+        var to = t == 0 ? loadto : loadfrom - DAY * (t - 1);
+        let c = result.openCursor(IDBKeyRange.bound(from, to), "prev");    //倒序条件查询
 
         c.onsuccess = function (e) {
             var cursor = e.target.result;
@@ -333,7 +337,6 @@ document.addEventListener('DOMContentLoaded', function () {
                     refreshSearchTags();
                     // 
                     alertLoadingHistory(true);
-                    console.log(" pre_History() finish :( ");
                 }
 
 
@@ -343,7 +346,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         c.onerror = function (event) {
-            console.log(" loadHistory() Error :( " + event);
+            console.error("loadHistory failed:", event);
             alertLoadingHistory(true);
         };
 

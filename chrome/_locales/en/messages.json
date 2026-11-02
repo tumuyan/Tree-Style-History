@@ -538,5 +538,20 @@
     },
     "help25": {
         "message": "If the selected day has fewer records than this value, earlier days are loaded automatically until the count is reached."
+    },
+    "restoreFailed": {
+        "message": "That tab is no longer available to reopen"
+    },
+    "parsingData": {
+        "message": "Parsing data..."
+    },
+    "pleaseWait": {
+        "message": "Please try again later..."
+    },
+    "noHistoryFound": {
+        "message": "No browsing history found"
+    },
+    "noClosedFound": {
+        "message": "No recently closed pages found"
     }
 }

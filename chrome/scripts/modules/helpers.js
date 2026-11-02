@@ -163,6 +163,57 @@ function escapeRegExp(text) {
     return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/**
+ * A unique id for an element built from an HTML string and looked up with $().
+ *
+ * Fourteen copies of `Math.floor(Math.random() * 999999999999999999) +
+ * 100000000000000000` lived in the two list renderers. The magnitude is not
+ * load-bearing (an id only has to be unique inside one document), so the
+ * shared helper drops the 18-digit arithmetic for a base-36 slice — same job,
+ * and `Math.random().toString(36)` never produces an exponent.
+ */
+var _idSeq = 0;
+function uniqueId(prefix) {
+    _idSeq += 1;
+    return prefix + '-' + _idSeq.toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+}
+
+/**
+ * The tooltip for a list row: title, URL, time, joined with ' | '.
+ *
+ * The popup and the bookmark page each carried their own copy, and they had
+ * already drifted — only one of them skipped the URL when it duplicated the
+ * title, so a bookmark titled by its URL showed that URL twice. `time` is
+ * optional: a history row has one, a most-visited row does not.
+ */
+function tooltipText(title, url, time) {
+    var parts = [];
+    if (title) parts.push(title);
+    // A bookmarklet's URL is `javascript:...` — useless as a tooltip, and long
+    // enough to crowd out the title it is supposed to accompany.
+    if (!isBookmarkletUrl(url) && url && title !== url) parts.push(url);
+    if (time !== undefined && time !== null && time !== '') parts.push(time);
+    var tip = parts.join(' | ');
+    if (!tip) tip = isBookmarkletUrl(url) ? '[Bookmarklet]' : (url || '');
+    return tip;
+}
+
+/**
+ * The twelve `<option>` elements of the month picker.
+ *
+ * Byte-identical in history.js, history2.js and closed.js — three copies of a
+ * string that has no reason to vary, so a month label would have had to be
+ * changed in three places.
+ */
+function monthOptionsHtml() {
+    var html = '';
+    for (var m = 1; m <= 12; m++) {
+        var v = m < 10 ? '0' + m : String(m);
+        html += '<option value="' + v + '">' + v + '</option>';
+    }
+    return html;
+}
+
 function truncate(str, ind, lng) {
     if (str.length > lng) {
         return str.substring(ind, lng) + '...';
@@ -223,14 +274,9 @@ function executeBookmarklet(url, options) {
                     if (options.onFailure) options.onFailure(chrome.runtime.lastError);
                 } else { if (options.onSuccess) options.onSuccess(); }
             });
-        } else if (chrome.tabs && chrome.tabs.executeScript) {
-            chrome.tabs.executeScript(tabId, { code: scriptToRun }, function () {
-                if (chrome.runtime.lastError) {
-                    console.error('Failed to execute bookmarklet:', chrome.runtime.lastError);
-                    if (options.onFailure) options.onFailure(chrome.runtime.lastError);
-                } else { if (options.onSuccess) options.onSuccess(); }
-            });
         } else {
+            // MV3 always ships chrome.scripting; this is here so a broken
+            // manifest fails loudly instead of silently doing nothing.
             console.error('No available API to execute bookmarklet');
             if (options.onFailure) options.onFailure(new Error('No available API to execute scripts'));
         }
@@ -366,6 +412,7 @@ export {
     TimeToStr, formatDate,
     escapeHtmlAttr, escapeHtmlText, escapeRegExp, truncate,
     getUrlVars, extractBookmarkletCode, decodeBookmarkletCode, executeBookmarklet,
+    uniqueId, tooltipText, monthOptionsHtml,
     chromeURL,
     Clipboard,
     setupFaviconElement

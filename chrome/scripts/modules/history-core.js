@@ -2,7 +2,7 @@
 // History page display functions extracted from func.js
 
 import { $, $$, createElement } from '../dom-helper.js';
-import { returnLang, TimeToStr, formatDate, truncate, get_host, getFaviconUrl, getFaviconOnerror, setupFaviconElement, escapeHtmlAttr, escapeHtmlText } from './helpers.js';
+import { returnLang, TimeToStr, formatDate, truncate, get_host, getFaviconUrl, getFaviconOnerror, setupFaviconElement, escapeHtmlAttr, escapeHtmlText, uniqueId } from './helpers.js';
 import { filtUrl } from './config.js';
 // Straight from the bottom layer, not via calendar.js: that module imports
 // `history` from here, and going through it closed an import cycle.
@@ -235,10 +235,10 @@ function history(w, q) {
                             if (rha[thisc.counter] !== undefined) {
                                 var hostKey = rha[thisc.counter].host;
                                 if (!groups.has(hostKey)) {
-                                    var toggleid = 'toggle-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
-                                    var moreid = 'more-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
-                                    var errorid = 'error-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
-                                    var groupid = 'group-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
+                                    var toggleid = uniqueId('toggle');
+                                    var moreid = uniqueId('more');
+                                    var errorid = uniqueId('error');
+                                    var groupid = uniqueId('group');
                                     var faviconUrl = rha[thisc.counter].favicon || '';
                                     // The host reaches attributes three times and
                                     // the visible label once — one escaper per
@@ -277,7 +277,7 @@ function history(w, q) {
                                 if (w == 'search' && (sw == 'all' || sw == 'recent')) {
                                     // rha[thisc.counter].time = '- - : - -';
                                 }
-                                var selectid = 'select-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
+                                var selectid = uniqueId('select');
                                 // The URL is attacker-controllable (it is whatever
                                 // the page asked for), so it is escaped before it
                                 // reaches href/value/title. Those are attributes,
@@ -338,8 +338,8 @@ function history(w, q) {
                                 if (w == 'search' && (sw == 'all' || sw == 'recent')) {
                                     // rha[thisc.counter].time = '- - : - -';
                                 }
-                                var selectid = 'select-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
-                                var errorid = 'error-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
+                                var selectid = uniqueId('select');
+                                var errorid = uniqueId('error');
                                 var faviconUrl = rha[thisc.counter].favicon || '';
                                 // See the grouped branch: the URL is escaped for
                                 // the attributes (escapeHtmlAttr), the visible
@@ -733,7 +733,17 @@ function deleteHistoryItem(w, redraw) {
             alertLoadingHistory(true);
             Array.from($$(into + ' .checkbox input:checked')).forEach(function (el) {
                 el.closest('div.item-holder').remove();
-                chrome.history.deleteUrl({ url: el.value });
+                // The row is already gone from the DOM, so a failed delete is
+                // the one case where the user sees a rule that did nothing and
+                // has no way to tell why: chrome.history.deleteUrl() reports
+                // through chrome.runtime.lastError rather than throwing.
+                chrome.history.deleteUrl({ url: el.value }, function () {
+                    if (chrome.runtime.lastError) {
+                        // One console line, not one alert per row: a delete of
+                        // 50 rows behind a modal would be 50 dialogs.
+                        console.warn('deleteUrl failed:', el.value, chrome.runtime.lastError.message);
+                    }
+                });
             });
             chrome.history.search({ text: '', maxResults: 1, startTime: (new Date()).getTime() - (24 * 3600 * 1000), endTime: (new Date()).getTime() }, function (hi) {
                 if (grp == 'yes') {

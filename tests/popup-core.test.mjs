@@ -22,6 +22,39 @@ installStubs();
 const dom = createDom();
 const popupCore = await importModule('modules/popup-core.js');
 
+// alertUser(…, 'open') schedules a 3s auto-hide, and Node's test runner waits for
+// a pending timer before it lets the process exit — that one call stretched this
+// file from ~0.1s to 3.1s of wall clock. The handle never returns to the caller,
+// so no case can clear it after the fact.
+//
+// Collected for the whole file rather than per case on purpose: a per-case
+// helper is only as good as the next author remembering to call it, and
+// forgetting costs 3 seconds while still passing green — a slow failure nobody
+// has a reason to look at. Clearing after every case leaves nothing to forget.
+const realSetTimeout = globalThis.setTimeout;
+const realClearTimeout = globalThis.clearTimeout;
+const pendingTimers = [];
+const clearedLongDelays = [];
+globalThis.setTimeout = function (fn, ms, ...args) {
+    const id = realSetTimeout(fn, ms, ...args);
+    pendingTimers.push({ id, ms });
+    return id;
+};
+// The receipt is taken here, inside clearTimeout, rather than next to the call
+// site that asks for the sweep. Bookkeeping that lives beside the call keeps
+// ticking when the call is deleted — the sweep would still look like it ran,
+// and the suite would still pay its 3 seconds for nothing.
+globalThis.clearTimeout = function (id) {
+    realClearTimeout(id);
+    const at = pendingTimers.findIndex((timer) => timer.id === id);
+    if (at < 0) return;
+    if (pendingTimers[at].ms >= 1000) clearedLongDelays.push(pendingTimers[at].ms);
+    pendingTimers.splice(at, 1);
+};
+test.afterEach(() => {
+    for (const timer of pendingTimers.slice()) clearTimeout(timer.id);
+});
+
 // 2024-01-02 13:05:06 local time, built from components so the rendering does
 // not depend on the machine's timezone.
 const TS = new Date(2024, 0, 2, 13, 5, 6, 0).getTime();
@@ -136,6 +169,46 @@ test('mostVisited renders nothing before the worker has written a cache', (t) =>
     assert.equal(holder.children.length, 0);
 });
 
+test('mostVisited survives a corrupt mv-cache instead of taking the popup down', (t) => {
+    // popup.js runs its blocks in a plain `for` loop with no try/catch, so a
+    // throw here does not fail one block — it ends the loop, and every block
+    // after it renders nothing with no error to point at. The worker is the
+    // writer of `mv-cache`, and it already guards its own JSON.parse; this is
+    // the read side catching up.
+    restoreStorage(t, ['mv-cache', 'mv-itemsno', 'mv-blocklist']);
+    const holder = block('mv-inject');
+
+    localStorage['mv-cache'] = '{"url": "https://a.test/", '; // truncated
+    localStorage['mv-itemsno'] = '8';
+    localStorage['mv-blocklist'] = 'false';
+
+    assert.doesNotThrow(() => popupCore.mostVisited(), 'a corrupt cache must not throw');
+    assert.equal(holder.children.length, 0, 'and must not render half an entry either');
+});
+
+test('mostVisited ignores a cache that parses to something other than a list', (t) => {
+    // JSON-valid but the wrong shape. The guard has to be `Array.isArray`, not
+    // "does it have a length", and only an ARRAY-LIKE can tell the two apart:
+    // a plain object has no `.length`, so the walk ends immediately whether the
+    // guard is there or not — deleting the guard leaves the whole file green.
+    //
+    // An array-like with a real entry under 0 is the shape that separates them:
+    // unguarded, the loop reads `mvd[0].title` and renders that row, i.e. it
+    // copies onto the screen a value it never validated.
+    restoreStorage(t, ['mv-cache', 'mv-itemsno', 'mv-blocklist']);
+    const holder = block('mv-inject');
+
+    localStorage['mv-cache'] = JSON.stringify({
+        0: { url: 'https://a.test/1', title: 'A1', favicon: '', visitCount: 9 },
+        length: 1,
+    });
+    localStorage['mv-itemsno'] = '8';
+    localStorage['mv-blocklist'] = 'false';
+
+    assert.doesNotThrow(() => popupCore.mostVisited());
+    assert.equal(holder.children.length, 0, 'an array-like cache must not be walked at all');
+});
+
 test('mostVisited skips a blacklisted host without spending a slot', (t) => {
     // Same rule as the internal URLs in recentHistory(): a dropped row is not a
     // used slot, or a filtered-down list comes back short.
@@ -159,6 +232,36 @@ test('mostVisited skips a blacklisted host without spending a slot', (t) => {
 // ---------------------------------------------------------------------------
 // pinned() — read-only since the pin button was removed
 // ---------------------------------------------------------------------------
+
+test('pinned ignores a rh-pinned value that parses to something other than a list', (t) => {
+    // The corrupt-value case below only proves the try/catch. This one proves
+    // the shape check next to it, and needs an array-like to do so: a plain
+    // object makes the walk end on its own, so removing the guard would still
+    // pass. Here the unguarded loop would render `pd[0]`.
+    restoreStorage(t, ['rh-pinned']);
+    const holder = block('pi-inject');
+
+    localStorage['rh-pinned'] = JSON.stringify({
+        0: { url: 'https://a.test/1', title: 'A1', favicon: '', time: '10:00' },
+        length: 1,
+    });
+
+    assert.doesNotThrow(() => popupCore.pinned());
+    assert.equal(holder.children.length, 0, 'an array-like value must not be walked at all');
+});
+
+test('pinned survives a corrupt rh-pinned value', (t) => {
+    // Same failure mode as mv-cache, on the block that renders FIRST (ahead of
+    // the loop over `rh-list-order`), so a throw here would take the whole
+    // popup with it rather than just the tail.
+    restoreStorage(t, ['rh-pinned']);
+    const holder = block('pi-inject');
+
+    localStorage['rh-pinned'] = '[{"url":"https://a.test/1"'; // truncated
+
+    assert.doesNotThrow(() => popupCore.pinned());
+    assert.equal(holder.children.length, 0);
+});
 
 test('pinned renders every stored entry', (t) => {
     // `rh-pinned` can only shrink now — nothing adds to it — but entries pinned
@@ -321,6 +424,85 @@ test('showRecentTabs tolerates an order that is not an array', (t) => {
 // ---------------------------------------------------------------------------
 // recentlyClosedTabs() / recentBookmarks()
 // ---------------------------------------------------------------------------
+
+test('clicking a closed-tab row reports a stale sessionId instead of doing nothing', (t) => {
+    // A sessionId goes stale as soon as the page has been open a while — the
+    // entry expires from chrome.sessions while the row is still on screen. The
+    // click handler used to pass an empty callback, so that click was simply
+    // swallowed: the row looked dead and said nothing.
+    restoreStorage(t, ['rct-itemsno']);
+    const holder = block('rct-inject');
+    localStorage['rct-itemsno'] = '4';
+
+    withChromeApi({
+        sessions: {
+            getRecentlyClosed: (_q, cb) => cb([
+                { tab: { sessionId: 'stale-1', title: 'Gone', url: 'https://gone.test/' } },
+            ]),
+        },
+    }, () => popupCore.recentlyClosedTabs());
+
+    const alert = dom.el('alert-text');
+    const holderEl = dom.el('alert-holder');
+    const savedAlert = { text: alert.textContent, display: holderEl.style.display };
+    alert.textContent = '';
+    holderEl.style.display = 'none';
+    // 'alert-text' and 'alert-holder' are one pair of nodes shared by the whole
+    // file (see dom.mjs), and this case is the only one that fills them. Left
+    // behind, the next case asserting on that node would read this case's
+    // message and pass or fail for the wrong reason.
+    t.after(() => {
+        alert.textContent = savedAlert.text;
+        holderEl.style.display = savedAlert.display;
+    });
+
+    const savedWarn = console.warn;
+    const warned = [];
+    console.warn = (...args) => warned.push(args.join(' '));
+    t.after(() => { console.warn = savedWarn; });
+
+    const row = holder.children[0];
+    withChromeApi({
+        sessions: {
+            restore: (_id, cb) => {
+                globalThis.chrome.runtime.lastError = { message: 'Invalid session id' };
+                cb();
+                delete globalThis.chrome.runtime.lastError;
+            },
+        },
+    }, () => row.dispatch('click', { preventDefault() {} }));
+
+    assert.equal(warned.length, 1, 'the failure must reach the console');
+    assert.match(warned[0], /Invalid session id/);
+    assert.equal(dom.el('alert-holder').style.display, 'block', 'and be shown, not swallowed');
+});
+
+test('the timer sweep really clears the banner timer', () => {
+    // The sweep in test.afterEach() has one job: stop Node waiting 3 seconds on
+    // alertUser()'s auto-hide. A sweep that clears nothing still lets every
+    // case pass — the run just takes 3.1s instead of 0.1s, which is a slow
+    // failure nobody looks at. So the sweep keeps a receipt and this reads it.
+    //
+    // Order matters: this runs after the case that trips alertUser(), so the
+    // 3s timer is already in the ledger. Before it, the ledger is legitimately
+    // empty and the assertion below would be vacuous.
+    assert.ok(clearedLongDelays.includes(3000),
+        `no 3s timer was swept; the suite pays 3s of wall clock for it (swept: ${clearedLongDelays.join(', ') || 'none'})`);
+});
+
+test('a case that trips the alert banner leaves nothing of it behind', (t) => {
+    // 'alert-holder' / 'alert-text' are two nodes shared by the whole file, and
+    // the case above is the only one that writes them. Its restore is the only
+    // thing keeping the message out of every later case, so it needs a reader:
+    // without one, dropping that restore is a green mutation and the trap gets
+    // set again for whoever asserts on this node next.
+    const holderEl = dom.el('alert-holder');
+    const alertEl = dom.el('alert-text');
+
+    assert.notEqual(holderEl.style.display, 'block', 'the banner is still up from an earlier case');
+    assert.doesNotMatch(alertEl.textContent, /restoreFailed|Invalid session id/,
+        'an earlier case\'s message is still in the banner');
+});
 
 test('recentlyClosedTabs restores a window session as one entry', (t) => {
     // chrome.sessions returns either a tab (one page) or a window (several pages

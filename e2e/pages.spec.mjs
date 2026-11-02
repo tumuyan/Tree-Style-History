@@ -896,14 +896,25 @@ test('history.html drops a day from the heat map once its history is gone', { sk
     const day = await page.evaluate(async () => {
         await window.storageAdapter.ready();
         const d = new Date();
-        d.setDate(d.getDate() - 1); // yesterday: always in the displayed month except on the 1st
         d.setHours(23, 59, 59, 999);
+        // Same walk-back as seedBackfillableVisit(): calendar() draws exactly
+        // one month, so yesterday has no cell when today is the 1st.
+        if (d.getDate() === 1) d.setDate(2);
+        else d.setDate(d.getDate() - 1);
         // A count no real day could have produced, so "did it get cleaned up?"
         // has an unambiguous answer.
         const key = d.getTime();
         localStorage['calendar-storage2'] = JSON.stringify({ [key]: 99 });
         await chrome.storage.local.set({ 'calendar-storage2': localStorage['calendar-storage2'] });
-        return { key, day: String(d.getDate()), month: String(d.getMonth() + 1), year: String(d.getFullYear()) };
+        // Zero-padded, which is how calendar() writes both `<option>` lists
+        // (`iaStr` / monthOptionsHtml()). An unpadded value matches no option
+        // and `sel.value` keeps whatever it had, so the selects stay on today
+        // and the case deletes the wrong day: it silently required a two-digit
+        // day *and* a two-digit month, i.e. mid-October onwards. Written out
+        // as-is it failed from the 1st to the 9th of November and on any day
+        // in a single-digit month — green when the author wrote it, red later.
+        const pad = (n) => String(n).padStart(2, '0');
+        return { key, day: pad(d.getDate()), month: pad(d.getMonth() + 1), year: String(d.getFullYear()) };
     });
 
     // Reloaded so the page's own map hydrates from the plant — that object is

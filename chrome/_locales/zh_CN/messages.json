@@ -538,5 +538,20 @@
     },
     "deleteCacheTip": {
         "message": "清除缓存"
+    },
+    "restoreFailed": {
+        "message": "该页面已无法恢复"
+    },
+    "parsingData": {
+        "message": "正在解析数据中"
+    },
+    "pleaseWait": {
+        "message": "请稍后再试..."
+    },
+    "noHistoryFound": {
+        "message": "没有找到浏览历史"
+    },
+    "noClosedFound": {
+        "message": "没有找到关闭页面的记录"
     }
 }

@@ -232,6 +232,25 @@ test('escapeHtmlText escapes ampersands first, so one pass is enough', () => {
     assert.equal(helpers.escapeHtmlText('a &lt; b'), 'a &amp;lt; b');
 });
 
+test('the shared tooltip drops a URL that only repeats the title', () => {
+    // This is the one behaviour the two copies actually disagreed on, and the
+    // reason the merge is worth anything: the popup skipped a URL equal to the
+    // title, bookmark.js pushed it, so a bookmark titled by its URL read the
+    // same string twice in one tooltip. Nothing asserted it, which is how the
+    // two comments describing the drift ended up saying opposite things.
+    assert.equal(helpers.tooltipText('Docs', 'https://x.test/a', '12:00'),
+        'Docs | https://x.test/a | 12:00');
+    assert.equal(helpers.tooltipText('https://x.test/a', 'https://x.test/a', '12:00'),
+        'https://x.test/a | 12:00');
+    // `time` is optional: a most-visited row has none, and 'undefined' must not
+    // be interpolated into the tooltip.
+    assert.equal(helpers.tooltipText('Docs', 'https://x.test/a'), 'Docs | https://x.test/a');
+    // A bookmarklet's URL is javascript:, too long and useless as a tooltip.
+    assert.equal(helpers.tooltipText('Run it', 'javascript:void 0', '12:00'), 'Run it | 12:00');
+    assert.equal(helpers.tooltipText('', 'javascript:void 0'), '[Bookmarklet]');
+    assert.equal(helpers.tooltipText('', '', ''), '');
+});
+
 test('escapeHtmlText tolerates a missing title', () => {
     // chrome.history hands back entries with no title at all, and the render
     // loops still interpolate the field.
@@ -2161,6 +2180,119 @@ test('dateFormat falls back to the default until storage is ready', async (t) =>
 
     localStorage['rh-date'] = 'yyyy/mm/dd';
     assert.equal(h.dateFormat(), 'yyyy/mm/dd');
+});
+
+/**
+ * Drive `deleteHistoryItem('selected')` with one checked row and a stub
+ * `chrome.history.deleteUrl`, returning the URLs it was called with and whether
+ * it got a callback at all.
+ *
+ * The callback flag is the point: `deleteUrl()` reports failure through
+ * `chrome.runtime.lastError`, which is only delivered to a callback. A stub that
+ * calls `cb()` unconditionally cannot tell "passed a callback" from "passed
+ * none", so the assertion would rest on the URL alone and stay green after the
+ * implementation dropped the callback — the exact regression this helper exists
+ * to catch.
+ */
+async function runSelectedDelete(t, deleteUrl) {
+    const historyCore = await importModule('modules/history-core.js');
+    restoreStorage(t, ['rh-group']);
+    localStorage['rh-group'] = 'no';
+
+    const root = dom.el('rh-views-insert');
+    root.style.display = 'block';
+    dom.el('rh-views-search-insert').style.display = 'none';
+    dom.el('alert-holder').style.display = 'none';
+    dom.el('alert-holder-loading');
+
+    // The row the delete sweep removes: `div.item-holder` wrapping the checked
+    // checkbox. It has to be a real ancestor — deleteHistoryItem() reaches the
+    // row with `el.closest('div.item-holder').remove()`.
+    const holder = dom.makeEl('div');
+    holder.className = 'item-holder';
+    const input = dom.makeEl('input');
+    input.className = 'chkbx';
+    input.value = 'https://gone.test/page';
+    input.checked = true;
+    holder.appendChild(input);
+    root.appendChild(holder);
+    dom.register('#rh-views-insert .checkbox input:checked', [input]);
+
+    const seen = [];
+    const callbackPassed = [];
+    await withChromeApi({
+        history: {
+            deleteUrl: (o, cb) => {
+                seen.push(o.url);
+                callbackPassed.push(typeof cb === 'function');
+                deleteUrl(o);
+                if (typeof cb === 'function') cb();
+            },
+            search: (_q, cb) => cb([]),
+        },
+        runtime: { lastError: undefined, id: 'test-extension-id' },
+    }, async () => {
+        historyCore.deleteHistoryItem('selected');
+    });
+    return { seen, callbackPassed, input, holder, root };
+}
+
+test('deleteHistoryItem("selected") passes a callback so a failed delete is visible', async (t) => {
+    // chrome.history.deleteUrl() reports through chrome.runtime.lastError, not
+    // by throwing. Called without a callback the failure is simply lost: the
+    // row was already removed from the DOM, so the user sees a page disappear
+    // from the list and come back on the next load with nothing to explain it.
+    //
+    // Asserted as "the callback was a function", not just "deleteUrl was
+    // called": the URL was already right in the version that passed no
+    // callback at all, so a URL-only assertion cannot see this regression.
+    const { seen, callbackPassed } = await runSelectedDelete(t, () => {});
+    assert.deepEqual(seen, ['https://gone.test/page']);
+    assert.deepEqual(callbackPassed, [true], 'deleteUrl has to be given a callback');
+});
+
+test('deleteHistoryItem("selected") survives a deleteUrl that reports an error', async (t) => {
+    // The failure path itself must not throw: it runs inside the same loop that
+    // removes the rows, and a throw there leaves the rest of the list intact
+    // while the page has already been half-cleared.
+    const historyCore = await importModule('modules/history-core.js');
+    restoreStorage(t, ['rh-group']);
+    localStorage['rh-group'] = 'no';
+    const root = dom.el('rh-views-insert');
+    root.style.display = 'block';
+    dom.el('rh-views-search-insert').style.display = 'none';
+    dom.el('alert-holder').style.display = 'none';
+    dom.el('alert-holder-loading');
+
+    const holder = dom.makeEl('div');
+    holder.className = 'item-holder';
+    const input = dom.makeEl('input');
+    input.className = 'chkbx';
+    input.value = 'https://gone.test/page';
+    input.checked = true;
+    holder.appendChild(input);
+    root.appendChild(holder);
+    dom.register('#rh-views-insert .checkbox input:checked', [input]);
+
+    const savedWarn = console.warn;
+    const warned = [];
+    console.warn = (...args) => warned.push(args.join(' '));
+    t.after(() => { console.warn = savedWarn; });
+
+    assert.doesNotThrow(() => withChromeApi({
+        history: {
+            deleteUrl: (_o, cb) => {
+                globalThis.chrome.runtime.lastError = { message: 'no such url' };
+                cb();
+                delete globalThis.chrome.runtime.lastError;
+            },
+            search: (_q, cb) => cb([]),
+        },
+        runtime: { lastError: undefined, id: 'test-extension-id' },
+    }, () => historyCore.deleteHistoryItem('selected')));
+
+    assert.equal(warned.length, 1, 'the failure has to be reported somewhere');
+    assert.match(warned[0], /no such url/);
 });
 
 test('deleteHistoryItem("range") deletes exactly the range the inputs describe', async (t) => {

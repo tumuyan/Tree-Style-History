@@ -55,10 +55,17 @@ const NUMERIC_WRAPPER = /\b(?:Number|parseInt|parseFloat|JSON\.\w+)\s*\(\s*$/;
 const NUMBER_LITERAL = /^-?\d+(?:\.\d+)?\b/;
 
 // A `/` that opens a regex literal rather than a comment can only follow an
-// operator, a bracket, a `;`, a newline, or `return`. Without this, the `//`
-// in `/^(http|https)\\:\\/\\//` reads as a line comment and the rest of the
-// file — including the code the rule is supposed to inspect — is dropped.
-const BEFORE_REGEX = /[(,=:[!&|?{};\s]$|\breturn\s*$/;
+// operator, a bracket, a `;`, or a keyword that expects an expression. Without
+// this, the `//` in `/^(http|https)\\:\\/\\//` reads as a line comment and the rest
+// of the file — including the code the rule is supposed to inspect — is dropped.
+//
+// Whitespace is deliberately absent: `hits / total` ends in a space, and
+// accepting that as "an expression may start here" made the scan read the
+// division as a literal, close it on the `/` of a later `</td>` and swallow the
+// code in between. Requiring `/\S` instead would be wrong the other way —
+// `/ /g` is a real literal. Kept identical to tests/static.test.mjs by the
+// parity guard there.
+const BEFORE_REGEX = /(?:^|[(,=:[!&|?{};]|\b(?:return|typeof|case|in|of|delete|void|new|do|else|yield|await))\s*$/;
 
 /**
  * Index just past the closing `/` of the regex literal beginning at `start`

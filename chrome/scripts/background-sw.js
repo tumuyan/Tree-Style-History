@@ -314,7 +314,12 @@ function extractHostnameFromFaviconUrl(url) {
             du = u.searchParams.get('domain_url');
             if (du) return new URL(decodeURIComponent(du)).hostname;
         }
-    } catch {}
+    } catch {
+        // Not an error: `null` is the documented answer for "this URL is not
+        // one of ours", and it is what every caller already handles. Logging
+        // here would put a line in the console for every malformed favicon URL
+        // the browser fires at the interceptor.
+    }
     return null;
 }
 
@@ -399,7 +404,12 @@ function setNegativeCache(cache) {
     _negativeCache = cache;
     try {
         localStorage['favicon-negative-cache'] = JSON.stringify(cache);
-    } catch {}
+    } catch {
+        // Best-effort write, same as cachePutSafe() below: the in-memory copy
+        // is already updated, when the favicon is looked up again it comes
+        // back a 404 and lands here again, and losing the persisted copy for
+        // one browser session costs a handful of repeat requests.
+    }
 }
 
 /**
@@ -510,7 +520,11 @@ function cachePutSafe(cache, request, response) {
     try {
         var p = cache.put(request, response);
         if (p && typeof p.catch === 'function') p.catch(function () {});
-    } catch {}
+    } catch {
+        // Cache API unavailable (private window, quota exhausted). The response
+        // already went back to the page, so the only thing lost is one cached
+        // icon.
+    }
 }
 
 // Try the configured fallback service for the same hostname.

@@ -6,7 +6,8 @@ import { $, $$, createElement, getStyle } from './dom-helper.js';
 import {
     TimeToStr, formatDate, truncate, returnLang, get_host,
     getFaviconUrl, getFaviconOnerror, setupFaviconElement,
-    escapeHtmlAttr, escapeHtmlText, executeBookmarklet, isBookmarkletUrl
+    escapeHtmlAttr, escapeHtmlText, executeBookmarklet, isBookmarkletUrl,
+    uniqueId, tooltipText
 } from './modules/helpers.js';
 import { filtUrl } from './modules/config.js';
 import { getActiveHistory, toggleGroup, getMoreItems, alertLoadingHistory, clearRowColor, groupTitleOf } from './modules/history-core.js';
@@ -617,10 +618,10 @@ document.addEventListener('DOMContentLoaded', function () {
                         var host = rha[thisc.counter].host;
                         if (host !== undefined) {
                             if (!groups.has(host)) {
-                                var toggleid = 'toggle-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
-                                var moreid = 'more-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
-                                var errorid = 'error-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
-                                var groupid = 'group-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
+                                var toggleid = uniqueId('toggle');
+                                var moreid = uniqueId('more');
+                                var errorid = uniqueId('error');
+                                var groupid = uniqueId('group');
                                 var faviconUrl = rha[thisc.counter].favicon || '';
                                 var escapedHost = escapeHtmlAttr(host);
                                 // Text position, so the text escaper: it leaves
@@ -661,7 +662,7 @@ document.addEventListener('DOMContentLoaded', function () {
                                 }
                             }
 
-                            var selectid = 'select-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
+                            var selectid = uniqueId('select');
                             var rawUrl = rha[thisc.counter].url || '';
                             var rawTime = rha[thisc.counter].time || '';
                             var displayTitleText = rha[thisc.counter].title || '';
@@ -677,21 +678,12 @@ document.addEventListener('DOMContentLoaded', function () {
                             // records what the value was escaped for.
                             var escapedDisplayTitle = escapeHtmlText(displayTitleText);
 
-                            var tooltipParts = [];
-                            if (displayTitleText) {
-                                tooltipParts.push(displayTitleText);
-                            }
-                            if (!isBookmarkletUrl(rawUrl) && rawUrl) {
-                                tooltipParts.push(rawUrl);
-                            }
-                            if (rawTime) {
-                                tooltipParts.push(rawTime);
-                            }
-                            var tooltipText = tooltipParts.join(' | ');
-                            if (!tooltipText) {
-                                tooltipText = isBookmarkletUrl(rawUrl) ? '[Bookmarklet]' : rawUrl;
-                            }
-                            var escapedTooltip = escapeHtmlAttr(tooltipText);
+                            // Same tooltip the popup builds, from one
+                            // function. The two copies had drifted the other
+                            // way round: the popup skipped a URL that repeats
+                            // the title and this one did not, so a bookmark
+                            // titled by its URL showed it twice.
+                            var escapedTooltip = escapeHtmlAttr(tooltipText(displayTitleText, rawUrl, rawTime));
 
                             var item;
                             item = '<div class="item">';
@@ -770,8 +762,8 @@ document.addEventListener('DOMContentLoaded', function () {
                     while (thisc.counter < rha.length && Date.now() < deadline) {
                         if (rha[thisc.counter] !== undefined) {
 
-                            var selectid = 'select-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
-                            var errorid = 'error-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
+                            var selectid = uniqueId('select');
+                            var errorid = uniqueId('error');
                             var rawUrl = rha[thisc.counter].url || '';
                             var rawTime = rha[thisc.counter].time || '';
                             var displayTitleText = rha[thisc.counter].title || '';
@@ -787,21 +779,12 @@ document.addEventListener('DOMContentLoaded', function () {
                             // records what the value was escaped for.
                             var escapedDisplayTitle = escapeHtmlText(displayTitleText);
 
-                            var tooltipParts = [];
-                            if (displayTitleText) {
-                                tooltipParts.push(displayTitleText);
-                            }
-                            if (!isBookmarkletUrl(rawUrl) && rawUrl) {
-                                tooltipParts.push(rawUrl);
-                            }
-                            if (rawTime) {
-                                tooltipParts.push(rawTime);
-                            }
-                            var tooltipText = tooltipParts.join(' | ');
-                            if (!tooltipText) {
-                                tooltipText = isBookmarkletUrl(rawUrl) ? '[Bookmarklet]' : rawUrl;
-                            }
-                            var escapedTooltip = escapeHtmlAttr(tooltipText);
+                            // Same tooltip the popup builds, from one
+                            // function. The two copies had drifted the other
+                            // way round: the popup skipped a URL that repeats
+                            // the title and this one did not, so a bookmark
+                            // titled by its URL showed it twice.
+                            var escapedTooltip = escapeHtmlAttr(tooltipText(displayTitleText, rawUrl, rawTime));
 
                             var faviconUrl = rha[thisc.counter].favicon || '';
                             var item;

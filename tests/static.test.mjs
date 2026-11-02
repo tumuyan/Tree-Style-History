@@ -435,6 +435,72 @@ test('every returnLang() key used in JS exists in both locales', () => {
     }
 });
 
+test('no user-visible string in a page script is hard-coded Chinese', () => {
+    // The tree pages' "nothing found" placeholders were literal Chinese, so an
+    // English user saw 没有找到浏览历史 in an otherwise English tree. The i18n
+    // assertions above all check the other direction — that a key the code asks
+    // for exists — and none of them can see a string that never asked.
+    //
+    // Chinese comments are fine and stay: scanJs() has already dropped them.
+    const offenders = [];
+    walkScripts((file, src) => {
+        const rel = file.replace(/\\/g, '/');
+        // The generated copy of the shared layer is not hand-written.
+        if (rel.endsWith('background-utils.js')) return;
+        for (const { line, text } of hardCodedChineseIn(scanJs(src))) {
+            offenders.push(`${rel}:${line}: ${text.slice(0, 40)}`);
+        }
+    });
+    assert.deepEqual(offenders, [], 'these strings reach the screen untranslated');
+});
+
+test('the hard-coded-Chinese guard sees the shapes it claims to catch', () => {
+    // Same rule as above, run against invented source. The first version of it
+    // matched literals line by line, so every shape below reported zero and the
+    // guard was green for the strings most likely to exist: the multi-line
+    // template holding a page's placeholder markup.
+    const foundIn = (src) => hardCodedChineseIn(scanJs(src)).map((o) => o.line);
+
+    assert.deepEqual(foundIn("var a = '没有找到记录';"), [1], 'a one-line literal');
+    assert.deepEqual(foundIn('var h = `<div class="empty">\n  没有找到记录\n</div>`;'), [1],
+        'a multi-line template');
+    // An escaped quote moves the closing delimiter, and `'([^']*)'` read the
+    // escaped one as the end — the match stopped short of the Chinese.
+    assert.deepEqual(foundIn("var a = 'It\\'s 没有找到记录';"), [1], 'an escaped single quote');
+    assert.deepEqual(foundIn('var a = "say \\"没有找到记录\\"";'), [1], 'an escaped double quote');
+    // The quote inside a regex literal is not a string delimiter. A regex
+    // scanning already-stripped text cannot know that: it opened a literal on
+    // the quote in `/'/g` and swallowed the real literal after it.
+    assert.deepEqual(foundIn("var s = t.replace(/'/g, ''); var x = '没有找到记录';"), [1],
+        'a quote inside a regex literal');
+    // A division read as a regex literal. `hits / total` ends in a space, and the
+    // old BEFORE_REGEX accepted a space as "an expression may start here"; the
+    // scan then closed the literal on the `/` of `</td>` and dropped the string
+    // between the two, so the span list came back empty instead of red.
+    assert.deepEqual(foundIn("var pct = hits / total; item += '<td>没有找到记录</td>';"), [1],
+        'a division before an inline HTML string');
+    // ...and the fix must not overreach: `/ /g` matches a single space and is a
+    // real literal. Requiring `/\S` — the obvious way to kill the division above
+    // — misreads this one as a division, and then the `/` of the trailing
+    // comment closes the "literal" it thinks is still open, so both the read and
+    // the comment after it disappear. The comment is what makes this probe
+    // discriminate: without a later `/` on the line the misread is harmless and
+    // the assertion passes either way.
+    assert.deepEqual(foundIn("var s = 'a b'.replace(/ /g, ''); var x = '没有找到记录'; // note"), [1],
+        'a regex literal that starts with a space');
+
+    // The line number has to point at the literal, since that is the only
+    // locator the message gives.
+    assert.deepEqual(foundIn("var a = 1;\nvar b = 2;\nvar c = '没有找到记录';"), [3],
+        'the reported line is the literal, not the top of the file');
+
+    // And the two shapes it must never flag: Chinese prose (this repo writes its
+    // comments in Chinese) and a string that goes through i18n.
+    assert.deepEqual(foundIn('// 没有找到记录\nvar a = 1;'), [], 'a line comment');
+    assert.deepEqual(foundIn('/* 没有找到记录 */\nvar a = 1;'), [], 'a block comment');
+    assert.deepEqual(foundIn("var a = returnLang('noClosedFound');"), [], 'a translated string');
+});
+
 test('every data-lang-string element also carries the .lang class', () => {
         // page-init.js fills only elements matching '.lang', so an element with
         // just data-lang-string renders as an empty box — silently, with no console
@@ -872,11 +938,23 @@ test('user-controlled values are escaped before being interpolated into HTML att
 // ---------------------------------------------------------------------------
 
 // A `/` that opens a regex literal rather than a comment can only follow an
-// operator, a bracket, a `;`, a newline, or `return`. Without this, `.replace(/'/g, …)`
-// leaves the quote state open for the rest of the file and the comment
-// stripping silently stops working — which is how a doc comment mentioning
-// title_fix() came to look like a call to it.
-const BEFORE_REGEX = /[(,=:[!&|?{};\s]$|\breturn\s*$/;
+// operator, a bracket, a `;`, or a keyword that expects an expression. Without
+// this, `.replace(/'/g, …)` leaves the quote state open for the rest of the file
+// and the comment stripping silently stops working — which is how a doc comment
+// mentioning title_fix() came to look like a call to it.
+//
+// Whitespace alone is NOT one of the tokens it may follow, even though a regex
+// cannot follow an operand either: `hits / total` ends in a space, so listing
+// `\s` here said "a regex can start after a space" and a division read as a
+// literal. `endOfRegex()` then closed it on the `/` of a later `</td>` and the
+// string in between vanished from the span list — the shape
+// `hits / total; item += '<td>…</td>'` was invisible. The operands themselves
+// are the discriminator, and they are what this list enumerates.
+//
+// The tempting one-liner — "a regex cannot start with a space, so require
+// `/\S`" — is wrong in the other direction: `/ /g` is a real literal (matching
+// one space), and rejecting it left the comment after it unstripped.
+const BEFORE_REGEX = /(?:^|[(,=:[!&|?{};]|\b(?:return|typeof|case|in|of|delete|void|new|do|else|yield|await))\s*$/;
 
 /**
  * Index just past the closing `/` of the regex literal beginning at `start`
@@ -909,26 +987,42 @@ function endOfRegex(src, start) {
 }
 
 /**
- * Remove `//` and block comments from a JavaScript source.
+ * Comment-strip `src` and, in the same pass, record where each string or
+ * template literal starts and ends.
  *
- * (Distinct from the `stripComments` above, which drops `<!-- -->` from HTML.)
+ * The span list is why this is not `stripJsComments()` plus a regex over its
+ * output: by the time the comments are gone, a `'` inside a regex literal is
+ * indistinguishable from a real string delimiter. `t.replace(/'/g, '')` made a
+ * regex-based scan open a literal on that quote and close it on the `'` of the
+ * next real string, so the two spans reported were `'/g, '` and
+ * `"'); var x = '"` — neither containing the Chinese in between.
  *
- * Prose that mentions a symbol — "the old title_fix() deleted…" — must not be
- * mistaken for a call to it. String and regex literals are tracked so that a
- * `//` or `/*` inside one survives.
+ * Quote state here is the same state `stripJsComments()` tracks, so this is a
+ * refactor of that function rather than a second implementation that has to
+ * agree with it: `stripJsComments()` returns `.code` from this scan.
+ *
+ * Known limit, shared with the stripper: a `${}` hole in a template is not
+ * descended into, so a nested backtick inside one ends the outer span early.
+ * Every span still gets its own text, which is all the caller needs.
  */
-function stripJsComments(src) {
-    let out = '';
+function scanJs(src) {
+    let code = '';
+    const literals = [];
     let quote = null;
+    let quoteAt = 0;
     for (let i = 0; i < src.length; i++) {
         const ch = src[i];
         if (quote) {
-            out += ch;
-            if (ch === '\\') { out += src[i + 1] ?? ''; i++; }
-            else if (ch === quote) quote = null;
+            code += ch;
+            if (ch === '\\') { code += src[i + 1] ?? ''; i++; }
+            else if (ch === quote) {
+                literals.push({ at: quoteAt, text: code.slice(quoteAt) });
+                quote = null;
+            }
         } else if (ch === '"' || ch === "'" || ch === '`') {
             quote = ch;
-            out += ch;
+            quoteAt = code.length;
+            code += ch;
         } else if (ch === '/' && src[i + 1] === '/') {
             // Stop *before* the newline, so the loop's i++ lands on it and the
             // `else` below copies it through. Skipping past it deletes the line
@@ -944,24 +1038,54 @@ function stripJsComments(src) {
                 if (src[i] === '\n') nl += '\n';
                 i++;
             }
-            out += nl;
+            code += nl;
             i++;
-        } else if (ch === '/' && BEFORE_REGEX.test(out)) {
+        } else if (ch === '/' && BEFORE_REGEX.test(code)) {
             // Regex literal, but only if one actually closes on this line;
             // otherwise it is a division and has to be copied through as
             // ordinary text.
             const end = endOfRegex(src, i + 1);
             if (end < 0) {
-                out += ch;
+                code += ch;
             } else {
-                out += src.slice(i, end);
+                code += src.slice(i, end);
                 i = end - 1; // the loop's i++ lands on the first character after it
             }
         } else {
-            out += ch;
+            code += ch;
         }
     }
-    return out;
+    return { code, literals };
+}
+
+/**
+ * The comment-free source, i.e. `scanJs(src).code`.
+ *
+ * A wrapper rather than a second scan, so the two can never disagree about
+ * where a literal starts — the spans the Chinese guard reads and the text the
+ * other rules match have to describe the same file.
+ */
+function stripJsComments(src) {
+    return scanJs(src).code;
+}
+
+/**
+ * Every string / template literal in `scan` whose text contains CJK, with the
+ * 1-based line the literal starts on.
+ *
+ * Reads `scanJs()`'s span list instead of matching a regex over the stripped
+ * text: see the note on scanJs() for the quote inside a regex literal, which a
+ * regex over the stripped text reads as a delimiter and hides the rest of the
+ * line behind.
+ */
+function hardCodedChineseIn(scan) {
+    const CJK = /[\u3400-\u9fff\uf900-\ufaff]/;
+    return scan.literals
+        .filter((literal) => CJK.test(literal.text))
+        .map((literal) => ({
+            line: scan.code.slice(0, literal.at).split('\n').length,
+            text: literal.text,
+        }));
 }
 
 test('stripJsComments drops prose that merely mentions a symbol', () => {
@@ -1630,6 +1754,21 @@ test('the numeric-read rule agrees with scripts/check-storage-numbers.mjs', () =
         ['a read on the right of a compound assignment', fn("x -= localStorage['rh-itemsno']\n")],
         // A division, not a regex: both must still see the comment after it.
         ['a division that looks like a regex', fn("var r = total / count; // note\nvar bad = localStorage['rh-itemsno'];\nif (bad > 3) { }\n")],
+        // The same division, but followed on its line by an inline `</td>`: the
+        // scan used to close a bogus literal on that slash and drop the read in
+        // between, and both strippers have to agree that they do not.
+        [
+            'a division followed by an inline closing tag',
+            fn("var pct = hits / total; var s = '<td>x</td>';\n"
+            + "var bad = localStorage['rh-itemsno']; if (bad > 3) { }\n"),
+        ],
+        // ...while a literal that legitimately starts with a space keeps being a
+        // literal, or the fix for the line above hides the read after it.
+        [
+            'a regex literal that starts with a space',
+            fn("var s = 'a b'.replace(/ /g, ''); // note\n"
+            + "var bad = localStorage['rh-itemsno']; if (bad > 3) { }\n"),
+        ],
         // A `/` in regex position with no closing `/` on its line, followed by a
         // line comment. A stripper that lets a literal run past the newline
         // swallows the `// comment` line as if it were part of the pattern —

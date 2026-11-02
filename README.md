@@ -72,6 +72,17 @@ chrome/scripts/background-utils.js 由 chrome/scripts/modules/shared/ 自动生�
 
 ## Changlog
 3.3.2 (未发布)  
+Bug 修复: `history.html?` 后面跟一个不完整的网址（如 `?http://[bad`）会让页面在解析时抛异常，而这个异常逃出了 `DOMContentLoaded` 回调——排在其后的监听器（「按范围删除」的开关）根本没绑上；现在解析失败只是不搜索  
+Bug 修复: 删除历史时 `chrome.history.deleteUrl()` 没有回调，删除失败用户毫无感知（行已经从列表里消失了）；改为读 `runtime.lastError` 并在控制台报出具体网址  
+Bug 修复: 弹窗里点「最近关闭的标签页」失败时（sessionId 过期是常态）静默无反应，点击像点空；现在会提示并写一条控制台日志  
+Bug 修复: `mv-cache` / `rh-pinned` 一旦解析失败会中断整个弹窗的初始化（后面的区块全部空白且不说原因）；两处 `JSON.parse` 都加了收口，解析出非数组也按空处理  
+Bug 修复: 树状历史/最近关闭页的占位节点「正在解析数据中」「没有找到…」写死中文，英文界面里照样显示中文；改走 i18n  
+清理: 删除 `executeBookmarklet()` 里 MV3 不可能走到的 `chrome.tabs.executeScript` 回退分支  
+清理: 删除 `formatItem()` 里两支完全相同、`history.js` 里永真的死分支，以及三个渲染文件里逐行的调试 `console.log`（`feach_History` 每次开一天打一行）  
+清理: 三处裸 `catch {}` 补上「为什么可以吞掉」的说明  
+重构: 收敛三样跨文件的重复：元素随机 id（14 处）、tooltip 拼接（3 份，其中两份已各自漂移）、月份下拉的 12 个 `<option>`（3 份逐字节相同）  
+重构: `feach_History()` 里 `t == 0` 与 `t == n` 两支原来是同一个 `openCursor` 两种区间，合并成一个区间表达式  
+新增校验: `tests/static.test.mjs` 拦住页面脚本里写死的中文（i18n 断言原来只检查「代码问的 key 存在」，看不见「根本没问 key 的字符串」）  
 Bug 修复: 日历翻到上一年时整月错位（首末日的星期按「今年」算），且所有格子的热力值都按今年查，颜色与列表对不上  
 Bug 修复: 弹窗的「最近浏览」与「最常访问」各少显示一条（配额攒到上限时那一条已经渲染，判断只能落在下一轮）  
 Bug 修复: 线性书签/线性历史取消全选后，行被刷成第三种底色；现在改为清掉内联颜色，交回样式表（任何字面量都跟不上主题切换）  
