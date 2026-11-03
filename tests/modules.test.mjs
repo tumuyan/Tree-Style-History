@@ -789,6 +789,35 @@ test('loadOptions back-fills the form from localStorage', (t) => {
     }
 });
 
+test('loadOptions survives a cold profile the worker has not seeded yet', (t) => {
+    // The options page runs its DOMContentLoaded handler as soon as
+    // storageAdapter.ready() resolves, and `defaultConfig()` is the *worker's*
+    // job. On a cold profile the two race: if the page wins, every key it reads
+    // is `undefined`. `localStorage['rh-list-order'].split(',')` then threw, and
+    // because that is the middle of the handler, everything after it was lost —
+    // including the click listeners on 保存并上传 / 下载参数, which is why the
+    // buttons looked dead. Reproduced in a real Chromium at roughly one cold
+    // start in seven.
+    //
+    // Empty storage, no defaultConfig(): exactly the losing side of the race.
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    resetForm();
+    env.reset();
+    try {
+        assert.doesNotThrow(() => config.loadOptions(true), 'loadOptions threw on an unseeded profile');
+        assert.doesNotThrow(() => config.mostVisitedBlocklist(), 'the most-visited blocklist threw on an unseeded profile');
+
+        assert.deepEqual(
+            dom.el('rhlistorder').children.map((c) => c.id),
+            // defaultValues['rh-list-order'], in that order.
+            ['rh-order', 'rct-order', 'rb-order', 'mv-order', 'rt-order'],
+            'an unseeded profile must still draw the default block order',
+        );
+    } finally {
+        t.mock.timers.reset();
+    }
+});
+
 test('a value survives a save/load round-trip unchanged', (t) => {
     t.mock.timers.enable({ apis: ['setTimeout'] });
     formDefaults();

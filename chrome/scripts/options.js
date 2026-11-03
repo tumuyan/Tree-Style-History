@@ -69,9 +69,15 @@ document.addEventListener('DOMContentLoaded', function () {
 
     loadOptionsLang();
     
-    // Initialize default options if not set
-    // 应该没用
-    // defaultConfig(false);
+    // Seed the defaults before building the form.
+    //
+    // `defaultConfig()` is the worker's job, and this page used to just assume
+    // it had already run. On a cold profile it often has not: the form was then
+    // built from `undefined` and showed NaN in every numeric box (and, until
+    // loadOptions() was made tolerant, threw and left the whole page dead).
+    // Seeding here is idempotent — `clean=false` only fills keys that are
+    // missing — and it makes the page independent of the boot order.
+    defaultConfig(false);
 
     // Load saved options
     loadOptions(true);

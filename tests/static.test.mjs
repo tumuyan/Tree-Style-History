@@ -2837,3 +2837,25 @@ if (i >= 0) { recentTabs.splice(i, 1); }`), 0, 'indexOf() + splice is not a walk
     return pIDs[node.id] == true;
 });`), 0, 'the replacement must pass');
 });
+
+test('options.js seeds the defaults itself instead of trusting the worker', () => {
+    // `defaultConfig()` is the service worker's job, and the options page used
+    // to build its form on the assumption that it had already run. On a cold
+    // profile it often has not: the page then read `undefined` for every key and
+    // filled the numeric boxes with NaN, and before loadOptions() was made
+    // tolerant the resulting TypeError killed the rest of the DOMContentLoaded
+    // handler — i.e. every button on the page, save and upload included, became
+    // dead until a manual reload. Reproduced in a real Chromium at roughly one
+    // cold start in seven, which is why this is asserted statically: the e2e
+    // suite cannot be relied on to lose the race on demand.
+    //
+    // The fix is two words, and the failure mode without it is invisible until
+    // the timing goes wrong, so the order of these two calls is the assertion.
+    const src = readScript('scripts/options.js');
+    const seed = src.indexOf('defaultConfig(false)');
+    const load = src.indexOf('loadOptions(true)');
+
+    assert.notEqual(seed, -1, 'options.js must seed the defaults before building the form');
+    assert.notEqual(load, -1, 'options.js must still call loadOptions()');
+    assert.ok(seed < load, 'the seed has to come first, or the form is built from unseeded storage');
+});

@@ -72,6 +72,7 @@ chrome/scripts/background-utils.js 由 chrome/scripts/modules/shared/ 自动生�
 
 ## Changlog
 3.3.2 (未发布)  
+Bug 修复: 冷启动时（新装、清过数据、或 Service Worker 还没把默认配置写进存储）打开选项页，按钮会全部点不动、数字框显示 `NaN`——页面假设 worker 已经把默认值写好，抢先时就整表读到空值：先是 `loadOptions()` 抛异常中断了 `DOMContentLoaded` 里后续所有事件绑定，修好抛异常之后表单仍然是空的；现在选项页自己先 `defaultConfig(false)` 再建表单，不再依赖启动顺序（实测冷启动约 1/7 命中，刷新一次即恢复）  
 Bug 修复: `history.html?` 后面跟一个不完整的网址（如 `?http://[bad`）会让页面在解析时抛异常，而这个异常逃出了 `DOMContentLoaded` 回调——排在其后的监听器（「按范围删除」的开关）根本没绑上；现在解析失败只是不搜索  
 Bug 修复: 删除历史时 `chrome.history.deleteUrl()` 没有回调，删除失败用户毫无感知（行已经从列表里消失了）；改为读 `runtime.lastError` 并在控制台报出具体网址  
 Bug 修复: 弹窗里点「最近关闭的标签页」失败时（sessionId 过期是常态）静默无反应，点击像点空；现在会提示并写一条控制台日志  

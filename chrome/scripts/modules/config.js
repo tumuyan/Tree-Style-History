@@ -89,7 +89,13 @@ function loadOptions(full) {
     $('rbitemsno').value = localStorage['rb-itemsno'];
 
     var rhilo_default = defaultValues["rh-list-order"].split(',');
-    var rhilo = localStorage['rh-list-order'].split(',');
+    // Falls back to the shipped order because this runs on a cold profile in
+    // the window before the worker has seeded `defaultConfig`: the key then
+    // reads `undefined`, `.split()` threw, and the whole DOMContentLoaded
+    // handler died — no labels, no event handlers, so every button on the page
+    // (including save and upload) stayed dead until a manual reload. Same
+    // reason as dateFormat() in helpers.js.
+    var rhilo = (localStorage['rh-list-order'] || defaultValues['rh-list-order']).split(',');
 
     for (var lo in rhilo_default) {
         if (rhilo.indexOf(rhilo_default[lo]) < 0)
@@ -699,29 +705,35 @@ function previewItem() {
 
 function mostVisitedBlocklist() {
     var mvbl = localStorage['mv-blocklist'];
-    if (mvbl.length > 0 && mvbl !== 'false') {
-        mvbl = mvbl.split('|');
-        if (mvbl.length > 0) {
-            for (var i = 0; i < mvbl.length; i++) {
-                if (mvbl[i] !== undefined && mvbl[i] !== '') {
-                    var linkid = 'link-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
-                    // Escaped: entries are URLs taken from browsing history, so
-                    // a quote in one would otherwise close this attribute. This
-                    // function only started running once #mvlist-table existed
-                    // in options.html, so the escaping was added together with
-                    // that element rather than left for the P0 XSS batch that
-                    // still covers filteredDomainsList() and addList() below.
-                    // One escaper per context: the same value goes into a title
-                    // attribute and into the visible text, and the text
-                    // escaper leaves quotes alone rather than rewriting them.
-                    var mvblAttr = escapeHtmlAttr(mvbl[i]);
-                    var mvblText = escapeHtmlText(mvbl[i]);
-                    var tr = createElement('tr', { html: '<td><div title="' + mvblAttr + '">' + mvblText + '</div></td><td style="width:20px;"><a href="#" id="' + linkid + '"><img alt="Restore" src="images/remove.png"></a></td>', 'class': 'op-item' });
-                    $('mvlist-table').appendChild(tr);
-                    $(linkid).addEventListener('click', function () {
-                        this.closest('tr').remove();
-                    });
-                }
+    // Unset reads `undefined` on a cold profile, in the same window loadOptions()
+    // describes: the worker has not seeded `defaultConfig` yet. `.length` threw
+    // there, and because this call sits in the middle of the DOMContentLoaded
+    // handler, everything after it — every button's listener — was lost.
+    // `false` is what saveOptions() stores for an empty list.
+    if (mvbl === undefined || mvbl === 'false' || mvbl.length == 0) {
+        return;
+    }
+    mvbl = mvbl.split('|');
+    if (mvbl.length > 0) {
+        for (var i = 0; i < mvbl.length; i++) {
+            if (mvbl[i] !== undefined && mvbl[i] !== '') {
+                var linkid = 'link-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
+                // Escaped: entries are URLs taken from browsing history, so
+                // a quote in one would otherwise close this attribute. This
+                // function only started running once #mvlist-table existed
+                // in options.html, so the escaping was added together with
+                // that element rather than left for the P0 XSS batch that
+                // still covers filteredDomainsList() and addList() below.
+                // One escaper per context: the same value goes into a title
+                // attribute and into the visible text, and the text
+                // escaper leaves quotes alone rather than rewriting them.
+                var mvblAttr = escapeHtmlAttr(mvbl[i]);
+                var mvblText = escapeHtmlText(mvbl[i]);
+                var tr = createElement('tr', { html: '<td><div title="' + mvblAttr + '">' + mvblText + '</div></td><td style="width:20px;"><a href="#" id="' + linkid + '"><img alt="Restore" src="images/remove.png"></a></td>', 'class': 'op-item' });
+                $('mvlist-table').appendChild(tr);
+                $(linkid).addEventListener('click', function () {
+                    this.closest('tr').remove();
+                });
             }
         }
     }
@@ -732,23 +744,27 @@ function mostVisitedBlocklist() {
 
 function filteredDomainsList() {
     var fbl = localStorage['rh-filtered'];
-    if (fbl.length > 0 && fbl !== 'false') {
-        fbl = fbl.split('|');
-        if (fbl.length > 0) {
-            for (var i = 0; i < fbl.length; i++) {
-                if (fbl[i] !== undefined && fbl[i] !== '') {
-                    var linkid = 'link-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
-                    // One escaper per context: the same value goes into a title
-                    // attribute and into the visible text, and the text escaper
-                    // leaves quotes alone rather than rewriting them.
-                    var fblAttr = escapeHtmlAttr(fbl[i]);
-                    var fblText = escapeHtmlText(fbl[i]);
-                    var tr = createElement('tr', { html: '<td><div title="' + fblAttr + '">' + fblText + '</div></td><td style="width:20px;"><a href="#" id="' + linkid + '"><img alt="Restore" src="images/remove.png"></a></td>', 'class': 'op-item' });
-                    $('flist-table').appendChild(tr);
-                    $(linkid).addEventListener('click', function () {
-                        this.closest('tr').remove();
-                    });
-                }
+    // Same cold-start window as mostVisitedBlocklist() above: both keys are
+    // seeded by the worker, and reading them before that lands is not an error
+    // the caller can recover from — it aborts the rest of page initialisation.
+    if (fbl === undefined || fbl === 'false' || fbl.length == 0) {
+        return;
+    }
+    fbl = fbl.split('|');
+    if (fbl.length > 0) {
+        for (var i = 0; i < fbl.length; i++) {
+            if (fbl[i] !== undefined && fbl[i] !== '') {
+                var linkid = 'link-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
+                // One escaper per context: the same value goes into a title
+                // attribute and into the visible text, and the text escaper
+                // leaves quotes alone rather than rewriting them.
+                var fblAttr = escapeHtmlAttr(fbl[i]);
+                var fblText = escapeHtmlText(fbl[i]);
+                var tr = createElement('tr', { html: '<td><div title="' + fblAttr + '">' + fblText + '</div></td><td style="width:20px;"><a href="#" id="' + linkid + '"><img alt="Restore" src="images/remove.png"></a></td>', 'class': 'op-item' });
+                $('flist-table').appendChild(tr);
+                $(linkid).addEventListener('click', function () {
+                    this.closest('tr').remove();
+                });
             }
         }
     }

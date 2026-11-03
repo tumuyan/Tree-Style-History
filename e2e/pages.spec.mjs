@@ -159,6 +159,25 @@ async function settle(page) {
     await new Promise((resolve) => setTimeout(resolve, SETTLE_MS));
 }
 
+/**
+ * Read `localStorage[key]` off `page` until it equals `expected`, or give up.
+ *
+ * chrome.storage.onChanged is delivered to the other contexts asynchronously,
+ * with no ordering guarantee against the write's own callback in the page that
+ * made it. So "the other page can see it" is a property to poll for, not to
+ * read once — a single read fails intermittently on a busy profile.
+ */
+async function waitForCacheValue(page, key, expected, timeout = 5000) {
+    const deadline = Date.now() + timeout;
+    let seen;
+    do {
+        seen = await page.evaluate((k) => localStorage[k], key);
+        if (seen === expected) return seen;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+    } while (Date.now() < deadline);
+    return seen;
+}
+
 test('the extension loads and its service worker boots', { skip: SKIP }, async () => {
     assert.match(extensionId, /^[a-p]{32}$/, `expected a packed extension id, got: ${extensionId}`);
 });
@@ -1013,4 +1032,193 @@ test('history2.html shows its node count under a label that says so', { skip: SK
     assert.deepEqual(jsErrors, [], 'history2.html threw');
     assert.match(label, /tree/i, `the total line still reads ${JSON.stringify(label)}`);
     assert.doesNotMatch(label, /history items/i, 'the node count is labelled as a history-row total');
+});
+
+/**
+ * Open options.html and wait for the form to be built.
+ *
+ * The wait has a purpose beyond timing: the form is built from `localStorage`,
+ * which the worker seeds — and on a cold profile the page used to get there
+ * first and render NaN in every box, so "the page opened" said nothing about
+ * whether the buttons below were wired up. `#rhitemsno` only holds a number
+ * once `loadOptions()` has run, so it doubles as the "the handler got to the
+ * end" signal. It is also the exact statement that used to be false: when
+ * loadOptions() threw, everything after it — every listener on the page — was
+ * lost, and this wait is what reports that instead of a confusing timeout on
+ * `#saveUpload`.
+ */
+async function openOptionsPage() {
+    const page = await context.newPage();
+    const errors = collectErrors(page);
+    await page.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: 'load' });
+    await settle(page);
+    const ready = await page
+        .waitForFunction(() => /^\d+$/.test(document.getElementById('rhitemsno').value), null, { timeout: 10000 })
+        .then(() => true, () => false);
+    assert.ok(
+        ready,
+        'options.html never finished initialising: the form still holds no numbers, so none of its buttons are wired',
+    );
+    return { page, errors };
+}
+
+test('options.html really writes the config into chrome.storage.sync', { skip: SKIP }, async () => {
+    // The upload is the one shipped feature nothing else here touches, and it
+    // is also the one a sandbox invites you to fake: it is easy to test the
+    // promise chain in tests/modules.test.mjs and call that "the upload works",
+    // while the store underneath is a Map in a stub.
+    //
+    // A profile that never signed in is therefore the first thing asserted
+    // about: chrome.storage.sync still accepts writes there, still enforces the
+    // 8KB per-item quota, and its contents survive a reload — but it is a local
+    // mirror, not a server round trip. The quota constant is the cheapest proof
+    // that this is the real store and not chrome.storage.local under another
+    // name (the two are separate namespaces, which saveOptions() depends on).
+    const { page, errors } = await openOptionsPage();
+    const { jsErrors } = errors;
+
+    // The success label is whatever chrome.i18n resolves it to, not the English
+    // literal: getMessage() follows the browser UI language, and on a zh_CN
+    // machine the button reads 已保存！. Asserting 'Saved!' made the case pass or
+    // fail on the locale of the box it ran on rather than on the upload.
+    const savedLabel = await page.evaluate(() => chrome.i18n.getMessage('saved'));
+
+    const before = await page.evaluate(() => new Promise((resolve) => chrome.storage.sync.get(null, resolve)));
+    const formValue = await page.inputValue('#rhitemsno');
+
+    // Three domains through the form, so the sliced path runs instead of the
+    // empty-list branch: `rh-filtered` is never uploaded as itself, because one
+    // domain list blows the per-item quota. It goes up as filterlist0..N plus a
+    // count, and the count is what mergeList() reads back.
+    for (const domain of ['sample-a.test', 'sample-b.test', 'sample-c.test']) {
+        await page.fill('#flist-add-i', domain);
+        await page.click('#flist-add-b');
+    }
+
+    await page.click('#saveUpload');
+    // saveOptions() reports the outcome on the button, and only after the
+    // writes settle. Waiting for the final label instead of a fixed delay is
+    // what makes a stuck "Saving..." a failure rather than a slow pass — so the
+    // timeout is not swallowed: it is re-thrown with the label the button is
+    // actually stuck on, because a bare "Timeout exceeded" says nothing about
+    // whether the upload failed ('Fail') or never settled ('Saving...').
+    await page
+        .waitForFunction(
+            (label) => document.getElementById('saveUpload').value === label,
+            savedLabel,
+            { timeout: 10000 },
+        )
+        .catch(async (err) => {
+            const stuck = await page
+                .evaluate(() => document.getElementById('saveUpload').value)
+                .catch(() => '<unreadable>');
+            throw new Error(
+                `the upload button never reported ${JSON.stringify(savedLabel)} — it reads ${JSON.stringify(stuck)}`,
+                { cause: err },
+            );
+        });
+
+    const observed = await page.evaluate(() => new Promise((resolve) => {
+        chrome.storage.sync.get(null, (cloud) => resolve({
+            button: document.getElementById('saveUpload').value,
+            cloud,
+            perItemQuota: chrome.storage.sync.QUOTA_BYTES_PER_ITEM,
+        }));
+    }));
+    await page.close();
+
+    assert.deepEqual(jsErrors, [], 'the upload path threw');
+    assert.equal(observed.button, savedLabel, 'the button never reported success');
+    assert.equal(observed.perItemQuota, 8192, 'chrome.storage.sync is not the store this upload writes to');
+    assert.ok(
+        Object.keys(observed.cloud).length > Object.keys(before).length,
+        'not one key reached chrome.storage.sync',
+    );
+    // Config keys travel with every '-' spelled '_', so the dash-spelled name
+    // must be absent — that pair is what downloadOptions() mirrors back.
+    assert.equal(observed.cloud.rh_itemsno, formValue, 'rh-itemsno did not arrive as rh_itemsno, with the form value');
+    assert.equal(observed.cloud.rh_filtered, undefined, 'the domain list is uploaded as slices, never whole');
+    assert.match(String(observed.cloud.filterlist0), /sample-a\.test/, 'filterlist0 does not carry the domains');
+    assert.equal(observed.cloud.filterlist_slices, '1', 'the slice count is what mergeList() indexes with');
+});
+
+test('the download button restores the cloud copy and reloads the page', { skip: SKIP }, async () => {
+    // The 3.3.0 regression: a stray `ve = result` in this callback threw under
+    // strict mode, so the handler died on its first statement — no key was
+    // restored, location.reload() was never reached and the button sat on
+    // "Saving..." forever. Nothing here was covered: the module tests call
+    // downloadOptions() directly, bypassing the strict-mode module evaluation
+    // that turns the assignment into a ReferenceError.
+    //
+    // So this case asserts the three observable consequences, not the call:
+    // the value comes back, the form shows it, and the page reloads.
+    const { page, errors } = await openOptionsPage();
+    const { jsErrors } = errors;
+
+    // A second page, deliberately left open and touched by nothing. The store
+    // behind localStorage is chrome.storage.local, and the adapter mirrors it
+    // into the cache of *every* page in this context through
+    // chrome.storage.onChanged — so "did this case change a knob the rest of
+    // the file shares" is only answerable from another context's cache, not
+    // from the page that did the writing.
+    const witness = await openOptionsPage();
+    const original = await page.evaluate(() => localStorage['rh-itemsno']);
+    assert.equal(
+        await waitForCacheValue(witness.page, 'rh-itemsno', original),
+        original,
+        'the two pages disagree before the case even starts — rh-itemsno is not being read from one store',
+    );
+
+    try {
+        // A cloud copy that disagrees with the local one, so "restored" is
+        // distinguishable from "nothing happened".
+        await page.evaluate(() => new Promise((resolve) => {
+            chrome.storage.sync.set({ rh_itemsno: '37' }, resolve);
+        }));
+        await page.evaluate(() => { localStorage['rh-itemsno'] = '5'; });
+
+        const reloaded = page
+            .waitForEvent('framenavigated', { predicate: (frame) => frame === page.mainFrame(), timeout: 15000 })
+            .then(() => true, () => false);
+
+        await page.click('#downloadConfig');
+        const didReload = await reloaded;
+        await settle(page);
+
+        const after = await page.evaluate(() => ({
+            stored: localStorage['rh-itemsno'],
+            form: document.getElementById('rhitemsno').value,
+        }));
+        const mirrored = await waitForCacheValue(witness.page, 'rh-itemsno', '37');
+
+        assert.deepEqual(jsErrors, [], 'the download button threw — its handler never got past the first statement');
+        assert.equal(didReload, true, 'the page never refreshed, so the button is stuck on "Saving..."');
+        assert.equal(after.stored, '37', 'the cloud value never reached chrome.storage.local');
+        assert.equal(after.form, '37', 'the form was not rebuilt from the restored value');
+        // downloadOptions() writes localStorage, i.e. chrome.storage.local, and
+        // that is the same road the restore travels — so the other page's cache
+        // has to see both hops, not just this page's.
+        assert.equal(mirrored, '37', 'the restored value never left the page that clicked the button');
+    } finally {
+        // rh-itemsno is a rendering knob every other case shares, and undoing it
+        // is a write to shared state, not to this page alone. So the undo is
+        // read back before the pages are closed: localStorage[...] alone is a
+        // fire-and-forget setItem() (the adapter persists it with an ignored
+        // promise) and the sync.remove() callback does not settle it either.
+        await page.evaluate((value) => new Promise((resolve) => {
+            localStorage['rh-itemsno'] = value;
+            chrome.storage.local.get('rh-itemsno', (got) => resolve(got['rh-itemsno']));
+        }), original).then((landed) => {
+            assert.equal(landed, String(original), `restoring rh-itemsno left ${JSON.stringify(landed)} in storage`);
+        });
+        await page.evaluate(() => new Promise((resolve) => chrome.storage.sync.remove('rh_itemsno', resolve)));
+        assert.equal(
+            await waitForCacheValue(witness.page, 'rh-itemsno', String(original)),
+            String(original),
+            'the restore never reached the other page in this context',
+        );
+        assert.deepEqual(witness.errors.jsErrors, [], 'the witness page threw while the value changed under it');
+        await page.close();
+        await witness.page.close();
+    }
 });
