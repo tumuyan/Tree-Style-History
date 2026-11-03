@@ -1510,7 +1510,7 @@ test('removing a blocklist row and saving restores that site to most visited', (
 
         // Click the X on the first row, exactly as the options page does.
         const rows = dom.el('mvlist-table').children;
-        const removeId = /id="(link-\d+)"/.exec(rows[0].innerHTML)[1];
+        const removeId = /id="(link-[^"]+)"/.exec(rows[0].innerHTML)[1];
         dom.el(removeId).dispatch('click');
         assert.equal(dom.el('mvlist-table').children.length, 1, 'the row must be gone from the DOM');
 

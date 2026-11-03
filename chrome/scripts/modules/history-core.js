@@ -118,8 +118,6 @@ function history(w, q) {
 
     chrome.history.search(obj, function (hi) {
 
-        console.log("search obj=" + obj['text']);
-
         // `overwrite` = "nothing can have counted this day more recently
         // than the loop above", and there is exactly one day for which
         // that holds: today. The map's other writer is the crawl, and it
@@ -432,7 +430,11 @@ function toggleGroup(host) {
             tgda.style.backgroundPosition = 'right center';
         }
     } else {
-        console.log('error: toggleGroup(' + host + ')');
+        // Reached when the group is not in the DOM: the render loop was
+        // interrupted (a delete in flight, a filtered repaint) or the caller
+        // passed a host that never got a group. Silence would make a toggle
+        // that does nothing look like a dead page.
+        console.warn('toggleGroup(): no group for ' + JSON.stringify(host));
     }
 
 }

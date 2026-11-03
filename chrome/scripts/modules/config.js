@@ -2,7 +2,7 @@
 // Manages all configuration-related functions extracted from func.js.
 
 import { $, $$, createElement } from '../dom-helper.js';
-import { returnLang, get_host, escapeHtmlAttr, escapeHtmlText, escapeRegExp } from './helpers.js';
+import { returnLang, get_host, escapeHtmlAttr, escapeHtmlText, escapeRegExp, uniqueId } from './helpers.js';
 import { defaultValues, defaultConfig } from './shared/config-defaults.js';
 
 
@@ -598,7 +598,6 @@ function saveOptions(sync) {
     so['page-zoom'] = parseInt($('pageZoom').value, 10) || 100;
     for (var i in so) {
         localStorage[i] = so[i];
-        console.log(i + '=' + so[i]);
     }
 
     let upload;
@@ -717,7 +716,7 @@ function mostVisitedBlocklist() {
     if (mvbl.length > 0) {
         for (var i = 0; i < mvbl.length; i++) {
             if (mvbl[i] !== undefined && mvbl[i] !== '') {
-                var linkid = 'link-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
+                var linkid = uniqueId('link');
                 // Escaped: entries are URLs taken from browsing history, so
                 // a quote in one would otherwise close this attribute. This
                 // function only started running once #mvlist-table existed
@@ -754,7 +753,7 @@ function filteredDomainsList() {
     if (fbl.length > 0) {
         for (var i = 0; i < fbl.length; i++) {
             if (fbl[i] !== undefined && fbl[i] !== '') {
-                var linkid = 'link-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
+                var linkid = uniqueId('link');
                 // One escaper per context: the same value goes into a title
                 // attribute and into the visible text, and the text escaper
                 // leaves quotes alone rather than rewriting them.
@@ -799,7 +798,7 @@ function addList(item) {
                 }
             }
             if (flic == 'test') {
-                var linkid = 'link-' + Math.floor((Math.random() * 999999999999999999) + 100000000000000000);
+                var linkid = uniqueId('link');
                 // One escaper per context, as in filteredDomainsList() above.
                 var flivAttr = escapeHtmlAttr(fliv);
                 var flivText = escapeHtmlText(fliv);

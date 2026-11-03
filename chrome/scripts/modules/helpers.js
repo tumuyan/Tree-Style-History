@@ -166,11 +166,12 @@ function escapeRegExp(text) {
 /**
  * A unique id for an element built from an HTML string and looked up with $().
  *
- * Fourteen copies of `Math.floor(Math.random() * 999999999999999999) +
- * 100000000000000000` lived in the two list renderers. The magnitude is not
- * load-bearing (an id only has to be unique inside one document), so the
- * shared helper drops the 18-digit arithmetic for a base-36 slice — same job,
- * and `Math.random().toString(36)` never produces an exponent.
+ * Seventeen copies of `Math.floor(Math.random() * 999999999999999999) +
+ * 100000000000000000` lived in the two list renderers and in the options
+ * page's three list builders. The magnitude is not load-bearing (an id only
+ * has to be unique inside one document), so the shared helper drops the
+ * 18-digit arithmetic for a base-36 slice — same job, and
+ * `Math.random().toString(36)` never produces an exponent.
  */
 var _idSeq = 0;
 function uniqueId(prefix) {
