@@ -375,8 +375,6 @@ function recentlyClosedTabs() {
         chrome.sessions.getRecentlyClosed({
             maxResults: itemsno
         }, function (sessionInfos) {
-            console.log(" sessions found " + sessionInfos.length)
-
             for (var i = 0; i < sessionInfos.length; i++) {
                 var win;
                 var sessionId;
@@ -543,10 +541,12 @@ function showRecentTabsImpl(rhhistory, rt) {
     // render empty without saying why — see "hides the block" in
     // tests/popup-core.test.mjs.
     rt = Array.isArray(rt) ? rt : [];
-    console.log("showRecentTabs() count = " + rt.length);
 
+    // Timing goes through info(), like the two lines in popup.js around it: the
+    // popup's cold-start budget is the thing this file was made faster for, and
+    // a format that a DevTools filter can hide is worth the two characters.
     var tDataReady = (performance.now() - (window._htmlStartTime || performance.now())).toFixed(1);
-    console.log('[Popup] Data ready (click to render): ' + tDataReady + 'ms');
+    console.info('[Popup] Data ready (click to render): ' + tDataReady + 'ms');
 
     var itemsno = Number(localStorage['rt-itemsno']);
     var rcti = 0;
@@ -574,11 +574,7 @@ function showRecentTabsImpl(rhhistory, rt) {
                     $('rt-inject').appendChild(formatItem({ type: 'rt', title: title, url: url, favicon: furl, time: time, tabId: t }));
                     rcti++;
                 }
-
-            } else {
-                console.log("showRecentTabs() tabId = " + t + ", rhhistory undefined");
             }
-
         }
 
         if ($$('#rt-inject .item').length == 0) {

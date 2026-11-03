@@ -1184,6 +1184,25 @@ test('no render site relies on title_fix for safety', () => {
     assert.deepEqual(offenders, []);
 });
 
+test('element ids come from uniqueId(), not from inline random arithmetic', () => {
+    // The 18-digit expression `Math.floor(Math.random() * <18 nines>) + <18
+    // digit floor>` was written out seventeen times: seven in each list
+    // renderer, three in the options page's list builders. A sweep that
+    // collapsed the fourteen it found left the options page's three in place
+    // and read, for a while, as "done" — which is exactly what this guard is
+    // for. uniqueId() is the one place that shape is allowed to live.
+    const offenders = [];
+    walkScripts((file, src) => {
+        // One offender per occurrence, so the report names the file once per
+        // site rather than once per file.
+        const found = stripJsComments(src).match(/Math\.floor\(\(Math\.random\(\)/g);
+        for (let _i = 0; found && _i < found.length; _i++) {
+            offenders.push(file.replace(/\\/g, '/'));
+        }
+    });
+    assert.deepEqual(offenders, []);
+});
+
 // A value heading for storage or for another module must arrive RAW: the side
 // that turns it into markup is the only one that knows whether it is writing
 // attribute text, element text or JSON, and a pre-escaped value cannot be

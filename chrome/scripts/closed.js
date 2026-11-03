@@ -89,8 +89,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
             pre_History(today0.getTime(), today.getTime());
         } else if (w == 'current') {
-            var ndc = new Date();
-            today = new Date(ndc.getFullYear(), ndc.getMonth(), ndc.getDate(), 23, 59, 59, 999);
+            // Nothing calls this with 'current' any more; the branch is kept
+            // because it is what "no range" means. It used to build a `today`
+            // here and never read it — the assignment is gone, `pre_History(0, 0)`
+            // is the whole effect.
             pre_History(0, 0);
         }
     }
