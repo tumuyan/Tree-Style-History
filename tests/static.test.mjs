@@ -489,6 +489,42 @@ test('the hard-coded-Chinese guard sees the shapes it claims to catch', () => {
     assert.deepEqual(foundIn("var s = 'a b'.replace(/ /g, ''); var x = '没有找到记录'; // note"), [1],
         'a regex literal that starts with a space');
 
+    // A literal after an arrow or an arithmetic operator. These were the largest
+    // hole left: the operator was not in BEFORE_REGEX at all, so the `/` read as
+    // a division, the pattern was copied through as text, and its inner quote
+    // opened a string that ran to the next real `'` in the file. Everything in
+    // between — Chinese included — was reported as one span, i.e. the guard was
+    // green on a file that plainly contains Chinese.
+    assert.deepEqual(foundIn("var k = xs.filter((t) => /['\"]/.test(t));\nvar x = '没有找到记录';"), [2],
+        'a regex literal after an arrow');
+    // One probe per member of BEFORE_REGEX's operator class, built the same way.
+    // The class grew to `* % < > ~ ^` in this change and several of those
+    // members were never mentioned by any probe: deleting them left the suite
+    // at `pass 72 / fail 0`, so the rule enforced six characters nobody had
+    // shown to matter. The pattern in these probes holds a quote on purpose —
+    // read as a division it is copied through as text, the quote opens a
+    // *string*, and the Chinese on the next line lands inside that span and is
+    // never reported. Without the quote the two readings produce identical
+    // output and the probe proves nothing.
+    for (const op of ['+', '-', '*', '%', '<', '>', '~', '^']) {
+        assert.deepEqual(
+            foundIn(`var k = a ${op} /['"]/.test(t);\nvar x = '没有找到记录';`),
+            [2],
+            `a regex literal after \`${op}\``,
+        );
+    }
+    // ...but `+` and `-` only open a literal when they are not doubled: `i++ / 2`
+    // is a division, and adding them naively swallowed the literal after it.
+    // Both doubles are checked — a veto that only looked at `++` left `i-- / 2`
+    // free to open a bogus literal.
+    for (const op of ['++', '--']) {
+        assert.deepEqual(
+            foundIn(`var q = n${op} / 2, label = '没有找到记录', r = a / b;`),
+            [1],
+            `a division after a postfix \`${op}\``,
+        );
+    }
+
     // The line number has to point at the literal, since that is the only
     // locator the message gives.
     assert.deepEqual(foundIn("var a = 1;\nvar b = 2;\nvar c = '没有找到记录';"), [3],
@@ -954,7 +990,20 @@ test('user-controlled values are escaped before being interpolated into HTML att
 // The tempting one-liner — "a regex cannot start with a space, so require
 // `/\S`" — is wrong in the other direction: `/ /g` is a real literal (matching
 // one space), and rejecting it left the comment after it unstripped.
-const BEFORE_REGEX = /(?:^|[(,=:[!&|?{};]|\b(?:return|typeof|case|in|of|delete|void|new|do|else|yield|await))\s*$/;
+//
+// Arithmetic and comparison operators belong in the list for the same reason
+// the brackets do: `(t) => /['"]/` and `a + /x/` start a literal. Omitting them
+// read the `/` as a division and copied the pattern through as text, after
+// which its inner quote opened a *string* — and the damage was silent and
+// large: quote state ran to the next real `'` in the file, so every literal in
+// between was reported as one span and the hard-coded-Chinese guard went green
+// on a file that plainly contains Chinese. `i++ / 2` is the shape that keeps
+// `+` and `-` from being added naively: the veto is a lookbehind, because the
+// operator touching the `/` is the second half of a doubled pair. The
+// lookahead that used to accompany it is gone — this regex is matched as a
+// suffix of the text before the `/`, so a lookahead at the end of the match can
+// never fail, and no probe could tell whether it was there.
+const BEFORE_REGEX = /(?:^|[(,=:[!&|?{};*%<>~^]|(?<![+\-])[+\-]|\b(?:return|typeof|case|in|of|delete|void|new|do|else|yield|await))\s*$/;
 
 /**
  * Index just past the closing `/` of the regex literal beginning at `start`
@@ -1774,6 +1823,38 @@ test('the numeric-read rule agrees with scripts/check-storage-numbers.mjs', () =
         // swallows the `// comment` line as if it were part of the pattern —
         // and a comment is exactly where a violation likes to hide.
         ['a slash that must not reach the next line', fn("var r = 1 / 2\n// comment\nvar bad = localStorage['x'];\nif (bad > 3) { }\n")],
+        // A literal after an arrow or an arithmetic operator: both strippers
+        // have to agree that the `/` opens a literal rather than a division.
+        // The trailing comment is what makes the probe discriminate — reading
+        // the `/` as a division copies the pattern through and then lets its
+        // inner quote open a string that swallows the `// note`, so that side
+        // keeps the comment while the other drops it. Without a comment the two
+        // outputs are identical either way and the probe proves nothing.
+        [
+            'a read after a literal that follows an arrow',
+            fn("var k = xs.filter((t) => /['\"]/.test(t)); // note\n"
+            + "var bad = localStorage['rh-itemsno']; if (bad > 3) { }\n"),
+        ],
+        // One probe per operator in that class, built the same way, because
+        // `* % < > ~ ^` arrived with no probe pointing at them — a mutation that
+        // deleted any one of the six left this suite green. The pattern holds a
+        // quote on purpose: read as a division it is copied through as text, the
+        // quote opens a *string*, and both the `// note` and the read below it
+        // land inside that span on one side only.
+        ...['+', '-', '*', '%', '<', '>', '~', '^'].map((op) => [
+            `a read after a literal that follows \`${op}\``,
+            fn(`var k = a ${op} /['"]/.test(t); // note\n`
+                + "var bad = localStorage['rh-itemsno']; if (bad > 3) { }\n"),
+        ]),
+        // ...while `i++ / 2` stays a division. Reading it as a literal closes it
+        // on a later `/` on the line and swallows everything between, comment
+        // included — so this is the probe that keeps `+`/`-` from being added to
+        // BEFORE_REGEX without the doubled-operator veto.
+        ...['++', '--'].map((op) => [
+            `a division after a postfix \`${op}\``,
+            fn(`var q = i${op} / 2; var s = 'x'; // note\n`
+                + "var bad = localStorage['rh-itemsno']; if (bad > 3) { }\n"),
+        ]),
         // The same local name in two top-level functions, wrapped in one of them
         // only. A file-wide symbol table exempts both — which is what this rule
         // did, on popup-core.js, where `itemsno` is declared three times.

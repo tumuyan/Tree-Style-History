@@ -65,7 +65,26 @@ const NUMBER_LITERAL = /^-?\d+(?:\.\d+)?\b/;
 // code in between. Requiring `/\S` instead would be wrong the other way —
 // `/ /g` is a real literal. Kept identical to tests/static.test.mjs by the
 // parity guard there.
-const BEFORE_REGEX = /(?:^|[(,=:[!&|?{};]|\b(?:return|typeof|case|in|of|delete|void|new|do|else|yield|await))\s*$/;
+//
+// The arithmetic and comparison operators are listed too, and they are not
+// optional: `=> /x/` and `a + /x/` are literals just as much as `(/x/)` is, and
+// leaving them out made the scan read the `/` as a division, copy the pattern
+// through as text, and then open a *string* on the first quote inside it. The
+// quote state ran to the next real `'` in the file, so every string literal in
+// between — including Chinese ones the neighbouring guard exists to find — was
+// filed under the wrong span.
+//
+// `+` and `-` need one more condition: `i++ / 2` is a division, and a plain
+// `[+\-]` said "a literal may start here" and then closed the bogus literal on
+// some later `/` on the same line. The lookbehind is what separates the two —
+// the operator right before a `/` is the *second* of a doubled pair.
+//
+// There used to be a matching lookahead here as well. It was unreachable: this
+// regex is tested as a suffix of the text before the `/`, so the lookahead
+// always ran at end-of-string and never failed. Deleting it changes no file's
+// strip result, which is how it was found — an unprovable branch is worse than
+// no branch.
+const BEFORE_REGEX = /(?:^|[(,=:[!&|?{};*%<>~^]|(?<![+\-])[+\-]|\b(?:return|typeof|case|in|of|delete|void|new|do|else|yield|await))\s*$/;
 
 /**
  * Index just past the closing `/` of the regex literal beginning at `start`
