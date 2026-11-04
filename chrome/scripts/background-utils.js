@@ -286,8 +286,9 @@ function getFaviconOnerror(url) {
 // by `scripts/gen-sw-utils.mjs`. Do NOT edit the generated file by hand.
 //
 // Load-order contract: `onStorageReady()` is called unconditionally at import
-// time, so `storage-adapter.js` must already have run. Every consumer honours
-// this — pages load it before the module bundle, and background-sw.js has
+// time and a `chrome.storage.onChanged` listener is registered, so
+// `storage-adapter.js` must already have run. Every consumer honours this —
+// pages load it before the module bundle, and background-sw.js has
 // `importScripts('storage-adapter.js')` first.
 
 
@@ -300,17 +301,61 @@ function getFaviconOnerror(url) {
 // implementation detail. `dayKey()` below converts an arbitrary instant into
 // it.
 var calendar_storage2 = {};
-onStorageReady(function() {
-    var calendar_storage2_str = localStorage['calendar-storage2'];
-    if (calendar_storage2_str != undefined) {
-        try {
-            calendar_storage2 = JSON.parse(calendar_storage2_str);
-        } catch (error) {
-            console.warn('Failed to parse calendar-storage2', error);
-            calendar_storage2 = {};
+
+/**
+ * Rebuild the parsed map from a stored value, in place.
+ *
+ * The object's identity is deliberately kept: `calendar_storage2` is a live
+ * ESM binding imported by calendar.js and a global the worker reads, and a
+ * render (or a test) may be holding the object it was handed. Replacing it
+ * would leave those readers on a stale map. Clearing and refilling gives the
+ * same contents without breaking them.
+ *
+ * `raw` is either the JSON string the writers store (an object is tolerated,
+ * for a value written straight through chrome.storage.local) or undefined for
+ * a removed key.
+ */
+function hydrateCalendarStorage(raw) {
+    var parsed = {};
+    if (raw != null) {
+        if (typeof raw === 'string') {
+            try {
+                raw = JSON.parse(raw);
+            } catch (error) {
+                console.warn('Failed to parse calendar-storage2', error);
+                raw = null;
+            }
         }
+        if (raw != null && typeof raw === 'object') parsed = raw;
     }
+    var oldKeys = Object.keys(calendar_storage2);
+    for (var i = 0; i < oldKeys.length; i++) delete calendar_storage2[oldKeys[i]];
+    var newKeys = Object.keys(parsed);
+    for (var j = 0; j < newKeys.length; j++) calendar_storage2[newKeys[j]] = parsed[newKeys[j]];
+}
+
+onStorageReady(function() {
+    hydrateCalendarStorage(localStorage['calendar-storage2']);
 });
+
+// storage-adapter mirrors other contexts' writes into the localStorage cache,
+// but the *parsed* map is a separate copy. Both writers (the page's
+// save_calendar_storage2() and the worker's saveCrawledHeat()) serialise their
+// own map over the whole key, so without this listener a write from one
+// context is erased by the other's next flush.
+//
+// `change.newValue` is the exact value that just landed — using it instead of
+// the localStorage cache means this does not depend on storage-adapter's own
+// onChanged listener having run first. A removal carries no newValue and means
+// the map is empty.
+if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged) {
+    chrome.storage.onChanged.addListener(function (changes, areaName) {
+        if (areaName !== 'local') return;
+        var change = changes['calendar-storage2'];
+        if (!change) return;
+        hydrateCalendarStorage('newValue' in change ? change.newValue : undefined);
+    });
+}
 
 /**
  * The heat map's key for the day `t` falls on: `t`'s date at 23:59:59.999.

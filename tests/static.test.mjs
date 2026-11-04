@@ -2104,6 +2104,41 @@ test('the heat map has exactly one page-side writer, and it lives in history-cor
         `the write is nested deeper than the flag — one of the two is inside a branch, so an empty result never reaches the write`);
 });
 
+test('the heat map re-hydrates on cross-context writes', () => {
+    // Two runtimes write the same key, each serialising its OWN parsed map
+    // over the whole value. storage-adapter keeps the localStorage cache in
+    // sync, but the parsed object is a separate copy hydrated once at startup;
+    // without an onChanged listener a write from one context is erased by the
+    // other's next flush and nothing recomputes the lost days.
+    const src = fs.readFileSync(path.join(CHROME_DIR, 'scripts/modules/shared/calendar-storage.js'), 'utf8');
+    const code = stripJsComments(src);
+    assert.match(code, /chrome\.storage\.onChanged\.addListener/,
+        'the shared layer must listen for changes to calendar-storage2');
+    assert.match(code, /hydrateCalendarStorage\(/,
+        'the parsed map must be rebuilt, not left as the boot-time copy');
+    // `change.newValue` is the value that just landed: reading the localStorage
+    // cache instead would depend on storage-adapter's own listener running
+    // first, which is an ordering nothing enforces.
+    assert.match(code, /'newValue'\s+in\s+change/,
+        're-hydration must use the change payload, not the localStorage cache');
+});
+
+test('finishEmptyDay only clears the calendar for the day view', () => {
+    // history('search', q) shares the empty-result path with the day view.
+    // A keyword that matches nothing says nothing about the day on the
+    // calendar, so writing '0' and uncolouring the selected cell there wiped
+    // a perfectly good day's total and colour.
+    const src = fs.readFileSync(path.join(CHROME_DIR, 'scripts/modules/history-core.js'), 'utf8');
+    const code = stripJsComments(src);
+    const slice = code.slice(code.indexOf('function finishEmptyDay'), code.indexOf('function history('));
+    const guard = slice.indexOf('rh-views-insert');
+    const total = slice.indexOf('calendar-total-value');
+    const paint = slice.indexOf('paintSelectedDay');
+    assert.ok(guard > -1, 'finishEmptyDay must decide which view it is finishing');
+    assert.ok(total > guard, 'the total must be written inside the day-view branch');
+    assert.ok(paint > guard, 'the selected cell must be cleared inside the day-view branch');
+});
+
 test('the tree pages label their total as a node count, not the row total', () => {
     // `#calendar-total-value` means two different things: on history.html it is
     // the day's history rows, on the two tree pages it is how many nodes the

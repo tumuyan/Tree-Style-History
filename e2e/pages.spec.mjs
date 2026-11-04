@@ -565,11 +565,11 @@ async function runCrawlOnOneUrl(url) {
 /**
  * Clear the heat map — in *both* places it lives — and report what is left.
  *
- * A removal is not a write, so it does not travel through the adapter: the
- * worker's own `calendar_storage2` keeps its entries unless they are deleted
- * too, and the next crawl would then read days the case believes it cleared.
- * Both sides are emptied, and storage is read back so the caller can assert the
- * map really did start empty.
+ * shared/calendar-storage.js empties its parsed map on a `chrome.storage`
+ * removal, but that broadcast is asynchronous: the `evaluate()` below reads
+ * storage back before it has necessarily arrived. Delete the in-memory copy
+ * here too, so the case cannot race the listener. Both sides are emptied, and
+ * storage is read back so the caller can assert the map really did start empty.
  */
 /* eslint-disable no-undef -- inside worker().evaluate(); see above */
 async function resetAndReadStoredHeatMap() {
@@ -631,13 +631,12 @@ async function seedBackfillableVisit() {
 /**
  * Boot the shipped worker into a page and run one crawl, from a planted map.
  *
- * The map is planted in `chrome.storage.local` and the worker's own boot
- * hydrates it — the path a real worker start takes. That is the only way to
- * test "a day that already has a count is not re-written": a *live* worker
- * hydrates `calendar_storage2` once, at boot, so nothing written to storage
- * afterwards can reach the map it crawls with. (`chrome.storage.onChanged` is
- * not the hook the shared map is rebuilt from either; a first attempt at this
- * case planted the day from a page and proved nothing.)
+ * The map is planted in `chrome.storage.local` before the scripts are injected,
+ * so the worker's boot hydrates it — the path a real worker start takes, and
+ * the only way to test "a day that already has a count is not re-written".
+ * shared/calendar-storage.js also re-hydrates on `chrome.storage.onChanged`,
+ * but nothing writes the key between the injection and the crawl below, so
+ * that listener stays idle and the boot-time copy is what the crawl reads.
  *
  * `new Worker()` is not an option: an MV3 service worker is started by the
  * browser, so there is no way to hand it pre-seeded storage before it boots.
@@ -901,9 +900,9 @@ test('history.html drops a day from the heat map once its history is gone', { sk
     // case does below.
     //
     // Nothing here talks to the service worker: both writers involved
-    // (history() and the range delete) are page-side, and the worker keeps a
-    // second copy of the map hydrated at its own boot, which it flushes over
-    // storage whenever it crawls.
+    // (history() and the range delete) are page-side. The worker does hold its
+    // own copy, but shared/calendar-storage.js re-hydrates on every storage
+    // change, so a crawl can no longer flush a stale copy over these writes.
     const page = await context.newPage();
     const { jsErrors } = collectErrors(page);
     await page.goto(`chrome-extension://${extensionId}/history.html`, { waitUntil: 'load' });
@@ -1009,6 +1008,82 @@ test('history.html drops a day from the heat map once its history is gone', { sk
     assert.equal(after.background, '',
         'the cell still shows the count that was just deleted — the map is only half the fix');
     await page.close();
+});
+
+test('a page write reaches the live worker map before its next crawl', { skip: SKIP }, async () => {
+    // The regression in its real shape. Two runtimes each hydrated a parsed
+    // copy of the map at boot and each serialised its OWN copy over the whole
+    // key. A page counting today was erased by the worker's next crawl flush —
+    // and because the map is a long-lived cache ("有值不覆盖"), no one ever
+    // recomputed it. shared/calendar-storage.js now re-hydrates on
+    // chrome.storage.onChanged, so the worker's live map must follow the
+    // page's write without a restart.
+    //
+    // A witness page (history2.html) is where the cross-context write is made;
+    // it loads the shared module but never calls history(), so it will not
+    // write the day itself. The worker's own `calendar_storage2` is read back
+    // directly to prove its *parsed* map converged, not just the localStorage
+    // cache that storage-adapter already mirrors.
+    await resetAndReadStoredHeatMap();
+
+    const witness = await context.newPage();
+    const { jsErrors } = collectErrors(witness);
+    await witness.goto(`chrome-extension://${extensionId}/history2.html`, { waitUntil: 'load' });
+    await settle(witness);
+
+    try {
+        const today = await worker().evaluate(() => {
+            const d = new Date();
+            d.setHours(23, 59, 59, 999);
+            return d.getTime();
+        });
+
+        // Written in the witness page, through the adapter into real storage.
+        // `history2.html` never calls history(), so it will not overwrite the
+        // day itself.
+        await witness.evaluate(async (key) => {
+            await window.storageAdapter.ready();
+            localStorage['calendar-storage2'] = JSON.stringify({ [key]: 4242 });
+            await chrome.storage.local.set({ 'calendar-storage2': localStorage['calendar-storage2'] });
+        }, today);
+
+        // Poll: chrome.storage.onChanged is delivered asynchronously, with no
+        // ordering guarantee against the write's own callback.
+        const poll = async (read) => {
+            const deadline = Date.now() + 5000;
+            let seen;
+            do {
+                seen = await read();
+                if (seen === 4242) return seen;
+                await new Promise((resolve) => setTimeout(resolve, 50));
+            } while (Date.now() < deadline);
+            return seen;
+        };
+
+        /* eslint-disable no-undef -- inside worker().evaluate(); see above */
+        const inWorker = await poll(() => worker().evaluate((key) => calendar_storage2[key], today));
+        const inWitness = await poll(() => witness.evaluate(async (key) => {
+            await window.storageAdapter.ready();
+            return JSON.parse(localStorage['calendar-storage2'] || '{}')[key];
+        }, today));
+        /* eslint-enable no-undef */
+
+        assert.equal(inWitness, 4242, 'the write never reached storage');
+        assert.equal(inWorker, 4242,
+            "the running worker's parsed map still holds its boot-time copy — the next crawl would erase the page's count");
+
+        // Now let that same worker flush a crawl. saveCrawledHeat() skips today,
+        // so the map it writes must still contain the page's 4242 rather than
+        // overwriting the key with a copy that never had it.
+        const landmarks = await seedBackfillableVisit();
+        const map = await runCrawlOnOneUrl('https://seed.test/heat');
+        assert.equal(map[today], 4242,
+            "the crawl erased the page's count for today (map was " + JSON.stringify(map) + ')');
+        assert.equal(map[landmarks.yesterday], 2, 'the crawl still back-filled its own day');
+    } finally {
+        assert.deepEqual(jsErrors, [], 'the witness page threw while the map changed under it');
+        await witness.close();
+    }
 });
 
 test('history2.html shows its node count under a label that says so', { skip: SKIP }, async () => {

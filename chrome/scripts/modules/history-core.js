@@ -50,10 +50,17 @@ function alertLoadingHistory(pm) {
  *
  * `paintSelectedDay(0)` is a level-0 paint, which clears `style` — there is no
  * separate "uncolour" path to keep in step.
+ *
+ * Only the day view owns those two DOM nodes. `history('search', q)` reaches
+ * here too when a keyword matches nothing, and a search says nothing about the
+ * day the calendar happens to be showing: clearing its total and its colour
+ * would leave "0 / uncoloured" next to a day that still has rows.
  */
 function finishEmptyDay(into) {
-    $('calendar-total-value').textContent = '0';
-    paintSelectedDay(0);
+    if (into == 'rh-views-insert') {
+        $('calendar-total-value').textContent = '0';
+        paintSelectedDay(0);
+    }
     $(into).innerHTML = '<div class="no-results"><span>' + returnLang('noResults') + '</span></div>';
 }
 

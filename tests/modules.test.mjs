@@ -642,6 +642,21 @@ test('formatDate renders the configured pattern, with placeholders when unset', 
     assert.equal(helpers.formatDate(undefined), '--/--/----');
 });
 
+test('formatDate survives a cold profile where rh-date has not been written yet', (t) => {
+    // The two other date helpers (dateFormat / TimeToStr) both default before
+    // calling .replace(). formatDate() used to read localStorage directly, so
+    // on a cold start — before the storage cache resolved — it threw inside
+    // the page's DOMContentLoaded handler and every listener registered after
+    // it (delete buttons, search) was lost.
+    restoreStorage(t, ['rh-date']);
+    delete localStorage['rh-date'];
+
+    assert.doesNotThrow(() => helpers.formatDate(TS), 'a cold start must not throw');
+    assert.equal(helpers.formatDate(TS), '01/02/2024', 'the default pattern is mm/dd/yyyy');
+    assert.equal(helpers.formatDate(undefined), '--/--/----',
+        'the placeholder form still works without a configured pattern');
+});
+
 // ---------------------------------------------------------------------------
 // config.js — defaults and filtering
 // ---------------------------------------------------------------------------
@@ -2947,10 +2962,11 @@ test('calendarLevel puts a count in the same tier the calendar paints', async ()
  * calendar click takes. Everything else is the shape the render tests use.
  */
 function seedHistoryPage() {
-    // `formatDate()` reads `rh-date` at *call* time and returns `undefined`
-    // without it, which then reaches `.replace()` inside history(). Storage is
-    // shared by this whole file, and several fixtures start with `env.reset()`
-    // — so this is set here rather than assumed from an earlier test.
+    // `formatDate()` reads `rh-date` at *call* time. It now defaults to
+    // mm/dd/yyyy on a cold profile, but the range-delete tests assert the
+    // yyyy/mm/dd field order, so this fixture still sets it explicitly.
+    // Storage is shared by this whole file, and several fixtures start with
+    // `env.reset()` — hence the guard rather than an unconditional write.
     if (localStorage['rh-date'] === undefined) localStorage['rh-date'] = 'yyyy/mm/dd';
     dom.setOptions('rh-what', ['current', 'all'], 'current');
     dom.el('rh-views-insert').style.display = 'block';
@@ -3154,6 +3170,130 @@ test('the deletion reaches storage, so the next page start sees it too', async (
     assert.deepEqual(JSON.parse(localStorage['calendar-storage2']), {},
         'the map still holds the deleted day');
 });
+test('a write from another context is folded into the in-memory heat map', async (t) => {
+    // The page's save_calendar_storage2() and the worker's saveCrawledHeat()
+    // each serialise their OWN map over the whole key. storage-adapter mirrors
+    // the new value into localStorage, but the parsed object was hydrated once
+    // at startup and never rebuilt — so the next flush from the other runtime
+    // erased the value that had just been written.
+    const { calendar_storage2 } = await importModule('modules/shared/calendar-storage.js');
+    restoreStorage(t, ['calendar-storage2']);
+    clearCalendarMap(calendar_storage2);
+
+    const reference = calendar_storage2; // the object handed to calendar.js
+    const oldDay = dayKeyOf(Date.now() - 3 * DAY_MS);
+    const today = dayKeyOf(Date.now());
+    calendar_storage2[oldDay] = 12; // an older day this context already counted
+    calendar_storage2[today] = 42;  // what the page just wrote for today
+
+    // Another context writes a map that keeps today's fresh count and adds a
+    // day this context has never seen. Without the onChanged listener the
+    // local map stays {12, 42} and its next flush drops the foreign day.
+    const incoming = { [oldDay]: 12, [today]: 42, [dayKeyOf(Date.now() - 5 * DAY_MS)]: 7 };
+    env.fireStorageChanged({ 'calendar-storage2': { newValue: JSON.stringify(incoming) } });
+
+    assert.equal(calendar_storage2, reference,
+        'the live binding must not be replaced — calendar.js holds the old object');
+    assert.deepEqual(calendar_storage2, incoming,
+        'the parsed map must be rebuilt from the value that just landed in storage');
+});
+
+test('a page write and a worker flush no longer erase each other', async (t) => {
+    // The bug in its real shape: two runtimes each hydrate their own copy at
+    // startup and each serialise that copy over the whole key. The page counts
+    // today, the worker then flushes a crawl that knows nothing about today,
+    // and the page's count is gone from storage for good — the map is a
+    // long-lived cache with no one recomputing it (README 100-101).
+    //
+    // Two fresh module instances stand in for the two runtimes: separate
+    // in-memory maps, one storage key, both listening to onChanged.
+    const page = await importModuleFresh('modules/shared/calendar-storage.js');
+    const worker = await importModuleFresh('modules/shared/calendar-storage.js');
+    restoreStorage(t, ['calendar-storage2']);
+
+    const today = dayKeyOf(Date.now());
+    const oldDay = dayKeyOf(Date.now() - 4 * DAY_MS);
+    clearCalendarMap(page.calendar_storage2);
+    clearCalendarMap(worker.calendar_storage2);
+
+    // A foreign write is delivered to BOTH listeners, as chrome.storage does.
+    const deliver = (value) => {
+        localStorage['calendar-storage2'] = JSON.stringify(value);
+        env.fireStorageChanged({ 'calendar-storage2': { newValue: localStorage['calendar-storage2'] } });
+    };
+
+    // 1. The page counts today and writes its own map (its sole authoritative
+    //    day — see history-core.js's isToday).
+    page.calendar_storage2[today] = 42;
+    deliver({ [today]: 42 });
+    assert.equal(worker.calendar_storage2[today], 42,
+        'the worker must see the page write before it flushes');
+
+    // 2. The worker's crawl walked an older day. saveCrawledHeat() only fills
+    //    gaps and skips today; with the listener gone this is where it would
+    //    overwrite the whole key with a map containing just the old day.
+    worker.calendar_storage2[oldDay] = 7;
+    deliver(Object.assign({}, worker.calendar_storage2));
+
+    assert.equal(worker.calendar_storage2[today], 42, 'the worker lost the page count');
+    assert.equal(page.calendar_storage2[today], 42, 'the page lost its own count');
+    assert.equal(page.calendar_storage2[oldDay], 7, 'the page never saw the back-filled day');
+    assert.equal(JSON.parse(localStorage['calendar-storage2'])[today], 42,
+        "today's count is gone from storage — the cache has no other writer to restore it");
+});
+
+test('a removal from another context empties the in-memory heat map', async (t) => {
+    const { calendar_storage2 } = await importModule('modules/shared/calendar-storage.js');
+    restoreStorage(t, ['calendar-storage2']);
+    clearCalendarMap(calendar_storage2);
+    calendar_storage2[dayKeyOf(Date.now())] = 9;
+
+    // A removal carries no newValue at all.
+    env.fireStorageChanged({ 'calendar-storage2': {} });
+
+    assert.deepEqual(calendar_storage2, {}, 'a removed key must leave no stale counts behind');
+});
+
+test('an empty keyword search does not clear the calendar total or the selected day', async (t) => {
+    // finishEmptyDay() is shared by the day view and the search view. A search
+    // for a word that matches nothing says nothing about the day the calendar
+    // is showing, yet it used to write '0' into #calendar-total-value and
+    // paintSelectedDay(0) — the total and the colour of a day that still has
+    // rows were wiped just by looking for something else.
+    const historyCore = await importModule('modules/history-core.js');
+    restoreStorage(t, ['rh-group', 'rh-orderby', 'rh-order', 'rh-date', 'rh-timeformat', 'calendar-storage2']);
+    localStorage['rh-group'] = 'no';
+    localStorage['rh-orderby'] = 'time';
+    localStorage['rh-order'] = 'desc';
+    localStorage['rh-date'] = 'yyyy/mm/dd';
+    localStorage['rh-timeformat'] = '24';
+
+    seedHistoryPage();
+    // The day view is showing a counted day: total 42 and a painted cell.
+    const total = dom.el('calendar-total-value');
+    total.textContent = '42';
+    const cell = dom.makeEl('a');
+    cell.style.backgroundColor = '#6dc738';
+    const lookup = document.querySelector;
+    document.querySelector = (sel) => (String(sel).includes('a#selected') ? cell : lookup.call(document, sel));
+
+    try {
+        // A search that returns nothing. `rh-what` is 'all' so the query is a
+        // 28-day window rather than a single day.
+        dom.setOptions('rh-what', ['current', 'all', 'recent'], 'all');
+        withChromeApi({ history: { search: (_q, cb) => cb([]) } }, () => {
+            historyCore.history('search', 'no-such-page-anywhere');
+        });
+    } finally {
+        document.querySelector = lookup;
+    }
+
+    assert.equal(total.textContent, '42', 'the search cleared the day total');
+    assert.equal(cell.style.backgroundColor, '#6dc738', 'the search uncoloured the day cell');
+    assert.match(dom.el('rh-views-search-insert').innerHTML, /no-results/,
+        'the search view must still render its empty-state message');
+});
+
 test('calendar() draws the month the dropdowns name, not the current year', async (t) => {
     // Every cell's `rel` carries the year the page will load, and its colour is
     // looked up under that year's key. `new Date().getFullYear()` broke both:

@@ -88,7 +88,11 @@ function TimeToStr(time, skip_date, skip_year, skip_clock) {
 }
 
 function formatDate(str) {
-    var datestr = localStorage['rh-date'];
+    // Same cold-start window as dateFormat() / TimeToStr(): before the storage
+    // cache resolves, every key reads undefined. `.replace()` on undefined
+    // throws inside the page's DOMContentLoaded handler and the listeners
+    // registered after it (delete buttons, search) never get bound.
+    var datestr = dateFormat();
     if (str == undefined) {
         datestr = datestr.replace('dd', '--');
         datestr = datestr.replace('mm', '--');
