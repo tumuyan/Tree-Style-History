@@ -63,6 +63,9 @@ export function installStubs() {
     // the cache is empty until chrome.storage.local.get() resolves, so every
     // read before that point yields undefined.
     const readyCallbacks = [];
+    // Listeners registered for chrome.storage.onChanged, keyed by nothing:
+    // the real API calls every listener with (changes, areaName).
+    const storageChangedListeners = [];
 
     const localStorageStub = {
         getItem: (k) => (store.has(String(k)) ? store.get(String(k)) : undefined),
@@ -127,7 +130,9 @@ export function installStubs() {
             local: storageArea(store),
             sync: storageArea(syncStore),
             session: storageArea(sessionStore),
-            onChanged: { addListener() {} },
+            onChanged: {
+                addListener: (fn) => { storageChangedListeners.push(fn); },
+            },
         },
         history: { search: (_q, cb) => cb && cb([]), getVisits: (_q, cb) => cb && cb([]) },
         tabs: { query: (_q, cb) => cb && cb([]) },
@@ -160,6 +165,10 @@ export function installStubs() {
             syncStore.clear();
             sessionStore.clear();
             readyCallbacks.length = 0;
+            // Not cleared: modules are imported once and keep their listeners
+            // for the lifetime of the process, exactly as in the extension.
+            // Clearing here would silently un-register a real module's hook
+            // for every test that follows a reset().
         },
         /** Run the queued onStorageReady callbacks, as the adapter does once the cache is filled. */
         fireStorageReady() {
@@ -168,6 +177,17 @@ export function installStubs() {
         },
         /** How many callbacks are waiting for storage to become ready. */
         pendingReady: () => readyCallbacks.length,
+        /**
+         * Deliver a chrome.storage.onChanged event to every listener.
+         *
+         * A write from another context arrives as `newValue`; a removal has no
+         * newValue at all. `changes` is the shape the real API uses.
+         */
+        fireStorageChanged(changes) {
+            for (const fn of storageChangedListeners.slice()) fn(changes, 'local');
+        },
+        /** How many onChanged listeners the modules under test registered. */
+        storageChangedListeners: () => storageChangedListeners.length,
     };
 }
 
