@@ -262,6 +262,27 @@ test('the crawl publishes the heat map only for a finished window', () => {
     assert.match(sw, /const\s+CRAWL_HEAT_KEY\s*=/);
 });
 
+test('a crawl cursor resumes on its id, never on its stored position', () => {
+    // The position is an index into the URL list *as it stood when the cursor
+    // was written*. That list is rebuilt from the database on every pass, and
+    // crawlUrlVisits() stamps loadto on every URL it walks so loadHistory()
+    // filters the head of it out. A shorter list makes the stored position
+    // point past URLs that were never walked; the pass is then judged complete
+    // and publishes a short count into a heat map that never recomputes a day.
+    // This is a source guard as well as a behaviour one: the wrong number shows
+    // up several layers away from the line that caused it, and a stub that
+    // hands the queue in whole (which most crawl tests do) never reaches the
+    // fallback at all.
+    const sw = stripJsComments(fs.readFileSync(path.join(CHROME_DIR, 'scripts/background-sw.js'), 'utf8'));
+    const restore = sw.slice(sw.indexOf('function restoreCrawlCursor()'));
+    const body = restore.slice(0, restore.indexOf('\nfunction ', 1));
+
+    assert.match(body, /return\s*\{\s*start:\s*0,\s*resumed:\s*true\s*\}/,
+        'an id that has left the list must resume from the top and keep the counts');
+    assert.doesNotMatch(body, /start:\s*cursor\.pos/,
+        'cursor.pos must not be used as a resume index');
+});
+
 test('service worker imports its dependencies via importScripts', () => {
     const sw = fs.readFileSync(path.join(CHROME_DIR, 'scripts/background-sw.js'), 'utf8');
     // storage-adapter is mandatory: without it `localStorage` is undefined in a SW.

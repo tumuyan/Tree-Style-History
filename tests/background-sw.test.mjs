@@ -812,26 +812,30 @@ test('a resume with an empty queue still publishes what was counted', async () =
     assert.equal(session.has('crawl-heat'), false, 'and the accumulator is done with');
 });
 
-test('the position fallback resumes where the id path would have', async () => {
-    // `pos` and the id answer the same question — "how many of this list were
-    // walked" — and they used to disagree by one: the id path returned `i + 1`
-    // while `pos` was stored as the *index of the last URL walked*. So a resume
-    // that had to fall back to the position re-walked that URL. One wasted
-    // getVisits() is not the cost any more: the heat accumulator counts the
-    // repeat visit, and the day ends up one too high in a cache nothing
-    // recomputes. Kept as a guard on the two paths agreeing.
+test('an id that has left the queue resumes from the top, ignoring the stored position', async () => {
+    // The cursor id is the only anchor. When it is gone — those URLs were
+    // walked, stamped with loadto, and filtered out of the rebuilt list — the
+    // pass starts from the top of what is left and keeps the counts already
+    // gathered. The old code fell back to `pos` here, which was an index into
+    // the *previous* list: on a list that had shrunk but was still long enough
+    // to hold `pos`, that skipped the untouched middle of the window, judged it
+    // finished, and published a partial count to a cache nobody recomputes.
     const session = new Map();
-    // The id is gone (its visits were deleted) but the list is still long
-    // enough for the position to mean something: three URLs walked.
+    const total = 6;
+    const day = dayKeyOf(Date.now() - 3 * DAY_MS);
     session.set('crawl-cursor', { id: 'gone', pos: 3, at: Date.now() });
+    session.set('crawl-heat', { [day]: 2 });
 
-    const w = await crawlUrls({ sessionStore: session, urls: urlList(6) });
+    const w = await crawlUrls({
+        sessionStore: session,
+        urls: urlList(total),
+        getVisits: visitsFor([visitAt(3, 1)]),
+    });
 
-    assert.deepEqual(w.state.queried, [
-        'https://example.com/3',
-        'https://example.com/4',
-        'https://example.com/5',
-    ], 'the URL at `pos` was already walked; the resume starts after it');
+    assert.deepEqual(w.state.queried, urlList(total).map((u) => u.url),
+        'a stale `pos` must not skip the head of the rebuilt list');
+    assert.equal(w.ctx.calendar_storage2[day], 2 + total,
+        'the resumed window keeps the earlier counts and adds the whole tail');
 });
 
 test('a window counted in passes survives the URLs leaving the queue', async () => {
@@ -882,6 +886,45 @@ test('a window counted in passes survives the URLs leaving the queue', async () 
     assert.equal(w.state.queried.length, total, 'both passes together must walk the window');
     assert.equal(w.ctx.calendar_storage2[day], total,
         'the pass that finishes the window must publish the whole of it, not its own tail');
+});
+
+test('a shrinking queue longer than the old position still counts the whole window', async () => {
+    // The shape that used to lose a whole budget-sized segment. The window is
+    // more than two passes wide, so after the first pass stamps 300 URLs the
+    // rebuilt list is still longer than the stored position (300): the old
+    // `pos` fallback looked valid, resumed at 300 in a list that had dropped
+    // its own head, and skipped URLs 300..599 — none of which had been walked.
+    // That pass was then judged complete and wrote a short count into a heat
+    // map that never recomputes a day. Driven through loadHistory() end to end
+    // so the stamping, the filter and the rebuild are all the real ones.
+    const session = new Map();
+    const total = 2 * CRAWL_BUDGET_URLS + 50;
+    const day = dayKeyOf(Date.now() - 3 * DAY_MS);
+    const visit = visitAt(3, 1);
+    const urls = urlList(total).map((u) => Object.assign({}, u, { lastVisitTime: visit.visitTime }));
+
+    const w = loadWorker({
+        sessionStore: session,
+        getVisits: visitsFor([visit]),
+        queryURLs: () => Promise.resolve(urls
+            .map((u) => {
+                const stored = w.state.urls.find((r) => r.id === u.id);
+                return Object.assign({}, u, { loadto: stored && stored.loadto });
+            })
+            .filter((u) => !u.loadto || u.loadto < u.lastVisitTime)),
+    });
+    w.ctx.localStorage['load-range'] = '7';
+
+    // Three passes: 300 + 300 + 50. Each one rebuilds a shorter list than the
+    // last, and the cursor id from the previous pass is always gone from it.
+    for (let pass = 0; pass < 3; pass++) await w.ctx.loadHistory();
+
+    assert.equal(w.state.queried.length, total,
+        'every URL in the window must be walked exactly once');
+    assert.equal(w.ctx.calendar_storage2[day], total,
+        'the heat map must hold the whole window, not a segment short of it');
+    assert.equal(session.has('crawl-cursor'), false,
+        'a finished window must clear its cursor');
 });
 
 test('a pass that finds the window already walked still publishes what was counted', async () => {
