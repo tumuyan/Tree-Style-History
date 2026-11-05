@@ -106,6 +106,8 @@ function negLocalStorage(state) {
  *   a restart: chrome.storage.session is the only thing that outlives one.
  * @param {Array}  [opts.tabs] what chrome.tabs.query() reports.
  * @param {Function} [opts.getVisits] (state, query, callback) per-URL answers.
+ * @param {Function} [opts.Date] a Date constructor with a fixed now(), for
+ *   tests that assert a whole-day boundary rather than a relative span.
  */
 function loadWorker(opts = {}) {
     const sessionStore = opts.sessionStore || new Map();
@@ -141,6 +143,7 @@ function loadWorker(opts = {}) {
         // recorder below. Empty for the crawl/session cases that never touch
         // the cache, so a stray write is visible rather than silently allowed.
         cachePuts: opts.faviconCachePuts || [],
+        purgedAt: [],
     };
 
     const ev = (name) => ({
@@ -229,12 +232,20 @@ function loadWorker(opts = {}) {
         // through `urls_wait_load` and only a few need `loadHistory()` to build
         // its own queue.
         queryURLs: opts.queryURLs || (() => Promise.resolve([])),
+        // Records the cutoff the worker decided on; the stores themselves are
+        // not simulated here (db-manager.test.mjs covers the real sweep).
+        purgeExpired: (cutoff) => { state.purgedAt.push(cutoff); return Promise.resolve(0); },
         deleteDB: () => Promise.resolve(),
     };
 
+    // Injectable clock for the retention boundary test: dayKey() buckets a
+    // whole day into one 23:59:59.999 key, so a case that asserts which day
+    // survives needs a `now` that cannot drift across midnight mid-test.
+    const Clock = opts.Date || Date;
     const ctx = {
         chrome,
         dbManager,
+        Date: Clock,
         console: {
             log() {}, debug() {}, info() {},
             warn: (...a) => state.warnings.push(a.join(' ')),
@@ -1108,6 +1119,153 @@ test('the mostVisited alarm is armed once, like the crawl one', async () => {
         'an existing mostVisited alarm must not be re-armed on every start');
     assert.equal(store.filter((a) => a.name === 'crawlHistory').length, 1,
         'and the crawl alarm must still be armed exactly once');
+});
+
+// ---------------------------------------------------------------------------
+// Retention cleanup (load-range3)
+// ---------------------------------------------------------------------------
+
+test('the mostVisited alarm enforces load-range3 on the database and the heat map', async () => {
+    const w = loadWorker({ tabs: [] });
+    w.boot();
+    await w.settle();
+
+    const now = Date.now();
+    const DAY = 24 * 3600 * 1000;
+    w.ctx.localStorage['load-range3'] = '30';
+
+    // Two heat-map days: one well outside the 30-day window, one inside it.
+    // dayKey is the worker's own helper, so the keys are in the exact shape
+    // saveCrawledHeat()/history() write.
+    const oldKey = String(w.ctx.dayKey(now - 60 * DAY));
+    const freshKey = String(w.ctx.dayKey(now - 5 * DAY));
+    w.ctx.calendar_storage2[oldKey] = 12;
+    w.ctx.calendar_storage2[freshKey] = 7;
+    w.ctx.localStorage['calendar-storage2'] = JSON.stringify(w.ctx.calendar_storage2);
+
+    w.fire('alarms.onAlarm', { name: 'mostVisited' });
+    await w.settle();
+
+    assert.equal(w.state.purgedAt.length, 1, 'the alarm must run the database sweep');
+    const cutoff = w.state.purgedAt[0];
+    assert.ok(Math.abs(cutoff - (now - 30 * DAY)) < 5000,
+        'the cutoff must be load-range3 days before now');
+
+    assert.equal(w.ctx.calendar_storage2[oldKey], undefined,
+        'a heat-map day older than the retention window must be dropped');
+    assert.equal(w.ctx.calendar_storage2[freshKey], 7,
+        'a day still inside the window must be kept');
+    // The map is persisted back so other contexts see the same pruned set.
+    assert.equal(JSON.parse(w.ctx.localStorage['calendar-storage2'])[oldKey], undefined);
+
+    assert.ok(w.sessionStore.has('retention-cleanup'),
+        'the sweep must be stamped so the next wake-up skips it');
+});
+
+test('retention cleanup runs at most once a day', async () => {
+    const session = new Map();
+    const w = loadWorker({ tabs: [], sessionStore: session });
+    w.boot();
+    await w.settle();
+    w.ctx.localStorage['load-range3'] = '30';
+
+    w.fire('alarms.onAlarm', { name: 'mostVisited' });
+    await w.settle();
+    assert.equal(w.state.purgedAt.length, 1);
+
+    // A fresh worker later in the same browser session shares the marker.
+    const again = loadWorker({ tabs: [], sessionStore: session });
+    again.boot();
+    await again.settle();
+    again.ctx.localStorage['load-range3'] = '30';
+    again.fire('alarms.onAlarm', { name: 'mostVisited' });
+    await again.settle();
+
+    assert.equal(again.state.purgedAt.length, 0,
+        'a sweep already done today must not run again on the next wake-up');
+});
+
+test('load-range3 = 0 keeps the cache forever', async () => {
+    const w = loadWorker({ tabs: [] });
+    w.boot();
+    await w.settle();
+    w.ctx.localStorage['load-range3'] = '0';
+
+    w.fire('alarms.onAlarm', { name: 'mostVisited' });
+    await w.settle();
+
+    assert.equal(w.state.purgedAt.length, 0, '0 means no retention sweep');
+    assert.equal(w.sessionStore.has('retention-cleanup'), false);
+});
+
+test('load-range3 = 1 keeps the cutoff day but drops the day before it', async () => {
+    // The heat map is keyed by dayKey() (the day's 23:59:59.999), while the
+    // database sweep uses the raw instant now - days*DAY. Both halves must
+    // answer "does this day still have data?" in their own units, so the
+    // heat-map boundary is aligned down to a whole day before the compare.
+    // A fixed clock keeps the edge from drifting across midnight mid-test:
+    //   now = 2026-05-15 14:30, cutoff = 05-14 14:30,
+    //   heat boundary = 05-14 00:00 (NOT the raw cutoff, NOT 23:59:59.999).
+    const FIXED = new Date(2026, 4, 15, 14, 30, 0, 0).getTime();
+    class FixedDate extends Date {
+        static now() { return FIXED; }
+    }
+    const DAY = 24 * 3600 * 1000;
+    const w = loadWorker({ tabs: [], Date: FixedDate });
+
+    // Spy on the internal helper: the point of this fix is the *boundary
+    // handed to it*. Deletion outcomes alone are equivalent for dayKey-shaped
+    // keys under either boundary, so they cannot prove the alignment happened.
+    const seen = [];
+    const realPrune = w.ctx.pruneHeatMap;
+    w.ctx.pruneHeatMap = function (boundary) {
+        seen.push(boundary);
+        return realPrune(boundary);
+    };
+
+    w.boot();
+    await w.settle();
+    w.ctx.localStorage['load-range3'] = '1';
+
+    const keyFor = (daysAgo) => String(w.ctx.dayKey(FIXED - daysAgo * DAY));
+    const todayKey = keyFor(0);
+    const yesterdayKey = keyFor(1);   // the cutoff day itself
+    const beforeKey = keyFor(2);      // first fully-expired day
+    const longAgoKey = keyFor(40);
+    for (const k of [todayKey, yesterdayKey, beforeKey, longAgoKey]) {
+        w.ctx.calendar_storage2[k] = 5;
+    }
+    w.ctx.localStorage['calendar-storage2'] = JSON.stringify(w.ctx.calendar_storage2);
+
+    w.fire('alarms.onAlarm', { name: 'mostVisited' });
+    await w.settle();
+
+    // The alignment itself: midnight of the cutoff day, not the raw instant.
+    const cutoffDayStart = (() => { const d = new Date(FIXED - DAY); d.setHours(0, 0, 0, 0); return d.getTime(); })();
+    assert.equal(seen.length, 1, 'the heat map must be pruned once for this sweep');
+    assert.equal(seen[0], cutoffDayStart,
+        'the heat-map boundary must be aligned to the cutoff day 00:00, not the raw now - days*DAY');
+    // -1 ms would land on the previous day's 23:59:59.999 and keep one day
+    // too many: a coloured cell for a day whose visits were just swept.
+    assert.equal(seen[0], w.ctx.dayKey(cutoffDayStart - 1) + 1,
+        'the boundary must be the instant right after the previous day ends');
+
+    // The database half must still receive the instantaneous cutoff, not the
+    // day-aligned one: visitTime is a real timestamp, not a day bucket.
+    assert.equal(w.state.purgedAt.length, 1);
+    assert.equal(w.state.purgedAt[0], FIXED - DAY,
+        'the DB sweep keeps the raw instant cutoff');
+
+    assert.equal(w.ctx.calendar_storage2[todayKey], 5, 'today is never pruned');
+    assert.equal(w.ctx.calendar_storage2[yesterdayKey], 5,
+        'the cutoff day still has visits from the afternoon, so its cell stays');
+    assert.equal(w.ctx.calendar_storage2[beforeKey], undefined,
+        'the day before the cutoff lost every visit and must lose its cell too');
+    assert.equal(w.ctx.calendar_storage2[longAgoKey], undefined,
+        'older days are dropped as before');
+    const persisted = JSON.parse(w.ctx.localStorage['calendar-storage2']);
+    assert.equal(persisted[beforeKey], undefined,
+        'the pruned set is persisted back for the other contexts');
 });
 
 test('a crawl alarm runs a pass', async () => {

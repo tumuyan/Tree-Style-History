@@ -20,19 +20,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var optsEl = $('options');
     optsEl.style.transition = 'margin-left 0.25s, opacity 0.25s';
     optsEl.style.opacity = '1';
-    if (chrome.i18n.getMessage("@@bidi_dir") == 'rtl' && chrome.i18n.getMessage("@@ui_locale") !== 'en') {
-        var oo = {
-            'margin-right': [150, 180],
-            'opacity': [0, 1]
-        };
-        optsEl.style.marginRight = oo['margin-right'][1] + 'px';
-    } else {
-        oo = {
-            'margin-left': [150, 180],
-            'opacity': [0, 1]
-        };
-        optsEl.style.marginLeft = oo['margin-left'][1] + 'px';
-    }
+    optsEl.style.marginLeft = '180px';
 
 
     $("version").textContent = getVersion();

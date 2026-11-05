@@ -161,9 +161,45 @@ test('no remotely hosted scripts (MV3 forbids remote code)', () => {
     }
 });
 
+// The only shipped locales are en and zh_CN, both `ltr`. The old `*-rtl.js`
+// shims used `document.write` to inject a stylesheet only when
+// `@@bidi_dir === 'rtl'` and the locale was not en — a branch no locale can
+// reach. Rather than keep three dead scripts, three dead stylesheets and six
+// `@@bidi_dir` checks in page modules, render the single ltr layout straight.
+// Guard the removal so the dead branch cannot quietly come back.
+test('the unreachable RTL branch stays removed', () => {
+    for (const file of htmlFiles()) {
+        const html = fs.readFileSync(path.join(CHROME_DIR, file), 'utf8');
+        assert.doesNotMatch(html, /-rtl\.(js|css)/, `${file} still references an RTL asset`);
+    }
+    walkScripts((rel, src) => {
+        assert.ok(!/document\.write\s*\(/.test(src), `${rel} uses document.write again`);
+        assert.ok(!/@@bidi_dir/.test(src), `${rel} checks @@bidi_dir again (no shipped locale is rtl)`);
+    });
+    for (const name of ['history', 'options', 'popup']) {
+        assert.ok(!exists(`scripts/${name}-rtl.js`), `scripts/${name}-rtl.js was removed; do not re-add it`);
+        assert.ok(!exists(`css/${name}-rtl.css`), `css/${name}-rtl.css was removed; do not re-add it`);
+    }
+});
+
 // ---------------------------------------------------------------------------
 // MV3 Service Worker constraints
 // ---------------------------------------------------------------------------
+
+test('shipped diagnostic logs are behind the DEBUG switch', () => {
+    // Every page and the worker used to print a startup trace unconditionally.
+    // Warnings and errors must stay live — they report real problems. Only the
+    // informational `log`/`info` calls are routed through debugLog().
+    const adapter = fs.readFileSync(path.join(CHROME_DIR, 'scripts/storage-adapter.js'), 'utf8');
+    assert.match(adapter, /globalObj\.DEBUG\s*=\s*false/, 'the shipped default must be quiet');
+    assert.match(adapter, /globalObj\.debugLog\s*=/, 'there must be one shared debug helper');
+
+    for (const rel of ['scripts/storage-adapter.js', 'scripts/db-manager.js', 'scripts/background-sw.js']) {
+        const src = fs.readFileSync(path.join(CHROME_DIR, rel), 'utf8');
+        assert.doesNotMatch(src, /console\.(log|info)\s*\(/,
+            `${rel} prints an unconditional diagnostic log; use debugLog()`);
+    }
+});
 
 test('service worker does not use DOM or timer-based scheduling', () => {
     const sw = fs.readFileSync(path.join(CHROME_DIR, 'scripts/background-sw.js'), 'utf8');
@@ -177,23 +213,31 @@ test('service worker does not use DOM or timer-based scheduling', () => {
     assert.ok(!/\bsetInterval\s*\(/.test(sw), 'service worker must use chrome.alarms, not setInterval');
 });
 
-test('service worker never calls a function named by the message itself', () => {
-    // Comments are stripped: this file documents the removed dispatch by
-    // writing it out, which would otherwise match the very thing we forbid.
+test('the dead generic message dispatch stays deleted', () => {
+    // `self[message.function](...)` once exposed every service-worker global —
+    // internal helpers included — to anyone who could reach the port. It was
+    // narrowed to a whitelist, but that whitelist's last entry (deleteDb) and
+    // its getData/callFunction actions had no sender left: options.js calls
+    // dbManager.deleteDB() in its own page, and the popup reads the session
+    // snapshot instead of messaging. Only two actions are still live.
     const sw = stripJsComments(fs.readFileSync(path.join(CHROME_DIR, 'scripts/background-sw.js'), 'utf8'));
 
-    // `self[message.function](...)` exposed every service-worker global —
-    // internal helpers included — to anyone who could reach the port. Dispatch
-    // has to go through an explicit table of names.
-    assert.doesNotMatch(sw, /self\s*\[\s*message\s*\.\s*function\s*\]/);
-    assert.match(sw, /CALLABLE_FUNCTIONS\s*\[\s*message\.function\s*\]/);
-});
+    assert.doesNotMatch(sw, /self\s*\[\s*message\s*\.\s*function\s*\]/,
+        'a message must never name the function to call');
+    for (const dead of ['CALLABLE_FUNCTIONS', 'handleCallFunction', 'callFunction', 'getData', 'deleteDb']) {
+        assert.doesNotMatch(sw, new RegExp('\\b' + dead + '\\b'),
+            `${dead} has no sender left; do not re-add the generic dispatch`);
+    }
 
-test('service worker checks the sender before running a callFunction request', () => {
-    const sw = fs.readFileSync(path.join(CHROME_DIR, 'scripts/background-sw.js'), 'utf8');
-
-    // Without this, any page or extension that can guess the name gets to run it.
-    assert.match(sw, /sender\.id\s*!==\s*chrome\.runtime\.id/);
+    // The two survivors. A third case is fine only if it has a real sender;
+    // this guards against the table quietly growing back.
+    for (const action of ['refreshContextMenu', 'clearFaviconCache']) {
+        assert.match(sw, new RegExp(`case\\s*['"]${action}['"]`), `${action} must still be handled`);
+    }
+    const listener = sw.slice(sw.indexOf('chrome.runtime.onMessage.addListener'));
+    const cases = [...listener.matchAll(/case\s*['"]([^'"]+)['"]/g)].map((m) => m[1]);
+    assert.deepEqual(cases.sort(), ['clearFaviconCache', 'refreshContextMenu'],
+        'onMessage must dispatch only the two actions with live senders');
 });
 
 test('the crawl is paced, and its constants are declared before their callers', () => {
@@ -292,6 +336,74 @@ test('service worker imports its dependencies via importScripts', () => {
 // ---------------------------------------------------------------------------
 // Asset references
 // ---------------------------------------------------------------------------
+
+// Every image shipped in the zip is either referenced by the extension or
+// dead weight. The 3.3.0 removal of the per-row pin/delete buttons left a
+// batch of icons and three CSS rules behind; a guard that only checks "does a
+// referenced file exist" cannot see files nobody references any more.
+//
+// References live in HTML attributes, CSS url() and JS string literals (e.g.
+// the fallback icons getFaviconUrl() returns), so all three sources are
+// concatenated. manifest.json and the locale files are included for icons and
+// __MSG_ placeholders. A word boundary keeps `2.png` from matching inside
+// `tree-32.png`.
+test('no orphaned image assets are shipped', () => {
+    const imageDirs = [path.join(CHROME_DIR, 'images'), path.join(CHROME_DIR, 'css', 'img')];
+    const images = [];
+    const walk = (dir) => {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            const p = path.join(dir, entry.name);
+            if (entry.isDirectory()) walk(p);
+            else if (/\.(png|gif|jpe?g|svg|webp)$/i.test(entry.name)) {
+                images.push({ abs: p, base: entry.name });
+            }
+        }
+    };
+    imageDirs.forEach(walk);
+    assert.ok(images.length > 0, 'expected shipped images');
+
+    let sources = '';
+    const collect = (dir) => {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            const p = path.join(dir, entry.name);
+            if (entry.isDirectory()) collect(p);
+            else if (/\.(html|css|js|json|mjs)$/i.test(entry.name)) {
+                sources += fs.readFileSync(p, 'utf8') + '\n';
+            }
+        }
+    };
+    collect(CHROME_DIR);
+    // The e2e suite and dev tooling also name a couple of icons.
+    for (const rel of ['e2e/pages.spec.mjs', 'scripts/dev-browser.sh']) {
+        const p = path.resolve(CHROME_DIR, '..', rel);
+        if (fs.existsSync(p)) sources += fs.readFileSync(p, 'utf8') + '\n';
+    }
+
+    const orphan = images.filter(({ base }) => {
+        const name = base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        return !(new RegExp(`(?<![\\w@.-])${name}(?![\\w])`)).test(sources);
+    }).map(({ abs }) => path.relative(CHROME_DIR, abs));
+
+    assert.deepEqual(orphan.sort(), [], 'unreferenced images should be deleted from the shipped extension');
+});
+
+test('the orphan-image guard needs a whole basename, not a substring', () => {
+    // Without the boundary, `2.png` looks referenced inside `tree-32.png` and
+    // the whole `diy/` set (whose names are single digits) would have stayed
+    // invisible — exactly the shape that made those files linger. Both halves:
+    // a real reference must clear the name, and a substring must not.
+    const referenced = (base, text) => {
+        const name = base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        return new RegExp(`(?<![\\w@.-])${name}(?![\\w])`).test(text);
+    };
+    assert.equal(referenced('2.png', 'tree-32.png'), false,
+        'a digit filename must not hide inside a larger icon name');
+    assert.equal(referenced('2.png', 'url(./img/2.png)'), true,
+        'a real url() reference must clear the name');
+    assert.equal(referenced('icon19.png', 'icon19-other.png'), false,
+        'a shorter icon name must not match a longer sibling');
+    assert.equal(referenced('icon19.png', 'images/icon19.png'), true);
+});
 
 test('every local src/href in HTML points at an existing file', () => {
     const missing = [];
@@ -459,6 +571,20 @@ test('every returnLang() key used in JS exists in both locales', () => {
         assert.ok(EN[key], `en missing JS key: ${key}`);
         assert.ok(ZH[key], `zh_CN missing JS key: ${key}`);
     }
+});
+
+test('page scripts never overwrite document.title with a literal', () => {
+    // deleteHistoryItem() used to write 'Deleting...' and restore the hard-coded
+    // 'History | Recent History' — English even in the Chinese UI, and not the
+    // title the shipped HTML declares. Transient titles now go through
+    // returnLang() and the original is captured at module load.
+    const offenders = [];
+    walkScripts((file, src) => {
+        for (const m of src.matchAll(/document\.title\s*=\s*(['"`])([^'"`]*)\1/g)) {
+            offenders.push(`${file}: ${m[2]}`);
+        }
+    });
+    assert.deepEqual(offenders, [], 'a title is user-visible text; use i18n or keep the HTML title');
 });
 
 test('no user-visible string in a page script is hard-coded Chinese', () => {
@@ -3041,6 +3167,30 @@ test('every periodic alarm goes through the same arm-once guard', () => {
     const calls = sw.match(/(?<!function )\bscheduleAlarm\s*\(/g) || [];
     assert.equal(calls.length, 2,
         'mostVisited and the crawl must both go through scheduleAlarm()');
+});
+
+test('load-range3 is a real retention window, not only a query bound', () => {
+    // It was documented as "cache retention days" but only ever used by the
+    // tree pages to stop paging back. Nothing deleted a record, so the three
+    // IndexedDB stores and the heat map grew for the life of the profile and
+    // every page paid to deserialise them on startup. Guard the whole chain so
+    // it cannot rot back into a name on a slider.
+    const sw = stripJsComments(fs.readFileSync(path.join(CHROME_DIR, 'scripts/background-sw.js'), 'utf8'));
+    assert.match(sw, /function retentionCleanup\s*\(/, 'there must be a retention sweep');
+    assert.match(sw, /localStorage\['load-range3'\]/, 'it must read the retention setting');
+    assert.match(sw, /dbManager\.purgeExpired\s*\(/, 'it must prune the IndexedDB stores');
+    assert.match(sw, /delete calendar_storage2\[key\]/, 'it must also drop expired heat-map days');
+    // Piggybacked on the existing most-visited alarm: no third alarm, no extra
+    // worker wake-up, and it goes through onStorageReady like the crawl.
+    const branch = sw.slice(sw.indexOf('if (alarm.name === MOST_VISITED_ALARM)'),
+        sw.indexOf('} else if', sw.indexOf('if (alarm.name === MOST_VISITED_ALARM)')));
+    assert.match(branch, /retentionCleanup\s*\(\s*\)/, 'the sweep must run on the paid-for alarm');
+
+    const db = fs.readFileSync(path.join(CHROME_DIR, 'scripts/db-manager.js'), 'utf8');
+    assert.match(db, /purgeExpired\s*\(beforeTime\)/, 'db-manager must expose the sweep');
+    for (const store of ['VisitItem', 'urls', 'closed']) {
+        assert.ok(db.includes(`store: '${store}'`), `the sweep must cover the ${store} store`);
+    }
 });
 
 test('the alarm periods are declared before the boot callback that reads them', () => {

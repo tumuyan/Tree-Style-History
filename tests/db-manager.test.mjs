@@ -26,6 +26,10 @@ class FakeDatabase {
         this.objectStoreNames = { contains: (n) => stores.includes(n) };
         this.transactions = 0;
         this.written = new Map(); // store name -> records put
+        // Rows that already exist before a sweep. purgeExpired() walks these
+        // through an index cursor; the fake sorts them by the indexed field.
+        this.seeded = new Map();  // store name -> records
+        this.deleted = new Map(); // store name -> keys deleted
     }
 
     close() {
@@ -38,6 +42,16 @@ class FakeDatabase {
         return this.written.get(name);
     }
 
+    /** Preload rows the sweep should find. */
+    seed(name, records) {
+        this.seeded.set(name, records.slice());
+    }
+
+    deletedFrom(name) {
+        if (!this.deleted.has(name)) this.deleted.set(name, []);
+        return this.deleted.get(name);
+    }
+
     transaction() {
         if (this.closed) {
             const err = new Error('InvalidStateError: the connection has been closed.');
@@ -47,10 +61,51 @@ class FakeDatabase {
         this.transactions++;
         const db = this;
         const tx = { oncomplete: null, onerror: null, onabort: null };
+        // A cursor per openCursor() call, advanced by continue() on a macrotask
+        // so the sweep's per-row onsuccess handlers really run in sequence.
         tx.objectStore = (name) => ({
             put(record) { db.stored(name).push(record); return {}; },
+            index(indexName) {
+                return {
+                    openCursor(range) {
+                        const request = {};
+                        const field = { visitTime: 'visitTime', lastVisitTime: 'lastVisitTime',
+                            closeTime: 'closeTime' }[indexName] || indexName;
+                        const upper = range && range.upper;
+                        const rows = (db.seeded.get(name) || [])
+                            .filter((r) => upper === undefined || r[field] <= upper)
+                            .sort((a, b) => a[field] - b[field]);
+                        // A synchronous cursor: continue() hands the next row
+                        // straight back. Real IDB queues these, but nothing in
+                        // purgeExpired() depends on the walk being async, and a
+                        // fixed timer here would race transaction.oncomplete on
+                        // a slow CI box.
+                        let i = 0;
+                        const step = () => {
+                            if (!request.onsuccess) return;
+                            if (i >= rows.length) {
+                                request.onsuccess({ target: { result: null } });
+                                return;
+                            }
+                            const value = rows[i++];
+                            const cursor = {
+                                value,
+                                delete() { db.deletedFrom(name).push(value); },
+                                continue: step,
+                            };
+                            request.onsuccess({ target: { result: cursor } });
+                        };
+                        // Microtask: it runs before the transaction's
+                        // macrotask oncomplete, but after purgeExpired() has
+                        // assigned request.onsuccess.
+                        queueMicrotask(step);
+                        return request;
+                    },
+                };
+            },
         });
-        // Completes asynchronously, like a real transaction.
+        // Completes asynchronously, like a real transaction, after the
+        // cursor walks (setTimeout 0 above runs before this timeout).
         setTimeout(() => { if (tx.oncomplete) tx.oncomplete(); }, 0);
         return tx;
     }
@@ -90,7 +145,8 @@ function makeIndexedDB() {
 function loadDbManager() {
     const { indexedDB, state } = makeIndexedDB();
     const win = {};
-    const ctx = { indexedDB, window: win, console, setTimeout, IDBKeyRange: {} };
+    const IDBKeyRange = { upperBound: (upper) => ({ upper }) };
+    const ctx = { indexedDB, window: win, console, setTimeout, queueMicrotask, IDBKeyRange };
     ctx.self = ctx; // db-manager.js also publishes onto `self`
     vm.createContext(ctx);
     new vm.Script(SRC, { filename: 'db-manager.js' }).runInContext(ctx);
@@ -187,4 +243,56 @@ test('close() invalidates the cached connection too', async () => {
     assert.notEqual(second, first);
     assert.equal(second.closed, false);
     assert.doesNotThrow(() => second.transaction(['urls'], 'readwrite'));
+});
+
+// ---------------------------------------------------------------------------
+// Retention cleanup
+// ---------------------------------------------------------------------------
+
+test('purgeExpired drops old rows from all three stores and keeps recent ones', async () => {
+    const { dbManager, state } = loadDbManager();
+    await dbManager.init();
+
+    const DAY = 24 * 3600 * 1000;
+    const now = Date.now();
+    state.db.seed('VisitItem', [
+        { visitId: 1, visitTime: now - 60 * DAY },
+        { visitId: 2, visitTime: now - 5 * DAY },
+    ]);
+    state.db.seed('urls', [
+        { id: 'a', lastVisitTime: now - 60 * DAY },
+        { id: 'b', lastVisitTime: now - 5 * DAY },
+    ]);
+    state.db.seed('closed', [
+        { id: 'c', closeTime: now - 60 * DAY },
+        { id: 'd', closeTime: now - 5 * DAY },
+        // A still-open marker: closeTime 0. It is older than the cutoff by
+        // timestamp but must survive — it belongs to the current session.
+        { id: 'e', closeTime: 0, close: -1 },
+    ]);
+
+    const cutoff = now - 30 * DAY;
+    const removed = await dbManager.purgeExpired(cutoff);
+
+    assert.equal(removed, 3, 'one old row per store must be deleted');
+    assert.deepEqual(state.db.deletedFrom('VisitItem').map((r) => r.visitId), [1]);
+    assert.deepEqual(state.db.deletedFrom('urls').map((r) => r.id), ['a']);
+    assert.deepEqual(state.db.deletedFrom('closed').map((r) => r.id), ['c'],
+        'the still-open marker (closeTime 0) must not be swept');
+});
+
+test('purgeExpired uses the cutoff faithfully', async () => {
+    const { dbManager, state } = loadDbManager();
+    await dbManager.init();
+    const now = Date.now();
+    state.db.seed('VisitItem', [
+        { visitId: 1, visitTime: now - 10 * 1000 },
+        { visitId: 2, visitTime: now - 2 * 1000 },
+    ]);
+    state.db.seed('urls', []);
+    state.db.seed('closed', []);
+
+    const removed = await dbManager.purgeExpired(now - 5 * 1000);
+    assert.equal(removed, 1, 'only the row at/older than the cutoff is dropped');
+    assert.deepEqual(state.db.deletedFrom('VisitItem').map((r) => r.visitId), [1]);
 });

@@ -123,6 +123,12 @@ Bug 修复: `options.html?p=<任意值>` 会把整页按钮搞死——`p` 直�
 Bug 修复: `mostVisited` 定时器每次 Service Worker 唤醒都被重新武装，倒计时不断被重置、实际几乎不会触发（连挂在它上面的 favicon 负缓存 TTL 清扫也一起失效）；现在两个周期闹钟都走同一处「已存在则不重建」收口，与分趟爬库闹钟一致  
 Bug 修复: 弹窗一行坏数据会带走后面所有区块——缓存行缺 `favicon` 字段、或冷启动时 `mv-blocklist` 还没落库，都会让 `.indexOf()` 抛异常，而 popup.js 的区块循环没有 try/catch；两处读取都给了空串兜底  
 文档: Policy 补明默认 favicon 服务（duckduckgo）会把页面主机名发送给第三方；浏览历史本身仍只存本地，可在选项里改用浏览器内置的 `chrome://favicon/` 服务避免这类外部请求  
+行为变更: `load-range3`（选项「缓存保留天数」）此前名存实亡——只在两个树状页当查询回溯边界，从无删除逻辑，三个 IndexedDB store 与热力图只增不减，拖慢每个页面和 SW 的启动；现在 SW 按这个天数真清理：挂在 `mostVisited` 闹钟上、每天最多一次，删掉 `VisitItem` / `urls` / `closed` 里更旧的记录，并同步删掉 `calendar_storage2` 里过期的日期（0 = 永久保留，默认 120 天）  
+清理: 删除整套不可达的 RTL 分支（三个 `*-rtl.js` 的 `document.write`、三个 `*-rtl.css`、6 个页面的 `<script>` 与 5 处 `@@bidi_dir` 判断）——只发布 `en` / `zh_CN` 两个 ltr locale，没有语言能到达它  
+清理: 删除 66 张无引用的孤儿图片（`icon19-*`、整套 `scrollbar-*.gif` / `tab-*.png` / `css/img/diy/`、随 3.3.0 删按钮遗留的 `pin.png` / `star.png` / `pin-grey.png` / `star-grey.png` 等）、`history.css` 里 `.item .bookmark` / `.item .pin` / `.bookmarked` / `.pinned` 四段孤儿规则，并加一条「无孤儿图片」静态守卫（按完整 basename 匹配，附变异探针）  
+清理: 删除零发送方的消息通道残留（`CALLABLE_FUNCTIONS` / `callFunction` / `getData` / `deleteDb`），`onMessage` 现在只分发 `refreshContextMenu` / `clearFaviconCache` 两个真正在用的 action  
+清理: 启动诊断日志（SW 启动摘要、存储适配器初始化计时、db-manager 开库日志）收敛到 `storage-adapter.js` 的 `DEBUG` 开关，默认关闭；`console.warn` / `console.error` 不受影响  
+Bug 修复: 删除历史时 `document.title` 写死英文（`'Deleting...'` / `'History | Recent History'`），英文界面之外的用户也只看到英文，且恢复值与 HTML 标题不一致；现在走 i18n（`deleting` 已补 en/zh），恢复用模块加载时记下的页面原标题  
 
 3.3.1 (2026/06/19)  
 修复设置丢失的bug 

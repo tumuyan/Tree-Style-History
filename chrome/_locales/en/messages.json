@@ -341,6 +341,9 @@
     "loading": {
         "message": "Loading..."
     },
+    "deleting": {
+        "message": "Deleting..."
+    },
     "original": {
         "message": "Original"
     },
