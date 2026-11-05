@@ -1248,7 +1248,7 @@ function setBadge(text, force) {
 // pass over the whole window, started once. Raising the frequency without
 // lowering the cost of a pass would just run that pass more often, so a pass is
 // now bounded: a window too large to finish in one is covered by several
-// consecutive ones, each resuming from the position the last persisted.
+// consecutive ones, each resuming from the cursor the last persisted.
 //
 // Every constant here is declared before any function below reaches for it,
 // `loadHistory()` included. `const` sits in the temporal dead zone until
@@ -1264,7 +1264,7 @@ const VISIT_CONCURRENCY = 6;
 const CRAWL_CURSOR_KEY = 'crawl-cursor';
 // The heat counts gathered by the passes of one window, added up until the
 // window is finished. Session storage for the same reason as the cursor: the
-// accumulator only means something next to the position it belongs to, and a
+// accumulator only means something next to the walk it belongs to, and a
 // recycled worker must resume both together.
 const CRAWL_HEAT_KEY = 'crawl-heat';
 // How often the crawl is flushed and its position persisted. ~500 URLs keeps
@@ -1274,7 +1274,7 @@ const CRAWL_HEAT_KEY = 'crawl-heat';
 // worker recycled mid-pass, so it has to be due at least once *within* a pass.
 const CRAWL_CHECKPOINT_URLS = 200;
 // A cursor older than this describes a URL list from a different sitting; new
-// visits have changed it, so start over rather than trust the position.
+// visits have changed it, so start over rather than trust the anchor.
 const CRAWL_CURSOR_TTL = 6 * 3600 * 1000;
 // When a finished sweep stops being authoritative. A sweep says "every URL in
 // the window has been walked"; an hour later, the window holds URLs that were
@@ -1404,8 +1404,8 @@ async function runCrawlPass() {
 // for its visits. One `await` per URL meant tens of thousands of sequential
 // round trips — slow enough that the worker was usually recycled before it
 // finished, and a restart began again from zero, so a large history could
-// never be crawled at all. It now goes in chunks, and the position is
-// persisted so a restart picks up where it stopped.
+// never be crawled at all. It now goes in chunks, and a cursor is persisted
+// so a restart picks up where it stopped.
 //
 // It also stops after `CRAWL_BUDGET_URLS` URLs instead of crawling to the end.
 // A bounded pass is what lets the crawl run on every worker start rather than
@@ -1419,9 +1419,9 @@ async function runCrawlPass() {
 //   everything.
 async function processVisits(sweepAt) {
     const sweep = Number(sweepAt) || 0;
-    // The cursor indexes `urls_wait_load` — the whole window — so it is read
-    // before anything is filtered out. A position into a filtered list would
-    // point at a different URL as soon as the next pass filters differently.
+    // Read against the whole window before anything is filtered out. The
+    // cursor is an id into `urls_wait_load`; a resume that cannot find it
+    // starts from the top of whatever is left (see restoreCrawlCursor()).
     const cursor = await restoreCrawlCursor();
     const start = cursor.start;
     // Only from the beginning of the walk, and only when nothing is being
@@ -1540,8 +1540,8 @@ async function processVisits(sweepAt) {
     } else {
         // Budget spent, not a finished walk. Cursor and counts in one write, so
         // a worker recycled between them cannot resume one without the other.
-        // The id is what the next pass resumes from; the position is its
-        // fallback for when the rebuilt list no longer holds that id.
+        // The id is the anchor the next pass resumes from; the position is a
+        // diagnostic of how far this pass got, not a resume index.
         await saveCrawlState(queue[urls_p - 1].id, urls_p, heatDays);
     }
     setBadge('', true); // forced: the badge must end up cleared
@@ -1683,16 +1683,16 @@ async function crawlUrlVisits(url_item) {
  * Where the previous worker got to.
  *
  * `urls_wait_load` is rebuilt from the database on every start, so the cursor
- * keeps both the id of the last URL written and its position: the id is
- * stable and exact, the position is the fallback for when the rebuilt list no
- * longer contains that id (it finished, or its visits are gone).
- *
- * `pos` is the *next* index, i.e. how many URLs of the list were walked — the
- * same thing the id path returns. The two used to disagree by one (the id path
- * returned `i + 1`, the stored position was the index of the last URL walked),
- * so a resume that fell back to the position re-walked it. One extra round trip
- * is not what that costs any more: the heat accumulator counts the visit again
- * and the day lands one too high, in a cache nothing recomputes.
+ * is anchored on the id of the last URL written: that id is stable and exact.
+ * The stored `pos` is only a diagnostic of how far the pass got — it is NOT a
+ * resume index. The list a position described is gone by the next pass:
+ * `crawlUrlVisits()` stamps `loadto` on every URL it walks, and `loadHistory()`
+ * filters those stamped URLs out, so the rebuilt list is shorter than the one
+ * the position was measured against. Applying it to the shorter list skips the
+ * untouched middle of the window; the pass is then judged complete and writes a
+ * partial count into a heat map that never recomputes a day. When the id cannot
+ * be found, the walk starts from the top of what is left — the URLs that left
+ * are exactly the ones already walked, so nothing is re-walked.
  *
  * Returns `{ start, resumed }` rather than a bare position. The two are not the
  * same question: a position of 0 means "walk from the top", which is the right
@@ -1703,9 +1703,8 @@ async function crawlUrlVisits(url_item) {
  * already walked". Collapsing them is what made a resume look like a fresh
  * start: `crawlUrlVisits()` stamps `loadto`, `loadHistory()` filters stamped
  * URLs out of the next list, so by the second pass of a window the cursor's id
- * is gone and its position (299) is past the end of what is left (50). Both
- * fallbacks fail, the position comes back 0, and the accumulator holding the
- * first pass's 300 counts is thrown away as stale — after which the pass that
+ * is gone — and that pass must still be told it is a resume, or the accumulator
+ * holding the first pass's counts is thrown away as stale and the pass that
  * finishes the window publishes only its own tail.
  */
 function restoreCrawlCursor() {
@@ -1725,14 +1724,19 @@ function restoreCrawlCursor() {
         });
         if (i >= 0) return { start: i + 1, resumed: true };
         // Not in the list any more — normal: those URLs were walked, stamped,
-        // and filtered out. The position is only usable while the list is still
-        // long enough for it to mean something.
-        if (cursor.pos > 0 && cursor.pos <= urls_wait_load.length) {
-            return { start: cursor.pos, resumed: true };
-        }
-        // Neither anchor resolves. Walk what is left from the top and keep the
-        // counts: in this shape the URLs that were walked are the ones that left
-        // the list, so starting over skips them rather than re-walking them. (A
+        // and filtered out. The heat accumulator from the earlier passes is
+        // still owed to the map, so this is a resumed window. Walk what is left
+        // from the top and keep the counts.
+        //
+        // The stored position is NOT a fallback here. It was an index into the
+        // list as it stood when it was written, and that list is rebuilt from
+        // the database on every start: crawlUrlVisits() stamps loadto, and
+        // loadHistory() drops every stamped URL, so the head of the list is
+        // gone by the next pass. Applying the old position to the shorter list
+        // skips the untouched middle of the window — the pass is then judged
+        // complete and publishes a partial count to a cache that never
+        // recomputes a day. Starting at 0 is safe: the walked URLs are exactly
+        // the ones that left, and `resumed` keeps the accumulated counts. (A
         // URL whose write failed never got stamped, so it is re-walked and
         // recounted — a handful against a whole head of the window.)
         return { start: 0, resumed: true };
