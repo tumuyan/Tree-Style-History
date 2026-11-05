@@ -137,6 +137,10 @@ function loadWorker(opts = {}) {
         // Likewise how many times it was re-parsed, which is how the tests tell
         // a cached copy from a discarded one.
         jsonParses: 0,
+        // URLs written to the favicon Cache API by the injected caches.open()
+        // recorder below. Empty for the crawl/session cases that never touch
+        // the cache, so a stray write is visible rather than silently allowed.
+        cachePuts: opts.faviconCachePuts || [],
     };
 
     const ev = (name) => ({
@@ -250,7 +254,25 @@ function loadWorker(opts = {}) {
             stringify: (value, a, b) => JSON.stringify(value, a, b),
         },
         localStorage: negLocalStorage(state),
-        caches: { open: async () => ({ match: async () => undefined, put: async () => {} }), delete: async () => true },
+        // Web-platform globals the real Service Worker has. Injected for the
+        // favicon tests, which drive handleFaviconRequest()/fallback end to end
+        // and need to see exactly which keys were written to the shared cache.
+        URL,
+        Request: function (url) { this.url = String(url); },
+        fetch: opts.faviconFetch || (async () => { throw new Error('fetch is not stubbed in this worker'); }),
+        // match() always misses so the network path is exercised; put() records
+        // the URL so a test can tell an exact-URL write from a shared-`<host>`
+        // one. The default recorder is state.cachePuts.
+        caches: {
+            open: async () => ({
+                match: async () => undefined,
+                put: async (req, res) => {
+                    state.cachePuts.push(req.url);
+                    return res;
+                },
+            }),
+            delete: async () => true,
+        },
         Response: { error: () => ({}) },
         // The worker's own onStorageReady hook. Nothing runs until boot(), and
         // afterwards it fires straight away — which is what the real adapter
@@ -1595,4 +1617,121 @@ test('the crawl alarm does not sweep the negative cache', async () => {
 
     assert.equal(swept.length, 0, 'a crawl pass must not pay for the negative-cache sweep');
     assert.ok(stale in negCache(w), 'and the entry it would have dropped must still be there');
+});
+
+// ---------------------------------------------------------------------------
+// Favicon shared cache
+//
+// `favicon-cache.internal/shared/<host>` is consulted by EVERY service before
+// its own URL, so a value written there is trusted across services. The primary
+// path only admits a response when `response.ok === true`; an opaque response
+// (status 0, e.g. a 404 from a service that answers with an image) cannot be
+// verified and must never reach the shared key. The fallback path used to write
+// unconditionally for both `ok` and `opaque`, poisoning the shared cache for
+// any later service on that hostname.
+// ---------------------------------------------------------------------------
+
+const SHARED_KEY = /const FAVICON_SHARED_KEY_PREFIX = '([^']+)'/.exec(SW_SRC)[1];
+
+/** A Response-ish object whose `.clone()` keeps the same shape. */
+function faviconResponse(ok, type) {
+    const make = () => ({ ok, type, clone: () => make() });
+    return make();
+}
+
+/** A duckduckgo icon URL whose hostname is `example.test`. */
+const PRIMARY_URL = 'https://icons.duckduckgo.com/ip3/example.test.ico';
+
+/**
+ * Drive handleFaviconRequest() with a failing primary and a configured
+ * fallback, and return the cache keys that were written.
+ *
+ * `primary` deliberately fails (ok=false, type='basic', i.e. an HTTP error)
+ * so the handler goes down the fallback branch — that is the branch under test.
+ * The fallback's own response is `fallbackResponse`.
+ */
+async function sharedCacheWritesFor(fallbackResponse) {
+    const puts = [];
+    let call = 0;
+    const w = loadWorker({
+        faviconCachePuts: puts,
+        faviconFetch: async () => {
+            call++;
+            // First fetch is the primary (network failure), second is the
+            // fallback service. Both go through the same stub.
+            return call === 1
+                ? faviconResponse(false, 'basic')
+                : fallbackResponse;
+        },
+    });
+    // A fallback service must be configured, or the handler returns before
+    // reaching fetchFaviconFallback() and the case would pass for the wrong
+    // reason. `google` produces a URL matching FAVICON_SERVICE_PATTERNS.
+    w.ctx.localStorage['favicon-service-fallback'] = 'google';
+    w.boot();
+    await w.settle();
+
+    const result = await w.ctx.handleFaviconRequest(new w.ctx.Request(PRIMARY_URL));
+    return { puts, result, call };
+}
+
+test('an opaque fallback response is not written to the shared cache', async () => {
+    // Regression for review #2: fetchFaviconFallback() used to write the
+    // shared key for `(ok || type === 'opaque')`. An opaque response cannot be
+    // verified, so that single write poisoned every later service's icon for
+    // the same hostname. The exact-URL cache is still fine — it is scoped to
+    // this one service URL.
+    const { puts, result, call } = await sharedCacheWritesFor(faviconResponse(false, 'opaque'));
+
+    assert.equal(call, 2, 'the fallback must actually have been fetched');
+    assert.ok(result, 'an opaque fallback is still returned to the page');
+    assert.ok(puts.includes('https://www.google.com/s2/favicons?sz=64&domain_url=https%3A%2F%2Fexample.test%2F'),
+        'the exact-URL cache must still hold the fallback icon');
+    assert.ok(!puts.some((u) => u.startsWith(SHARED_KEY)),
+        `an opaque response must not reach the shared cache; wrote ${JSON.stringify(puts)}`);
+});
+
+test('a successful fallback response is written to the shared cache', async () => {
+    // The same branch must keep its useful behaviour: a verifiable success is
+    // worth sharing across services. Without this case, "delete both writes"
+    // would also make the regression case above pass.
+    const { puts, result, call } = await sharedCacheWritesFor(faviconResponse(true, 'basic'));
+
+    assert.equal(call, 2, 'the fallback must actually have been fetched');
+    assert.ok(result, 'a successful fallback is returned to the page');
+    assert.ok(puts.includes(SHARED_KEY + 'example.test'),
+        `a response.ok fallback must populate the shared key; wrote ${JSON.stringify(puts)}`);
+});
+
+test('the primary and fallback paths apply the same shared-cache rule', async () => {
+    // Two writers, one invariant. Driving the primary with an opaque response
+    // and the fallback with an opaque response must produce the exact same
+    // decision about the shared key; a future edit that fixes only one of them
+    // leaves the other half of the bug. Both still write their own exact URL.
+    const puts = [];
+    const w = loadWorker({
+        faviconCachePuts: puts,
+        faviconFetch: async () => faviconResponse(false, 'opaque'),
+    });
+    w.ctx.localStorage['favicon-service-fallback'] = 'google';
+    w.boot();
+    await w.settle();
+
+    // Primary succeeds as opaque -> handleFaviconRequest() returns before the
+    // fallback is reached, so the shared key must be absent.
+    await w.ctx.handleFaviconRequest(new w.ctx.Request(PRIMARY_URL));
+    assert.ok(!puts.some((u) => u.startsWith(SHARED_KEY)),
+        `primary: opaque must not reach the shared cache; wrote ${JSON.stringify(puts)}`);
+    assert.ok(puts.includes(PRIMARY_URL), 'primary: the exact-URL cache is still written');
+
+    // Now force the fallback branch and confirm the same verdict there.
+    puts.length = 0;
+    let call = 0;
+    w.ctx.fetch = async () => {
+        call++;
+        return call === 1 ? faviconResponse(false, 'basic') : faviconResponse(false, 'opaque');
+    };
+    await w.ctx.handleFaviconRequest(new w.ctx.Request(PRIMARY_URL));
+    assert.ok(!puts.some((u) => u.startsWith(SHARED_KEY)),
+        `fallback: opaque must not reach the shared cache; wrote ${JSON.stringify(puts)}`);
 });

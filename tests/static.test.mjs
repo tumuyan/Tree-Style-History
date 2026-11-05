@@ -2913,3 +2913,39 @@ test('options.js seeds the defaults itself instead of trusting the worker', () =
     assert.notEqual(load, -1, 'options.js must still call loadOptions()');
     assert.ok(seed < load, 'the seed has to come first, or the form is built from unseeded storage');
 });
+
+test('options.js checks that a ?p= tab exists before touching it', () => {
+    // Review #5: the `p` query parameter was used to build two ids straight
+    // into $().style / $().classList. Unknown values (and `translations`, whose
+    // tab anchor is commented out in options.html) returned null and threw in
+    // the middle of DOMContentLoaded, so every listener below it — save,
+    // upload, clear cache — was lost. A cold-start race is not needed to hit
+    // this one; any crafted URL does it, which is why it is a shipped-input
+    // guard rather than a timing one.
+    //
+    // The check has to cover BOTH ids: a guard that only looks at the content
+    // panel would still pass `?p=translations` (the panel exists) and throw on
+    // the anchor. Assert the null-guard and the fallback together.
+    const src = readScript('scripts/options.js');
+    const firstContent = src.indexOf('var tabContent =');
+    const firstAnchor = src.indexOf('var tabAnchor =');
+    const guard = src.indexOf('if (!tabContent || !tabAnchor)');
+    const fallback = src.indexOf("tabName = 'options'");
+    // The fallback must RE-READ both elements: renaming the tab without
+    // refreshing the two lookups would still hand a null to .style below.
+    const reContent = src.indexOf("$('tab-' + tabName + '-content')", fallback);
+    const reAnchor = src.indexOf("$('tab-' + tabName)", fallback);
+    const style = src.indexOf('tabContent.style.display');
+
+    assert.notEqual(firstContent, -1, 'the panel must be looked up before any use');
+    assert.notEqual(firstAnchor, -1, 'the anchor must be looked up before any use');
+    assert.notEqual(guard, -1, 'options.js must guard both the panel and the anchor before use');
+    assert.ok(firstContent < guard && firstAnchor < guard,
+        'both lookups must precede the null-check, or the check sees undefined');
+    assert.notEqual(fallback, -1, 'an unknown p must fall back to the options tab');
+    assert.ok(reContent > fallback && reAnchor > fallback,
+        'the fallback must re-read both elements under the default name');
+    assert.notEqual(style, -1, 'the selected panel must still be shown');
+    assert.ok(guard < fallback && fallback < style,
+        'the fallback has to run before the panel is shown, or a null still reaches .style');
+});

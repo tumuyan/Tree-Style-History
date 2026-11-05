@@ -41,13 +41,21 @@ document.addEventListener('DOMContentLoaded', function () {
 
     var vars = getUrlVars();
 
-    if (vars['p'] == undefined) {
-        $('tab-options-content').style.display = 'block';
-        $('tab-options').classList.add('tab-current');
-    } else {
-        $('tab-' + vars['p'] + '-content').style.display = 'block';
-        $('tab-' + vars['p']).classList.add('tab-current');
+    // `p` comes straight off the query string, so it may name a tab that does
+    // not exist (or one whose anchor is commented out). Selecting it used to
+    // call .style/.classList on the null from $() -- an exception in the middle
+    // of DOMContentLoaded that lost every listener registered below. Require
+    // both the panel and its anchor, and fall back to the options tab otherwise.
+    var tabName = vars['p'] == undefined ? 'options' : vars['p'];
+    var tabContent = $('tab-' + tabName + '-content');
+    var tabAnchor = $('tab-' + tabName);
+    if (!tabContent || !tabAnchor) {
+        tabName = 'options';
+        tabContent = $('tab-' + tabName + '-content');
+        tabAnchor = $('tab-' + tabName);
     }
+    tabContent.style.display = 'block';
+    tabAnchor.classList.add('tab-current');
 
     // Options tabs
 

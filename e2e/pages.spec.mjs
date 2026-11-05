@@ -1297,3 +1297,35 @@ test('the download button restores the cloud copy and reloads the page', { skip:
         await witness.page.close();
     }
 });
+
+test('options.html?p=<unknown tab> falls back instead of killing the page', { skip: SKIP }, async () => {
+    // Review #5: `p` is read straight off the query string and used to build
+    // two ids. A bogus value made $() return null and the handler threw on
+    // `.style`; `?p=translations` is subtler — its content panel exists but
+    // the tab anchor is commented out in options.html, so it threw too.
+    // The exception lands in the middle of DOMContentLoaded, which is why the
+    // failure is not "a tab does not open" but "every button on the page is
+    // dead" (all listeners are registered below the throw).
+    for (const p of ['bogus', 'translations']) {
+        const page = await context.newPage();
+        const { jsErrors } = collectErrors(page);
+        await page.goto(`chrome-extension://${extensionId}/options.html?p=${p}`, { waitUntil: 'load' });
+        await settle(page);
+
+        // #rhitemsno only holds a number once loadOptions() has run, so it is
+        // the "the handler reached the end" signal — the exact thing that used
+        // to be lost. Asserting it here is what separates "fell back safely"
+        // from "did not throw but stopped halfway".
+        const shape = await page.evaluate(() => ({
+            itemsno: document.getElementById('rhitemsno').value,
+            optionsPanel: document.getElementById('tab-options-content').style.display,
+            optionsTabCurrent: document.getElementById('tab-options').classList.contains('tab-current'),
+        }));
+        await page.close();
+
+        assert.deepEqual(jsErrors, [], `?p=${p} threw inside DOMContentLoaded`);
+        assert.match(shape.itemsno, /^\d+$/, `?p=${p}: initialisation did not finish, the buttons are not wired`);
+        assert.equal(shape.optionsPanel, 'block', `?p=${p}: must fall back to the options panel`);
+        assert.equal(shape.optionsTabCurrent, true, `?p=${p}: must mark the options tab current`);
+    }
+});

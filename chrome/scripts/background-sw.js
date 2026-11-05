@@ -549,7 +549,12 @@ async function fetchFaviconFallback(request, cache) {
         var fallbackResponse = await fetch(fallbackUrl);
         if (fallbackResponse && (fallbackResponse.ok || fallbackResponse.type === 'opaque')) {
             cachePutSafe(cache, new Request(fallbackUrl), fallbackResponse.clone());
-            if (_shareFaviconCache) {
+            // Same invariant as the primary path above: only a verifiable
+            // response.ok may enter the cross-service shared cache. An opaque
+            // response (status 0) cannot be checked, so caching it under
+            // shared/<host> would poison every other service's fallback for
+            // that hostname. The exact-URL cache is safe either way.
+            if (_shareFaviconCache && fallbackResponse.ok) {
                 cachePutSafe(cache, new Request(FAVICON_SHARED_KEY_PREFIX + hostname), fallbackResponse.clone());
             }
             return fallbackResponse;
