@@ -16,6 +16,11 @@ import { modifierState, ITEM_SELECTED_COLOR, RENDER_BUDGET_MS } from './ui-state
 var selectedItem;
 var prh;
 
+// The page's own <title>, captured before any transient status replaces it.
+// Restoring a hard-coded string here used to leave the English UI (and the
+// label) inconsistent with the shipped HTML title.
+var initialTitle = (typeof document !== 'undefined') ? (document.title || '') : '';
+
 // --- Alert functions ---
 
 function alertUserHistory(pm) {
@@ -738,7 +743,7 @@ function deleteHistoryItem(w, redraw) {
             into = '#rh-views-search-insert';
         }
         if ($$(into + ' .checkbox input:checked').length > 0) {
-            document.title = 'Deleting...';
+            document.title = returnLang('deleting');
             alertLoadingHistory(true);
             Array.from($$(into + ' .checkbox input:checked')).forEach(function (el) {
                 el.closest('div.item-holder').remove();
@@ -764,7 +769,7 @@ function deleteHistoryItem(w, redraw) {
                         }
                     });
                 }
-                document.title = 'History | Recent History';
+                document.title = initialTitle;
                 alertLoadingHistory(true);
             });
         }
@@ -804,7 +809,7 @@ function deleteHistoryItem(w, redraw) {
             return;
         }
         if (startRange < endRange) {
-            document.title = 'Deleting...';
+            document.title = returnLang('deleting');
             alertUserHistory(true);
             chrome.history.deleteRange({ startTime: startRange, endTime: endRange }, function () {
                 // `redraw` stands where `window.calendar('yes','')` used to be.
@@ -819,7 +824,7 @@ function deleteHistoryItem(w, redraw) {
                 // change all of them.
                 if (typeof redraw === 'function') redraw();
                 history('yes', '');
-                document.title = 'History | Recent History';
+                document.title = initialTitle;
                 alertUserHistory(true);
             });
         }

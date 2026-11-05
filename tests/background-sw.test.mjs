@@ -141,6 +141,7 @@ function loadWorker(opts = {}) {
         // recorder below. Empty for the crawl/session cases that never touch
         // the cache, so a stray write is visible rather than silently allowed.
         cachePuts: opts.faviconCachePuts || [],
+        purgedAt: [],
     };
 
     const ev = (name) => ({
@@ -229,6 +230,9 @@ function loadWorker(opts = {}) {
         // through `urls_wait_load` and only a few need `loadHistory()` to build
         // its own queue.
         queryURLs: opts.queryURLs || (() => Promise.resolve([])),
+        // Records the cutoff the worker decided on; the stores themselves are
+        // not simulated here (db-manager.test.mjs covers the real sweep).
+        purgeExpired: (cutoff) => { state.purgedAt.push(cutoff); return Promise.resolve(0); },
         deleteDB: () => Promise.resolve(),
     };
 
@@ -1108,6 +1112,83 @@ test('the mostVisited alarm is armed once, like the crawl one', async () => {
         'an existing mostVisited alarm must not be re-armed on every start');
     assert.equal(store.filter((a) => a.name === 'crawlHistory').length, 1,
         'and the crawl alarm must still be armed exactly once');
+});
+
+// ---------------------------------------------------------------------------
+// Retention cleanup (load-range3)
+// ---------------------------------------------------------------------------
+
+test('the mostVisited alarm enforces load-range3 on the database and the heat map', async () => {
+    const w = loadWorker({ tabs: [] });
+    w.boot();
+    await w.settle();
+
+    const now = Date.now();
+    const DAY = 24 * 3600 * 1000;
+    w.ctx.localStorage['load-range3'] = '30';
+
+    // Two heat-map days: one well outside the 30-day window, one inside it.
+    // dayKey is the worker's own helper, so the keys are in the exact shape
+    // saveCrawledHeat()/history() write.
+    const oldKey = String(w.ctx.dayKey(now - 60 * DAY));
+    const freshKey = String(w.ctx.dayKey(now - 5 * DAY));
+    w.ctx.calendar_storage2[oldKey] = 12;
+    w.ctx.calendar_storage2[freshKey] = 7;
+    w.ctx.localStorage['calendar-storage2'] = JSON.stringify(w.ctx.calendar_storage2);
+
+    w.fire('alarms.onAlarm', { name: 'mostVisited' });
+    await w.settle();
+
+    assert.equal(w.state.purgedAt.length, 1, 'the alarm must run the database sweep');
+    const cutoff = w.state.purgedAt[0];
+    assert.ok(Math.abs(cutoff - (now - 30 * DAY)) < 5000,
+        'the cutoff must be load-range3 days before now');
+
+    assert.equal(w.ctx.calendar_storage2[oldKey], undefined,
+        'a heat-map day older than the retention window must be dropped');
+    assert.equal(w.ctx.calendar_storage2[freshKey], 7,
+        'a day still inside the window must be kept');
+    // The map is persisted back so other contexts see the same pruned set.
+    assert.equal(JSON.parse(w.ctx.localStorage['calendar-storage2'])[oldKey], undefined);
+
+    assert.ok(w.sessionStore.has('retention-cleanup'),
+        'the sweep must be stamped so the next wake-up skips it');
+});
+
+test('retention cleanup runs at most once a day', async () => {
+    const session = new Map();
+    const w = loadWorker({ tabs: [], sessionStore: session });
+    w.boot();
+    await w.settle();
+    w.ctx.localStorage['load-range3'] = '30';
+
+    w.fire('alarms.onAlarm', { name: 'mostVisited' });
+    await w.settle();
+    assert.equal(w.state.purgedAt.length, 1);
+
+    // A fresh worker later in the same browser session shares the marker.
+    const again = loadWorker({ tabs: [], sessionStore: session });
+    again.boot();
+    await again.settle();
+    again.ctx.localStorage['load-range3'] = '30';
+    again.fire('alarms.onAlarm', { name: 'mostVisited' });
+    await again.settle();
+
+    assert.equal(again.state.purgedAt.length, 0,
+        'a sweep already done today must not run again on the next wake-up');
+});
+
+test('load-range3 = 0 keeps the cache forever', async () => {
+    const w = loadWorker({ tabs: [] });
+    w.boot();
+    await w.settle();
+    w.ctx.localStorage['load-range3'] = '0';
+
+    w.fire('alarms.onAlarm', { name: 'mostVisited' });
+    await w.settle();
+
+    assert.equal(w.state.purgedAt.length, 0, '0 means no retention sweep');
+    assert.equal(w.sessionStore.has('retention-cleanup'), false);
 });
 
 test('a crawl alarm runs a pass', async () => {

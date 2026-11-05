@@ -20,11 +20,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var historyContainer = $('history-container');
     if (historyContainer) {
         historyContainer.style.transition = 'margin-left 0.25s, margin-right 0.25s, opacity 0.25s';
-        if (chrome.i18n.getMessage("@@bidi_dir") == 'rtl' && chrome.i18n.getMessage("@@ui_locale") !== 'en') {
-            historyContainer.style.marginRight = '180px';
-        } else {
-            historyContainer.style.marginLeft = '180px';
-        }
+        historyContainer.style.marginLeft = '180px';
         historyContainer.style.opacity = '1';
     }
 

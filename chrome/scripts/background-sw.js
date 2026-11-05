@@ -6,6 +6,10 @@ importScripts('storage-adapter.js');
 importScripts('background-utils.js');
 importScripts('db-manager.js');
 
+// Diagnostic logs go through the shared switch storage-adapter.js installs on
+// self. Fall back to a no-op when the worker is evaluated without it (tests).
+var debugLog = (typeof self !== 'undefined' && self.debugLog) || function () {};
+
 // Startup timing
 const _tSW = performance.now();
 // Declared here rather than where they are assigned: `initializeExistingTabs()`
@@ -35,6 +39,17 @@ const MOST_VISITED_ALARM = 'mostVisited';
 // sweeping the negative cache is piggybacked on the same alarm, so 30 minutes.
 const CRAWL_PERIOD_MINUTES = 15;
 const MOST_VISITED_PERIOD_MINUTES = 30;
+
+// `load-range3` is the cache retention window in days. The tree pages already
+// stop paging back at this boundary, so the worker deletes everything older
+// than it: without a delete, the three IndexedDB stores and the heat map only
+// ever grow, and every page's startup `get(null)` has to deserialise that
+// accumulation. 0 keeps the cache forever.
+const RETENTION_CLEANUP_KEY = 'retention-cleanup';
+// A day, not a period: the window is measured in whole days and nothing in it
+// changes within one. Piggybacked on the most-visited alarm so no extra wake-up
+// is paid for.
+const RETENTION_CLEANUP_INTERVAL = 24 * 3600 * 1000;
 
 // Set global vars
 var openedTabs = {};
@@ -261,17 +276,17 @@ function restoreSessionState() {
     });
 }
 
-console.log("Service Worker loading... (" + (performance.now() - _tSW).toFixed(1) + "ms)");
+debugLog("Service Worker loading... (" + (performance.now() - _tSW).toFixed(1) + "ms)");
 
 // Initialize on install
 self.addEventListener('install', (event) => {
-    console.log('Service Worker installing...');
+    debugLog('Service Worker installing...');
     self.skipWaiting();
 });
 
 // Activate and take control
 self.addEventListener('activate', (event) => {
-    console.log('Service Worker activating...');
+    debugLog('Service Worker activating...');
     event.waitUntil(clients.claim());
 });
 
@@ -556,7 +571,7 @@ async function fetchFaviconFallback(request, cache) {
         return null;
     }
     if (isNegativeCached(fallbackUrl)) {
-        console.info('SW: fallback also negative cached for', hostname);
+        debugLog('SW: fallback also negative cached for', hostname);
         return null;
     }
     try {
@@ -660,14 +675,14 @@ onStorageReady(function () {
 });
 
 chrome.runtime.onInstalled.addListener(() => {
-    console.log('onInstalled event');
+    debugLog('onInstalled event');
     onStorageReady(function () {
         initializeStorageState();
     });
 });
 
 chrome.runtime.onStartup.addListener(() => {
-    console.log('onStartup event');
+    debugLog('onStartup event');
     onStorageReady(function () {
         initializeStorageState();
     });
@@ -678,7 +693,7 @@ function initializeStorageState() {
     if (_storageInitialized) return;
     _storageInitialized = true;
 
-    console.log('Initializing storage state... (' + (performance.now() - _tSW).toFixed(1) + 'ms)');
+    debugLog('Initializing storage state... (' + (performance.now() - _tSW).toFixed(1) + 'ms)');
     _tSW_init = performance.now();
     
     // Read favicon cache sharing preference
@@ -730,7 +745,7 @@ function initializeStorageState() {
     // Initialize DB
     if (typeof dbManager !== 'undefined') {
         dbManager.init().then(() => {
-            console.log('DB ready in service worker (' + (performance.now() - _tSW).toFixed(1) + 'ms)');
+            debugLog('DB ready in service worker (' + (performance.now() - _tSW).toFixed(1) + 'ms)');
             _tSW_db = performance.now();
             dbManager.updateClosedTabsStatus();
             loadDate(date.getTime(), 0).catch(error => {
@@ -750,7 +765,7 @@ function initializeStorageState() {
     // have no other source and the live-tab query can only rebuild the two
     // tab lists.
     restoreSessionState().then(function (restored) {
-        console.log('Session state: ' + (restored ? 'restored' : 'cold start'));
+        debugLog('Session state: ' + (restored ? 'restored' : 'cold start'));
         initializeExistingTabs();
     }).catch(function (error) {
         // Only reachable from initializeExistingTabs(): restoreSessionState()
@@ -763,7 +778,7 @@ function initializeStorageState() {
 // Initialize tracking for existing tabs when service worker starts
 function initializeExistingTabs() {
     chrome.tabs.query({}, function(tabs) {
-        console.log('Initializing ' + tabs.length + ' existing tabs (' + (performance.now() - _tSW).toFixed(1) + 'ms)');
+        debugLog('Initializing ' + tabs.length + ' existing tabs (' + (performance.now() - _tSW).toFixed(1) + 'ms)');
 
         const live = {};
         for (let tab of tabs) {
@@ -788,9 +803,9 @@ function initializeExistingTabs() {
         }
         recentTabs = recentTabs.filter(function (id) { return live[id]; });
 
-        console.log('Opened tabs count:', Object.keys(openedTabs).length);
+        debugLog('Opened tabs count:', Object.keys(openedTabs).length);
         var dbMs = (_tSW_db !== undefined) ? (_tSW_db - _tSW).toFixed(1) + 'ms' : '(pending)';
-        console.log('[SW Startup] sync=' + (_tSW_load - _tSW).toFixed(1) +
+        debugLog('[SW Startup] sync=' + (_tSW_load - _tSW).toFixed(1) +
             'ms | init=' + (_tSW_init - _tSW).toFixed(1) +
             'ms | db=' + dbMs +
             ' | tabs=' + (performance.now() - _tSW).toFixed(1) +
@@ -806,6 +821,10 @@ chrome.alarms.onAlarm.addListener((alarm) => {
         // its own would wake the worker — and re-run the startup crawl — for
         // nothing but a map sweep.
         sweepNegativeCache();
+        // Same reasoning for the retention sweep: it is throttled to once a
+        // day and piggybacks on this already-paid wake-up. onStorageReady()
+        // because it reads load-range3 out of the storage cache, like the crawl.
+        onStorageReady(function () { retentionCleanup(); });
     } else if (alarm.name === CRAWL_ALARM) {
         // A pass, not the whole window: processVisits() stops when it has spent
         // its budget and the next alarm resumes from the cursor. Nothing here is
@@ -962,7 +981,7 @@ var mostVisitedInit = function () {
 
 // Listeners
 chrome.commands.onCommand.addListener(function (command) {
-    console.log('Command:', command);
+    debugLog('Command:', command);
     if (command == "open_history2") {
         chrome.tabs.create({ url: "history2.html" });
     } else if (command == "open_history1") {
@@ -1056,7 +1075,7 @@ function initContextMenu() {
                 if (chrome.runtime && chrome.runtime.lastError) {
                     console.warn('Failed to create context menu:', chrome.runtime.lastError);
                 } else {
-                    console.log('Context menu ready:', options.id);
+                    debugLog('Context menu ready:', options.id);
                     chrome.contextMenus.onClicked.addListener(handleContextMenuClick);
                 }
             });
@@ -1558,8 +1577,8 @@ async function processVisits(sweepAt) {
  * is one the crawl is *not* authoritative about — it was counted by an earlier
  * crawl over the same window, or by the page while the user looked at it, and
  * neither number is a recomputation of the other. So an existing count stays
- * until the retention cleanup deletes the day (`load-range3`, off by default),
- * at which point the day is empty again and refills on the next start.
+ * until retentionCleanup() drops the day (`load-range3` days old), at which
+ * point the day is empty again and refills on the next start.
  *
  * That is also why today is never written here. Today is the one day that keeps
  * moving, and the page is its authority: it counts the day it is displaying
@@ -1591,6 +1610,81 @@ function saveCrawledHeat(days) {
         stored = true;
     }
     if (stored) localStorage['calendar-storage2'] = JSON.stringify(calendar_storage2);
+}
+
+/**
+ * Enforce `load-range3` ("cache retention days") on the persisted cache.
+ *
+ * The tree pages already treat it as the furthest day they will page back to,
+ * so a record older than that boundary can never be rendered — yet nothing
+ * deleted it, and the three IndexedDB stores plus `calendar_storage2` grew for
+ * the life of the profile. Every page and the worker deserialise that whole map
+ * on startup, so the unbounded growth is a startup cost too.
+ *
+ * `days <= 0` means "keep forever", matching the option's 0 end of the slider.
+ * Otherwise the cutoff is `Date.now() - days * DAY`, and the same number is
+ * used for the stores (visitTime / lastVisitTime / closeTime) and for the heat
+ * map, whose keys are the day's end-of-day epoch.
+ *
+ * Throttled to once a day through session storage: this is piggybacked on the
+ * most-visited alarm (every 30 minutes) and a full-store sweep is not worth
+ * running on every wake-up. Session storage is the right place — the claim is
+ * about work done in this browser session, and it dies with the browser.
+ */
+async function retentionCleanup() {
+    const days = Number(localStorage['load-range3']);
+    if (!Number.isFinite(days) || days <= 0) return;
+
+    const area = sessionArea();
+    if (!area) return;
+    let last = 0;
+    try {
+        const stored = await area.get(RETENTION_CLEANUP_KEY);
+        last = Number(stored && stored[RETENTION_CLEANUP_KEY]) || 0;
+    } catch (error) {
+        console.warn('SW: could not read the retention cleanup marker', error);
+        return;
+    }
+    const now = Date.now();
+    if (last && now - last < RETENTION_CLEANUP_INTERVAL) return;
+
+    const cutoff = now - days * DAY;
+
+    // Both halves are independent; the heat map is pruned by a synchronous
+    // helper so its localStorage write does not sit after an await (which
+    // require-atomic-updates reads as a stale-state assignment).
+    pruneHeatMap(cutoff);
+    try {
+        await dbManager.purgeExpired(cutoff);
+    } catch (error) {
+        console.warn('SW: retention cleanup of the database failed', error);
+        return;
+    }
+
+    // Written last, and only after the store was actually pruned: a failed
+    // sweep must not postpone the next attempt by a whole day.
+    await area.set({ [RETENTION_CLEANUP_KEY]: now }).catch(function (error) {
+        console.warn('SW: could not persist the retention cleanup marker', error);
+    });
+}
+
+/**
+ * Drop heat-map days older than `cutoff` and persist the pruned map.
+ *
+ * `calendar_storage2` is `{ <end-of-day epoch ms>: <count> }`: its keys are
+ * absolute instants, so the same cutoff the database sweep uses applies
+ * directly, with no second time unit to reconcile. Deleted in place so the
+ * shared live binding keeps its identity for calendar.js and other contexts.
+ */
+function pruneHeatMap(cutoff) {
+    let dropped = false;
+    for (const key of Object.keys(calendar_storage2)) {
+        if (Number(key) < cutoff) {
+            delete calendar_storage2[key];
+            dropped = true;
+        }
+    }
+    if (dropped) localStorage['calendar-storage2'] = JSON.stringify(calendar_storage2);
 }
 
 /**
@@ -1945,66 +2039,20 @@ function add_tab_history(visitItems, i, loadfrom, url_item) {
     }
 }
 
-// Entry points a page may reach through the message channel. Dispatch used to
-// be `self[message.function](...)`, which made every global in this service
-// worker — internal helpers included — callable by name from any sender.
-const CALLABLE_FUNCTIONS = {
-    // Nothing in the extension sends it any more: options.js calls
-    // dbManager.deleteDB() in its own page, which is all this used to forward
-    // to. Kept so the dispatch table below is not empty — the table is the
-    // point, and `getData` still answers from it.
-    deleteDb: () => dbManager.deleteDB(),
-};
-
-function handleCallFunction(message, sender, sendResponse) {
-    if (!sender || sender.id !== chrome.runtime.id) {
-        sendResponse({ error: 'Rejected: foreign sender' });
-        return true;
-    }
-
-    // Own property only: a bare `CALLABLE_FUNCTIONS[name]` would also resolve
-    // inherited members such as `toString` and `constructor`, which would put
-    // the whitelist back to "any function reachable by name".
-    const fn = Object.hasOwn(CALLABLE_FUNCTIONS, message.function)
-        ? CALLABLE_FUNCTIONS[message.function]
-        : undefined;
-    if (typeof fn !== 'function') {
-        sendResponse({ error: 'Function not found' });
-        return true;
-    }
-
-    // Answered from a promise callback, so `true` is returned to keep the port
-    // open past this turn of the event loop.
-    Promise.resolve()
-        .then(() => fn(...(Array.isArray(message.args) ? message.args : [])))
-        .then(
-            (result) => sendResponse({ result }),
-            (error) => sendResponse({ error: error.message })
-        );
-
-    return true;
-}
-
 // Message handler for MV3 compatibility
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+// The middle argument is the sender; it is unused now that the generic
+// callFunction dispatch (which checked sender.id) is gone, but the listener
+// signature is fixed by chrome.runtime.onMessage.
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (!message || !message.action) {
         return;
     }
 
+    // Only two actions have a live sender left: config.js asks for a context
+    // menu rebuild after a save, and options.js clears the favicon caches.
+    // The old getData/callFunction/deleteDb dispatch had no senders at all;
+    // it exposed worker internals by name for a channel nobody used any more.
     switch (message.action) {
-        case 'getData':
-            // The only two keys this ever answered were openedTabs and
-            // recentTabs, and both readers are gone: the popup reads the
-            // snapshot the worker mirrors into chrome.storage.session, which
-            // costs no wake. Answering them here would mean a page could still
-            // wake the worker for a list it can read for free.
-            sendResponse(undefined);
-            break;
-
-        case 'callFunction':
-            // Returned because the reply is sent from a promise callback.
-            return handleCallFunction(message, sender, sendResponse);
-
         case 'refreshContextMenu':
             // Re-read favicon cache config from storage
             _shareFaviconCache = localStorage['share-favicon-cache'] !== 'no';
@@ -2034,5 +2082,5 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
 });
 
-console.log("Service Worker loaded (" + (performance.now() - _tSW).toFixed(1) + "ms)");
+debugLog("Service Worker loaded (" + (performance.now() - _tSW).toFixed(1) + "ms)");
 _tSW_load = performance.now();

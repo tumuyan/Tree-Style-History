@@ -198,7 +198,7 @@ input[type="text"]:focus {
     float: left;
 }
 
-.item .checkbox, .item .bookmark, .item .pin, .item .time {
+.item .checkbox, .item .time {
     display: block;
     float: left;
 }
@@ -219,19 +219,6 @@ input[type="text"]:focus {
     padding: 1px 5px 2px 5px;
     left: 3px;
     top: 3px;
-}
-
-.item .bookmark, .item .pin {
-    margin: 0 15px 0 9px;
-    padding-left: 8px;
-}
-
-.item .bookmark {
-    background: url('../images/star-grey.png') no-repeat left center;
-}
-
-.item .pin {
-    background: url('../images/pin-grey.png') no-repeat left center;
 }
 
 .item .time {
@@ -261,12 +248,6 @@ input[type="text"]:focus {
 
 .item .title:hover {
     text-decoration: underline;
-}
-
-.bookmarked, .pinned {
-    display: inline-block;
-    vertical-align: top;
-    margin-left: 5px;
 }
 
 .group-title {

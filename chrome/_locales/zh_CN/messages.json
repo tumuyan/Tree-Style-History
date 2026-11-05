@@ -353,6 +353,9 @@
     "loading": {
         "message": "正在载入..."
     },
+    "deleting": {
+        "message": "删除中..."
+    },
     "original": {
         "message": "原始"
     },

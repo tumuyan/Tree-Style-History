@@ -5,6 +5,11 @@
 (function() {
     'use strict';
 
+    // Diagnostic logs go through the shared switch storage-adapter.js installs
+    // on the global. When this file is evaluated on its own (tests, or a page
+    // that forgot the adapter) the fallback is a no-op, never a ReferenceError.
+    var debugLog = (typeof self !== 'undefined' && self.debugLog) || (typeof window !== 'undefined' && window.debugLog) || function () {};
+
     const DB_NAME = 'testDB';
     const DB_VERSION = 6;
 
@@ -36,7 +41,7 @@
                 };
 
                 request.onupgradeneeded = (event) => {
-                    console.log('Upgrading DB to version', DB_VERSION);
+                    debugLog('Upgrading DB to version', DB_VERSION);
                     const db = event.target.result;
 
                     // Create VisitItem store
@@ -48,7 +53,7 @@
                             visitStore.createIndex('referringVisitId', 'referringVisitId', { unique: false });
                             visitStore.createIndex('title', 'title', { unique: false });
                             visitStore.createIndex('transition', 'transition', { unique: false });
-                            console.log('Created VisitItem store');
+                            debugLog('Created VisitItem store');
                         } catch (error) {
                             console.error('Error creating VisitItem store:', error);
                         }
@@ -62,7 +67,7 @@
                             urlStore.createIndex('lastVisitTime', 'lastVisitTime', { unique: false });
                             urlStore.createIndex('title', 'title', { unique: false });
                             urlStore.createIndex('from_to', ['loadfrom', 'loadto'], { unique: false });
-                            console.log('Created urls store');
+                            debugLog('Created urls store');
                         } catch (error) {
                             console.error('Error creating urls store:', error);
                         }
@@ -76,7 +81,7 @@
                             closedStore.createIndex('title', 'title', { unique: false });
                             closedStore.createIndex('closeTime', 'closeTime', { unique: false });
                             closedStore.createIndex('close', 'close', { unique: false });
-                            console.log('Created closed store');
+                            debugLog('Created closed store');
                         } catch (error) {
                             console.error('Error creating closed store:', error);
                         }
@@ -84,7 +89,7 @@
                 };
 
                 request.onsuccess = (event) => {
-                    console.log('Success opening DB');
+                    debugLog('Success opening DB');
                     this.db = event.target.result;
                     this.isReady = true;
 
@@ -165,7 +170,7 @@
                 };
 
                 deleteRequest.onsuccess = (event) => {
-                    console.log('Successfully deleted DB');
+                    debugLog('Successfully deleted DB');
                     resolve(event);
                 };
             });
@@ -401,6 +406,57 @@
             });
         }
 
+        /**
+         * Drop cached history older than `beforeTime` from all three stores.
+         *
+         * This is what `load-range3` ("cache retention days") actually buys:
+         * the tree pages already use it as the furthest day they will query,
+         * so anything older than that boundary is unreachable and only costs
+         * every page's startup snapshot. `VisitItem` is keyed by visitTime,
+         * `urls` by lastVisitTime and `closed` by closeTime.
+         *
+         * `closed` rows with a non-positive close time are "still open" (-1)
+         * or "url/title changed" (-2) markers that updateClosedTabsStatus()
+         * has not flipped yet; their closeTime is 0, so they are deliberately
+         * NOT swept here — they belong to the current session, not old cache.
+         *
+         * One transaction per store, resolves with the count removed.
+         */
+        purgeExpired(beforeTime) {
+            const cutoff = Number(beforeTime);
+            const specs = [
+                { store: 'VisitItem', index: 'visitTime' },
+                { store: 'urls', index: 'lastVisitTime' },
+                { store: 'closed', index: 'closeTime' },
+            ];
+            return this.getDB().then(db => {
+                return new Promise((resolve, reject) => {
+                    const transaction = db.transaction(specs.map((s) => s.store), 'readwrite');
+                    let removed = 0;
+                    for (const spec of specs) {
+                        const index = transaction.objectStore(spec.store).index(spec.index);
+                        const request = index.openCursor(IDBKeyRange.upperBound(cutoff));
+                        request.onsuccess = (event) => {
+                            const cursor = event.target.result;
+                            if (!cursor) return;
+                            // closeTime 0 means the row is not a closed page yet.
+                            if (spec.store === 'closed' && !cursor.value.closeTime) {
+                                cursor.continue();
+                                return;
+                            }
+                            cursor.delete();
+                            removed++;
+                            cursor.continue();
+                        };
+                        request.onerror = (event) => reject(event);
+                    }
+                    transaction.oncomplete = () => resolve(removed);
+                    transaction.onerror = (event) => reject(event);
+                    transaction.onabort = (event) => reject(event);
+                });
+            });
+        }
+
         // Update closed tabs status
         updateClosedTabsStatus() {
             return this.getDB().then(db => {
@@ -425,15 +481,15 @@
 
                             const updateRequest = cursor.update(value);
                             updateRequest.onsuccess = () => {
-                                console.log('updateClosed() succeed ' + value.id);
+                                debugLog('updateClosed() succeed ' + value.id);
                             };
                             updateRequest.onerror = () => {
-                                console.log('updateClosed() fail ' + value.id);
+                                debugLog('updateClosed() fail ' + value.id);
                             };
 
                             cursor.continue();
                         } else {
-                            console.log('updateClosed() done');
+                            debugLog('updateClosed() done');
                             resolve();
                         }
                     };

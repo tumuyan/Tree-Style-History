@@ -4,13 +4,23 @@
 (function () {
     const globalObj = typeof window !== 'undefined' ? window : self;
 
+    // One switch for the extension's diagnostic logs. Every page and the
+    // service worker print a startup trace otherwise, which is noise in a
+    // shipped extension. Off by default; set `self.DEBUG = true` (or
+    // `window.DEBUG = true` in a page) in DevTools and reload to see them.
+    // Warnings and errors are NOT routed through here — those are real problems.
+    globalObj.DEBUG = false;
+    globalObj.debugLog = function () {
+        if (globalObj.DEBUG) console.log.apply(console, arguments);
+    };
+
     // === Popup timing tracking ===
     const _pageStartTime = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
     if (typeof window !== 'undefined') { window._htmlStartTime = _pageStartTime; }
     if (globalObj.document) {
         globalObj.document.addEventListener('DOMContentLoaded', function _onDCL() {
             var elapsed = ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - _pageStartTime;
-            console.info('[Popup] HTML load → DOMContentLoaded:', elapsed.toFixed(1) + 'ms');
+            globalObj.debugLog('[Popup] HTML load → DOMContentLoaded:', elapsed.toFixed(1) + 'ms');
             globalObj.document.removeEventListener('DOMContentLoaded', _onDCL);
         });
     }
@@ -87,8 +97,8 @@
             }
 
             this._initStartTime = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-            console.info('[StorageAdapter] === Initialization START ===');
-            console.info('[StorageAdapter] Service Worker context:', typeof globalObj.location !== 'undefined' ? globalObj.location.protocol : 'unknown');
+            globalObj.debugLog('[StorageAdapter] === Initialization START ===');
+            globalObj.debugLog('[StorageAdapter] Service Worker context:', typeof globalObj.location !== 'undefined' ? globalObj.location.protocol : 'unknown');
             this._initializing = true;
 
             if (callback) {
@@ -204,10 +214,10 @@
         const totalDuration = adapter._initStartTime ? now() - adapter._initStartTime : duration;
         const elapsed = (typeof duration === 'number' && typeof duration.toFixed === 'function') ? duration.toFixed(2) : duration;
         const totalElapsed = (typeof totalDuration === 'number' && typeof totalDuration.toFixed === 'function') ? totalDuration.toFixed(2) : totalDuration;
-        console.info(`[StorageAdapter] === Initialization COMPLETE ===`);
-        console.info(`[StorageAdapter]   Cache keys: ${cacheSize}`);
-        console.info(`[StorageAdapter]   Normalize time: ${elapsed}ms`);
-        console.info(`[StorageAdapter]   Total init time: ${totalElapsed}ms`);
+        globalObj.debugLog(`[StorageAdapter] === Initialization COMPLETE ===`);
+        globalObj.debugLog(`[StorageAdapter]   Cache keys: ${cacheSize}`);
+        globalObj.debugLog(`[StorageAdapter]   Normalize time: ${elapsed}ms`);
+        globalObj.debugLog(`[StorageAdapter]   Total init time: ${totalElapsed}ms`);
 
         // Every read that happened before this line was answered `undefined`.
         // Say so before the callbacks run, so the warning precedes whatever
@@ -244,12 +254,12 @@
 
     function fetchFromStorage() {
         const fallbackToStorage = () => {
-            console.info('[StorageAdapter] Reading chrome.storage.local');
+            globalObj.debugLog('[StorageAdapter] Reading chrome.storage.local');
             const now = (typeof performance !== 'undefined' && performance.now) ? performance.now.bind(performance) : Date.now;
             const t0 = now();
             chrome.storage.local.get(null, (items) => {
                 const elapsed = (now() - t0).toFixed(2);
-                console.info(`[StorageAdapter] chrome.storage.local.get(null) completed in ${elapsed}ms`);
+                globalObj.debugLog(`[StorageAdapter] chrome.storage.local.get(null) completed in ${elapsed}ms`);
                 completeInitialization(items);
             });
         };
