@@ -1036,6 +1036,37 @@ test('the crawl alarm is armed once and repeats', async () => {
     assert.deepEqual(again.state.alarms, store, 'the second worker must read the same alarm store');
 });
 
+test('the mostVisited alarm is armed once, like the crawl one', async () => {
+    // It used to be created unconditionally in initializeStorageState(), which
+    // runs on EVERY worker wake-up. alarms.create() restarts the countdown, so
+    // a worker woken by browsing more often than once per period kept pushing
+    // the next firing into the future and the alarm never fired at all. That
+    // also silently disabled sweepNegativeCache(), which is piggybacked on it.
+    // The crawl alarm was already protected by scheduleCrawl(); mostVisited has
+    // to use the same guard.
+    const w = loadWorker({ tabs: [] });
+    w.boot();
+    await w.settle();
+
+    const armed = w.state.alarms.filter((a) => a.name === 'mostVisited');
+    assert.equal(armed.length, 1, 'the mostVisited alarm must be created on start');
+    assert.equal(armed[0].info.periodInMinutes, 30,
+        'and it must still repeat every 30 minutes, or there is no second refresh');
+
+    // The alarm lives in the browser, not in the worker. A fresh worker shares
+    // the same alarm store and must leave the existing one alone. Mutation-
+    // checked: reverting to an unconditional create() puts two entries here.
+    const store = w.state.alarms;
+    const again = loadWorker({ tabs: [], alarmStore: store });
+    again.boot();
+    await again.settle();
+
+    assert.equal(store.filter((a) => a.name === 'mostVisited').length, 1,
+        'an existing mostVisited alarm must not be re-armed on every start');
+    assert.equal(store.filter((a) => a.name === 'crawlHistory').length, 1,
+        'and the crawl alarm must still be armed exactly once');
+});
+
 test('a crawl alarm runs a pass', async () => {
     // The listener half: an alarm that is armed but never starts anything is
     // worse than no alarm, because nothing reports the difference.

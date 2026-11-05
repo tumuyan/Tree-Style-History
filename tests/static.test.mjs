@@ -207,7 +207,12 @@ test('the crawl is paced, and its constants are declared before their callers', 
         assert.match(sw, new RegExp('const\\s+' + name + '\\s*='), `the crawl needs ${name}`);
     }
     // The alarm is the frequency half, and it has to be armed from somewhere.
-    assert.match(sw, /chrome\.alarms\.create\(\s*CRAWL_ALARM/);
+    // Both periodic alarms now go through one arm-once helper, so the crawl's
+    // call site names CRAWL_ALARM rather than calling chrome.alarms.create()
+    // directly.
+    assert.match(sw, /scheduleAlarm\(\s*CRAWL_ALARM,\s*\{[^}]*CRAWL_PERIOD_MINUTES/);
+    assert.match(sw, /chrome\.alarms\.create\(\s*name,\s*info\s*\)/,
+        'the shared helper must create the alarm with the caller\'s name and info');
     assert.match(sw, /alarm\.name\s*===\s*CRAWL_ALARM/, 'the alarm must reach the crawl');
 
     // `const` is in the temporal dead zone until execution reaches it. The
@@ -2948,4 +2953,90 @@ test('options.js checks that a ?p= tab exists before touching it', () => {
     assert.notEqual(style, -1, 'the selected panel must still be shown');
     assert.ok(guard < fallback && fallback < style,
         'the fallback has to run before the panel is shown, or a null still reaches .style');
+});
+
+test('the README Policy discloses the favicon requests behind the default service', () => {
+    // Review #7: "It does not upload data to the Internet" was written before
+    // MV3 made chrome://favicon/ unusable. The default favicon-service is a
+    // third-party host, and every rendered row sends that host a page's
+    // hostname. The history itself stays local, so the fix is to say so
+    // plainly and point at the built-in alternative, not to delete the claim.
+    //
+    // Asserted statically because this is a statement about shipped config,
+    // not about runtime behaviour: a behaviour test cannot tell whether prose
+    // and the default value agree.
+    const readme = fs.readFileSync(path.join(CHROME_DIR, '..', 'README.md'), 'utf8');
+    const policy = readme.slice(readme.indexOf('## Policy'), readme.indexOf('## Install'));
+    assert.ok(policy.length > 0, 'README must still have a Policy section');
+
+    // The disclosure has to mention BOTH halves: that hostnames leave the
+    // machine, and that the built-in service is the way to stop it. A sentence
+    // that only says "favicons" without naming the third party would leave the
+    // original misleading claim essentially intact.
+    assert.match(policy, /favicon/i, 'the Policy must name favicon requests');
+    assert.match(policy, /third[- ]party|外部服务|第三方/i,
+        'the Policy must say the requests go to a third party');
+    assert.match(policy, /hostname|主机名|域名/i,
+        'the Policy must say what is sent (the hostname, not the history)');
+    assert.match(policy, /chrome:\/\/favicon|内置|built-in|switch|关闭|改用/i,
+        'the Policy must point at the built-in service or the option to turn it off');
+
+    // Match both languages the README is written in, so one cannot drift.
+    assert.match(policy, /不会上传|does not upload/i,
+        'the original "history stays local" claim must remain');
+
+    const defaults = readScript('scripts/modules/shared/config-defaults.js');
+    // The doc and the shipped default must agree. If the default is ever
+    // changed to a local service, the disclosure above has to be rewritten
+    // too — this assertion is what makes that a conscious step.
+    assert.equal(/"favicon-service":\s*"([^"]+)"/.exec(defaults)[1], 'duckduckgo',
+        'the Policy disclosure is written against the duckduckgo default');
+});
+
+test('every periodic alarm goes through the same arm-once guard', () => {
+    // Review #1: mostVisited used to call chrome.alarms.create() directly in
+    // initializeStorageState(), which runs on every worker wake-up. Re-arming
+    // restarts the countdown, so an alarm whose worker is woken more often
+    // than its period never fires — and the negative-cache sweep piggybacked
+    // on it was silently disabled too. scheduleCrawl() already had the
+    // alarms.get() guard; the fix routes BOTH through one helper.
+    const sw = stripJsComments(readScript('scripts/background-sw.js'));
+
+    assert.match(sw, /function scheduleAlarm\s*\(/,
+        'there must be one shared arm-once helper');
+    assert.match(sw, /chrome\.alarms\.get\s*\(/, 'the helper must check for an existing alarm');
+    assert.match(sw, /if\s*\(existing\)\s*return/, 'and leave an existing alarm alone');
+
+    // No periodic alarm may bypass the helper. Count the create() calls: the
+    // helper holds the only one, so two create() sites means one alarm is
+    // back to being re-armed on every start.
+    const creates = sw.match(/chrome\.alarms\.create\s*\(/g) || [];
+    assert.equal(creates.length, 1,
+        'only scheduleAlarm() may create a periodic alarm');
+
+    // Both call sites must name the helper, or one of them is still bare.
+    // Count calls, not every occurrence: the function's own declaration also
+    // matches `scheduleAlarm(` and would make a single call look like two.
+    const calls = sw.match(/(?<!function )\bscheduleAlarm\s*\(/g) || [];
+    assert.equal(calls.length, 2,
+        'mostVisited and the crawl must both go through scheduleAlarm()');
+});
+
+test('the alarm periods are declared before the boot callback that reads them', () => {
+    // Found by the e2e worker-replay: in a page, storageAdapter.ready() is
+    // already resolved, so onStorageReady(initializeStorageState) runs
+    // SYNCHRONOUSLY while the classic script is still evaluating. A period
+    // declared down with the crawl constants would still be in its TDZ; the
+    // throw aborts the rest of the file and surfaces later as an unrelated
+    // "Cannot access CRAWL_BUDGET_URLS before initialization" from
+    // processVisits(). Both periods belong at the top, beside the alarm names.
+    const sw = stripJsComments(readScript('scripts/background-sw.js'));
+    const boot = sw.indexOf('function initializeStorageState()');
+    assert.ok(boot > 0, 'expected the boot callback');
+    for (const name of ['CRAWL_PERIOD_MINUTES', 'MOST_VISITED_PERIOD_MINUTES']) {
+        const decl = sw.indexOf(`const ${name} =`);
+        assert.ok(decl > 0, `${name} must be declared`);
+        assert.ok(decl < boot,
+            `${name} must be declared before initializeStorageState() reads it`);
+    }
 });

@@ -33,10 +33,14 @@ Currently only Chinese and English UI are available.
 ## Policy  
 
 Tree Style History collects your browser history, analyzes it and stores it on your computer, and shows it when needed.   
-It does not upload data to the Internet or share it with other programs. When you uninstall the extension, all saved data will be automatically erased by the browser.  
+It does not upload your browsing history to the Internet or share it with other programs. When you uninstall the extension, all saved data will be automatically erased by the browser.  
+
+One exception worth naming: to draw the little site icons, the extension sends a page's **hostname** (not its URL, title or history) to the favicon service you pick in Options. The default (`duckduckgo`) is a third-party service; switch to the built-in `chrome://favicon/` service in Options if you would rather make no such external requests at all. Icons are cached locally, and the history itself never leaves your machine.  
 
 Tree Style History会收集您的浏览器记录，分析并存储到您的计算机内，并在需要的时候进行展示。  
-它不会上传数据上传到互联网或者分享给其他程序。当您卸载扩展时，所有保存的数据均会被浏览器自动清除。  
+它不会把浏览记录上传到互联网或者分享给其他程序。当您卸载扩展时，所有保存的数据均会被浏览器自动清除。  
+
+需要说明一个例外：为了显示网站图标，扩展会把页面的**主机名**（不含完整网址、标题或历史记录）发送给您在选项里选定的第三方图标服务，默认服务（`duckduckgo`）即为一例。若不想发起这类外部请求，可在选项中改用浏览器内置的 `chrome://favicon/` 服务；图标会在本地缓存，浏览记录本身始终不会离开本机。  
 
 
 ## Install  
@@ -115,6 +119,9 @@ Bug 修复: "最近标签页"的快照顺序异常时，整个区块空白且不
 Bug 修复: favicon 备用服务把「不可验证的 opaque 响应」也写进了跨服务共享缓存（主路径只认 `response.ok`）；其他服务随后查同一主机名都会命中这个坏图标；现在两条写方统一只在 `response.ok` 为真时进共享键  
 Bug 修复: `options.html?p=<任意值>` 会把整页按钮搞死——`p` 直接拼成 id 后未经校验就取 `.style`/`.classList`，未知值（以及锚点被注释掉的 `translations`）会抛异常中断 `DOMContentLoaded`，后面所有监听器全丢；现在要求面板与锚点都存在，否则回退到选项页  
 破坏性变更: 最低支持的 Chrome 版本提升到 102（此前声明为 88）。低版本能安装但一运行就崩，因为需要 MV3 起才有的 `chrome.storage.session` 等 API（`manifest.json` 已于 #4 提升至 102，此处补记）  
+Bug 修复: `mostVisited` 定时器每次 Service Worker 唤醒都被重新武装，倒计时不断被重置、实际几乎不会触发（连挂在它上面的 favicon 负缓存 TTL 清扫也一起失效）；现在两个周期闹钟都走同一处「已存在则不重建」收口，与分趟爬库闹钟一致  
+Bug 修复: 弹窗一行坏数据会带走后面所有区块——缓存行缺 `favicon` 字段、或冷启动时 `mv-blocklist` 还没落库，都会让 `.indexOf()` 抛异常，而 popup.js 的区块循环没有 try/catch；两处读取都给了空串兜底  
+文档: Policy 补明默认 favicon 服务（duckduckgo）会把页面主机名发送给第三方；浏览历史本身仍只存本地，可在选项里改用浏览器内置的 `chrome://favicon/` 服务避免这类外部请求  
 
 3.3.1 (2026/06/19)  
 修复设置丢失的bug 
