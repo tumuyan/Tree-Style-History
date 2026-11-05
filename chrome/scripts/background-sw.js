@@ -1622,9 +1622,16 @@ function saveCrawledHeat(days) {
  * on startup, so the unbounded growth is a startup cost too.
  *
  * `days <= 0` means "keep forever", matching the option's 0 end of the slider.
- * Otherwise the cutoff is `Date.now() - days * DAY`, and the same number is
- * used for the stores (visitTime / lastVisitTime / closeTime) and for the heat
- * map, whose keys are the day's end-of-day epoch.
+ * Otherwise the database cutoff is `Date.now() - days * DAY`: an instant,
+ * compared against real visitTime / lastVisitTime / closeTime values.
+ *
+ * The heat map cannot use that instant verbatim. Its keys are whole-day
+ * buckets produced by dayKey() — each is the day's 23:59:59.999, not the
+ * moment a visit happened. So the boundary is first aligned down to the
+ * cutoff day's midnight: every day ending before that boundary lost all its
+ * visits in the sweep above and loses its cell too, while the cutoff day
+ * itself (ending 23:59:59.999) is kept. Both halves then answer the same
+ * question — "does this day still have data?" — in their own units.
  *
  * Throttled to once a day through session storage: this is piggybacked on the
  * most-visited alarm (every 30 minutes) and a full-store sweep is not worth
@@ -1650,10 +1657,18 @@ async function retentionCleanup() {
 
     const cutoff = now - days * DAY;
 
-    // Both halves are independent; the heat map is pruned by a synchronous
-    // helper so its localStorage write does not sit after an await (which
+    // Align the heat-map boundary to a whole day before comparing it with
+    // dayKey() keys. Rounding down to the cutoff day's 00:00:00 keeps that
+    // day's cell (whose 23:59:59.999 end is later) and drops every earlier
+    // day. Do NOT subtract 1 ms here: that lands on the *previous* day's
+    // 23:59:59.999 and keeps one day too many — a coloured cell for a day
+    // whose visits the sweep below has just removed. Both halves are
+    // independent; the heat map is pruned by a synchronous helper so its
+    // localStorage write does not sit after an await (which
     // require-atomic-updates reads as a stale-state assignment).
-    pruneHeatMap(cutoff);
+    const heatFrom = new Date(cutoff);
+    heatFrom.setHours(0, 0, 0, 0);
+    pruneHeatMap(heatFrom.getTime());
     try {
         await dbManager.purgeExpired(cutoff);
     } catch (error) {
@@ -1669,17 +1684,20 @@ async function retentionCleanup() {
 }
 
 /**
- * Drop heat-map days older than `cutoff` and persist the pruned map.
+ * Drop heat-map days that ended before `dayBoundary` and persist the map.
  *
- * `calendar_storage2` is `{ <end-of-day epoch ms>: <count> }`: its keys are
- * absolute instants, so the same cutoff the database sweep uses applies
- * directly, with no second time unit to reconcile. Deleted in place so the
+ * `calendar_storage2` is `{ <end-of-day epoch ms>: <count> }`. A key is NOT
+ * an arbitrary instant: dayKey() maps every moment on a day to that day's
+ * 23:59:59.999. `dayBoundary` is therefore already aligned to a day's
+ * 00:00:00 by the caller — passing the raw `now - days*DAY` instant here
+ * would compare a whole-day bucket against a mid-day clock reading, and the
+ * two would disagree by up to a day at the edge. Deleted in place so the
  * shared live binding keeps its identity for calendar.js and other contexts.
  */
-function pruneHeatMap(cutoff) {
+function pruneHeatMap(dayBoundary) {
     let dropped = false;
     for (const key of Object.keys(calendar_storage2)) {
-        if (Number(key) < cutoff) {
+        if (Number(key) < dayBoundary) {
             delete calendar_storage2[key];
             dropped = true;
         }
