@@ -602,6 +602,39 @@ test('formatItem falls back to the URL when there is no title', () => {
     assert.match(html, /https:\/\/example\.test\/p/);
 });
 
+test('formatItem survives a row whose favicon is missing entirely', () => {
+    // The last else-if reads faviconSrc.indexOf(...). A cache row written by an
+    // older worker, or a bookmark without a favicon, can carry no `favicon`
+    // key at all. popup.js renders its blocks in a plain for loop with no
+    // try/catch, so one throw here silently drops every block after it.
+    // The distinguishing shape is a NORMAL web url: the special-case branches
+    // above do not fire, so execution reaches exactly the indexOf() that threw.
+    const inputs = [undefined, null];
+    for (const favicon of inputs) {
+        assert.doesNotThrow(() => popupCore.formatItem({
+            url: 'https://example.test/p', title: 'T', type: 'rh', favicon,
+        }), 'a missing favicon must not take the popup down');
+    }
+});
+
+test('mostVisited survives a cold profile with no blocklist key', (t) => {
+    // localStorage['mv-blocklist'] is undefined on a profile the worker has not
+    // seeded yet; mvrl.indexOf(...) threw the same way formatItem did. The row
+    // has to be rendered so the case proves the read happened, not merely that
+    // the function returned early.
+    restoreStorage(t, ['mv-cache', 'mv-itemsno', 'mv-blocklist']);
+    const holder = block('mv-inject');
+    delete localStorage['mv-blocklist'];
+    localStorage['mv-cache'] = JSON.stringify([
+        { url: 'https://a.test/1', title: 'A1', favicon: '', visitCount: 9 },
+    ]);
+    localStorage['mv-itemsno'] = '8';
+
+    assert.doesNotThrow(() => popupCore.mostVisited());
+    assert.equal(holder.children.length, 1,
+        'with no blocklist, a valid cache row must still render');
+});
+
 test('formatItem hides the URL and the visit count when both are switched off', (t) => {
     // rhs-showurl / rhs-showext default to 'no': the two spans are still
     // rendered and hidden with an inline style rather than omitted, so the

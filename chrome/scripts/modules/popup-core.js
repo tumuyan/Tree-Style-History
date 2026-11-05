@@ -138,7 +138,12 @@ function formatItem(data) {
     // buttons were visible, hoverable and completely inert — worse than not
     // being drawn. Deleting is still available in the linear views, which do
     // wire it up.
-    var faviconSrc = favicon;
+
+    // `favicon` comes from a cache the worker writes, a bookmark, or a session
+    // record — none of which guarantees the key exists. The else-if chain below
+    // calls .indexOf() on it, and popup.js renders its blocks in a plain loop
+    // with no try/catch, so one undefined here used to drop every later block.
+    var faviconSrc = favicon || '';
     // 为不同类型的页面设置不同的图标
     if (isBookmarkletUrl(url)) {
         faviconSrc = 'images/iconmonstr-script-6.svg';
@@ -610,7 +615,9 @@ function mostVisited() {
         }
         if (!Array.isArray(mvd)) mvd = [];
         var itemsno = Number(localStorage['mv-itemsno']);
-        var mvrl = localStorage['mv-blocklist'];
+        // Undefined on a profile the worker has not seeded yet; the .indexOf()
+        // below would throw the same way formatItem() did.
+        var mvrl = localStorage['mv-blocklist'] || '';
         var r = 0;
 
         // Two bounds, not one. MOST_VISITED_MAX is what the worker fills the

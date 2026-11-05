@@ -152,7 +152,7 @@ Service Worker 侧（`background-sw.js`、`background-utils.js`、`db-manager.js
 
 MV3 取消了后台页面，因此代码分成两套互不相通的运行时：
 
-- **Service Worker**（`scripts/background-sw.js`，通过 `importScripts` 加载 `storage-adapter.js`、`background-utils.js`、`db-manager.js`）。它负责**采集与持久化**：监听 `tabs.onCreated/onUpdated/onActivated/onRemoved`，调用 `chrome.history.getVisits` 取访问项，把 `visitId → referringVisitId` 的父子关系写入 IndexedDB；周期性（`chrome.alarms`，3 分钟）刷新「最常访问」缓存；管理右键菜单与 4 个快捷键。
+- **Service Worker**（`scripts/background-sw.js`，通过 `importScripts` 加载 `storage-adapter.js`、`background-utils.js`、`db-manager.js`）。它负责**采集与持久化**：监听 `tabs.onCreated/onUpdated/onActivated/onRemoved`，调用 `chrome.history.getVisits` 取访问项，把 `visitId → referringVisitId` 的父子关系写入 IndexedDB；周期性（`chrome.alarms`）刷新「最常访问」缓存（30 分钟）与分趟爬库（15 分钟）；管理右键菜单与 4 个快捷键。**两个闹钟都走 `scheduleAlarm(name, info)` 这一处收口**：闹钟活在整个浏览器会话里，而 `initializeStorageState()` 每次 SW 唤醒都会重跑，无条件 `create()` 会不断重置倒计时——被频繁唤醒的 worker 会让闹钟永远不响（负缓存的 TTL 清扫挂在 `mostVisited` 分支上，也会一起失效）。`tests/static.test.mjs` 锁住「只有一个 `chrome.alarms.create` 调用点、两个闹钟都调 `scheduleAlarm()`」。
 - **页面**（popup 与 5 个功能页）。它们负责**查询与渲染**，数据源按页面分三类：树状页（`history2.html` / `closed.html`）通过 `dbManager` 直连同一个 IndexedDB；线性页（`history.html` / `bookmark.html`）走 `chrome.history` / `chrome.bookmarks`；**popup 两者都不碰**——它读 `chrome.history` / `chrome.sessions` / `chrome.bookmarks`，加上 SW 镜像到 `chrome.storage.session` 的 tab 列表（详见下面「前端模块结构」里 `popup-core.js` 的 `showRecentTabs`），`popup.html` 因此既不加载 `db-manager.js` 也不加载任何消息通道。**不要给 popup 加回消息通道**：一次 `sendMessage` 就会唤醒 SW 并重跑启动爬库。
 
 两者唯一的共享状态是 IndexedDB 和被 `storage-adapter.js` 劫持后的 `localStorage`。

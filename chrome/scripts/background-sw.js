@@ -21,6 +21,20 @@ var _storageInitialized = false;
 // execution reaches it, and the alarms.onAlarm listener registered near the top
 // of this file reads this one — at registration time, not at firing time.
 const CRAWL_ALARM = 'crawlHistory';
+// Both alarm names live next to CRAWL_ALARM: the alarms.onAlarm listener is
+// registered near the top of this file and compares against them.
+const MOST_VISITED_ALARM = 'mostVisited';
+// Both periods are read by initializeStorageState(), which onStorageReady()
+// can run synchronously (a page that replays the worker boot with an already
+// resolved storage adapter does exactly that). Keep them up here with the
+// names rather than down with the crawl constants: a `const` declared below
+// would still be in its temporal dead zone, aborting the rest of the file.
+// Sweeping the window in passes is not free, so the crawl period is a floor,
+// not a target; 15 minutes keeps a pass's cost a rounding error next to the
+// browsing that produced the history. "Most visited" changes slowly, and
+// sweeping the negative cache is piggybacked on the same alarm, so 30 minutes.
+const CRAWL_PERIOD_MINUTES = 15;
+const MOST_VISITED_PERIOD_MINUTES = 30;
 
 // Set global vars
 var openedTabs = {};
@@ -695,20 +709,23 @@ function initializeStorageState() {
     // Initialize Most Visited (once per session)
     mostVisitedInit();
     
-    // Periodic refresh of the most-visited cache.
+    // Two periodic alarms, both armed through scheduleAlarm(): an alarm
+    // outlives the worker, so re-creating it on every start would restart its
+    // countdown every time. A worker woken by browsing is woken far more
+    // often than once per period, so an alarm re-armed on each start would
+    // never fire at all. mostVisitedInit() already ran above on this start; the
+    // alarm is what refreshes it (and sweeps the negative cache, which is
+    // piggybacked on the same wake-up) during a long session.
     //
-    // The period costs far more than it looks. Every alarm wakes the service
-    // worker, and a worker that wakes runs this entire initialisation again —
-    // including the history crawl in loadDate() — because `_storageInitialized`
-    // is a module-level variable and starts false in every new worker. At three
-    // minutes that meant dozens of full re-initialisations an hour. "Most
-    // visited" changes slowly, so half an hour is plenty.
-    chrome.alarms.create('mostVisited', { periodInMinutes: 30 });
+    // The period costs far more than it looks: "most visited" changes slowly,
+    // and every alarm wake-up re-runs this entire initialisation. Half an hour
+    // is a deliberate compromise; the crawl has its own, shorter period.
+    scheduleAlarm(MOST_VISITED_ALARM, { periodInMinutes: MOST_VISITED_PERIOD_MINUTES });
 
     // The crawl's own paced passes. The startup crawl below is the first one;
     // this is what keeps the window warm afterwards, so a long browsing session
     // is not left waiting for the next worker start.
-    scheduleCrawl();
+    scheduleAlarm(CRAWL_ALARM, { periodInMinutes: CRAWL_PERIOD_MINUTES });
     
     // Initialize DB
     if (typeof dbManager !== 'undefined') {
@@ -783,7 +800,7 @@ function initializeExistingTabs() {
 
 // Handle alarms (replaces setInterval)
 chrome.alarms.onAlarm.addListener((alarm) => {
-    if (alarm.name === 'mostVisited') {
+    if (alarm.name === MOST_VISITED_ALARM) {
         mostVisitedInit();
         // Piggybacked on a wake-up that is already paid for: a new alarm of
         // its own would wake the worker — and re-run the startup crawl — for
@@ -1241,16 +1258,6 @@ function setBadge(text, force) {
 // How many URLs one pass may look at. This is the point of the change: a pass
 // costs at most this many getVisits() round trips whatever the window holds.
 const CRAWL_BUDGET_URLS = 300;
-// Sweeping the window in passes is not free — each pass re-reads the URL list
-// and re-derives the queue — so the period is a floor, not a target. A pass
-// costs one `chrome.history.search`, one IndexedDB scan and at most
-// `CRAWL_BUDGET_URLS` getVisits() round trips; at 15 minutes that is a
-// rounding error next to the browsing that produced the history.
-//
-// Not configurable: an option would have to be validated against Chrome's own
-// floor (alarms below ~30s are throttled to it), and the value that matters is
-// the one that keeps a pass short, which is the budget above.
-const CRAWL_PERIOD_MINUTES = 15;
 // How many URLs to ask chrome.history.getVisits() about at once. Six keeps
 // the crawl moving without tripping the history API's own throttling.
 const VISIT_CONCURRENCY = 6;
@@ -1276,17 +1283,19 @@ const CRAWL_SWEEP_KEY = 'crawl-sweep';
 const CRAWL_SWEEP_TTL = 60 * 60 * 1000;
 
 /**
- * Arm the crawl alarm for this browser session, once.
+ * Arm a periodic alarm for this browser session, once.
  *
  * The alarm outlives the worker, so it only has to be created when it is not
  * there yet. Re-creating it on every start would restart its countdown every
  * time — and a worker that is woken by browsing is woken far more often than
  * once a period, so an alarm re-armed on each start would never fire at all.
+ * Both the most-visited refresh and the paced crawl go through here for that
+ * reason; callers pass the period so the helper owns no policy of its own.
  */
-function scheduleCrawl() {
-    chrome.alarms.get(CRAWL_ALARM, function (existing) {
+function scheduleAlarm(name, info) {
+    chrome.alarms.get(name, function (existing) {
         if (existing) return;
-        chrome.alarms.create(CRAWL_ALARM, { periodInMinutes: CRAWL_PERIOD_MINUTES });
+        chrome.alarms.create(name, info);
     });
 }
 
