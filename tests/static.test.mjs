@@ -9,9 +9,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import vm from 'node:vm';
 
 import { CHROME_DIR } from './stubs.mjs';
 import { createDom } from './dom.mjs';
+import { crawlStateGuard, crawlHeatGuard, sourceParts } from './crawl-state-guard.mjs';
 
 const readJson = (rel) => JSON.parse(fs.readFileSync(path.join(CHROME_DIR, rel), 'utf8'));
 const exists = (rel) => fs.existsSync(path.join(CHROME_DIR, rel));
@@ -247,7 +249,8 @@ test('the crawl is paced, and its constants are declared before their callers', 
     // alarm have to all be present.
     const sw = stripJsComments(fs.readFileSync(path.join(CHROME_DIR, 'scripts/background-sw.js'), 'utf8'));
 
-    for (const name of ['CRAWL_BUDGET_URLS', 'CRAWL_PERIOD_MINUTES', 'CRAWL_ALARM', 'CRAWL_SWEEP_KEY']) {
+    for (const name of ['CRAWL_BUDGET_URLS', 'CRAWL_PERIOD_MINUTES', 'CRAWL_ALARM',
+                        'CRAWL_STATE_KEY', 'CRAWL_STATE_VERSION']) {
         assert.match(sw, new RegExp('const\\s+' + name + '\\s*='), `the crawl needs ${name}`);
     }
     // The alarm is the frequency half, and it has to be armed from somewhere.
@@ -298,12 +301,184 @@ test('the crawl publishes the heat map only for a finished window', () => {
     assert.match(branch, /^\s*saveCrawledHeat\(/m,
         'the heat map must be written from the `complete` branch, where the window is whole');
 
-    // Both the accumulator and its storage key, or a window counted in passes
-    // would publish only the last pass's share.
-    for (const fn of ['restoreCrawlHeat', 'saveCrawlState', 'clearCrawlState']) {
-        assert.match(sw, new RegExp('function\\s+' + fn + '\\s*\\('), `the crawl needs ${fn}()`);
+    // The accumulator is a field of the single state object, not a second
+    // storage key with its own read/write path. A window counted in passes
+    // would otherwise publish only the last pass's share.
+    assert.match(sw, /function\s+restoreCrawlState\s*\(/,
+        'the crawl needs its one read point');
+    assert.match(sw, /function\s+saveCrawlState\s*\(/,
+        'the crawl needs its one write point');
+});
+
+/**
+ * A mutation probe is only worth keeping if the REAL guard goes red under it.
+ * Feed each mutant to the same pure function the assertion used, and parse it
+ * first: a mutant that does not parse could never have been committed, so a
+ * guard green/red under it says nothing.
+ */
+function assertProbesTurnGuardRed(probes, sw, guard) {
+    for (const probe of probes) {
+        assert.notEqual(probe.block, sw,
+            `the ${probe.what} probe must change the source, or it proves nothing`);
+        assert.doesNotThrow(
+            () => new vm.Script('(async function(){\n' + probe.block + '\n})'),
+            `the ${probe.what} probe must be valid JavaScript`);
+        const problems = guard(probe.block);
+        assert.ok(problems.length > 0,
+            `the ${probe.what} probe must be detectable by the real guard`);
     }
-    assert.match(sw, /const\s+CRAWL_HEAT_KEY\s*=/);
+}
+
+test('every crawl write passes heat explicitly and the empty pass writes nothing', () => {
+    // A `saveCrawlState()` caller that omits `heat` used to silently snapshot
+    // the module-level live accumulator. After a window closes that live object
+    // still holds the previous window's counts, so a fresh pass (or an empty
+    // one in the same worker) could persist them as its own. `heat` is now a
+    // required field, the pass hydrates its one live truth source at the top,
+    // and the empty-pass branch writes nothing at all.
+    const sw = stripJsComments(fs.readFileSync(path.join(CHROME_DIR, 'scripts/background-sw.js'), 'utf8'));
+
+    // Feed the real source to the SAME pure function the probes below use. A
+    // probe that restated these regexes would only prove "the same regex
+    // returns true twice"; here the assertion and the probe share one verdict.
+    assert.deepEqual(crawlHeatGuard(sw), []);
+
+    // Mutation probes: plausible regressions that must turn the real guard RED.
+    const parts = sourceParts(sw);
+    const probes = [
+        {
+            what: 'an implicit heatDays fallback returns to saveCrawlState()',
+            block: sw.replace(
+                /for \(const key of Object\.keys\(state\.heat\)\) heat\[key\] = state\.heat\[key\];/,
+                'for (const key of Object.keys(heatDays)) heat[key] = heatDays[key];'),
+        },
+        {
+            what: 'a checkpoint forgets to pass heat',
+            block: parts.swapPass((b) => b.replace(
+                /heat: heatDays,[\s\S]*?sweepAt: state\.sweepAt,/,
+                'sweepAt: state.sweepAt,')),
+        },
+        {
+            what: 'the empty pass writes crawl state again',
+            block: parts.swapPass((b) => b.replace(
+                /setBadge\('', true\);\n        return;/,
+                "await saveCrawlState({ v: CRAWL_STATE_VERSION, cursor: null, heat: {}, sweepAt: state.sweepAt });\n        setBadge('', true);\n        return;")),
+        },
+        {
+            what: 'the empty-pass condition is rewritten so the slice marker vanishes',
+            block: parts.swapPass((b) => b.replace(
+                'if (walked === 0 && !cursor.resumed)',
+                'if (walked === 0 && !resumeIndex(state).resumed)')),
+        },
+        {
+            what: 'hydrateHeat() is dropped from the top of the pass',
+            block: parts.swapPass((b) => b.replace(
+                /hydrateHeat\(state\.cursor \? state\.heat : \{\}\);/, '')),
+        },
+    ];
+    assertProbesTurnGuardRed(probes, sw, crawlHeatGuard);
+});
+
+test('all crawl state lives in ONE versioned object with one read and one write', () => {
+    // The convergence itself, pinned on the source. Three independent keys
+    // (cursor / heat / sweep), each with its own get/set/remove and TTL, were
+    // the bug farm behind #34/#36/#37: a worker recycled between any two of
+    // those writes left the others behind. A behaviour test can show a wrong
+    // number, but only a source guard can show that a SECOND write point has
+    // quietly come back.
+    const sw = stripJsComments(fs.readFileSync(path.join(CHROME_DIR, 'scripts/background-sw.js'), 'utf8'));
+
+    // 1. The three old keys and their helpers are gone, for good.
+    for (const key of ['CRAWL_CURSOR_KEY', 'CRAWL_HEAT_KEY', 'CRAWL_SWEEP_KEY',
+                       'crawl-cursor', 'crawl-heat', 'crawl-sweep']) {
+        assert.doesNotMatch(sw, new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+            `the old ${key} must not come back`);
+    }
+    for (const fn of ['restoreCrawlCursor', 'restoreCrawlHeat', 'clearCrawlState',
+                      'clearCrawlHeat', 'readSweepCursor', 'saveSweepCursor']) {
+        assert.doesNotMatch(sw, new RegExp('function\\s+' + fn + '\\s*\\('),
+            `the old ${fn}() split the state again`);
+    }
+
+    // 2. ONE key, with a version. Both are non-negotiable: an unversioned
+    // snapshot from an older build would be half-restored, which is exactly
+    // the "sweep claims URLs whose cursor is still queued" shape.
+    assert.match(sw, /const\s+CRAWL_STATE_KEY\s*=\s*'[^']+'/);
+    assert.match(sw, /const\s+CRAWL_STATE_VERSION\s*=\s*\d+/);
+    const emptyFn = sw.slice(sw.indexOf('function emptyCrawlState('));
+    const emptyBody = emptyFn.slice(0, emptyFn.indexOf('\n}', 1));
+    for (const field of ['v:', 'cursor:', 'heat:', 'sweepAt:']) {
+        assert.match(emptyBody, new RegExp(field), `the state shape needs ${field}`);
+    }
+
+    // 3+4. ONE read / ONE write and a pass that derives everything from it.
+    // The real verdict comes from crawlStateGuard(), which counts storage calls
+    // (whitespace-tolerant, chained and renamed receivers included) and slices
+    // by function markers that must both be present. The mutation probes below
+    // feed the SAME function, so a green probe is impossible: it would have to
+    // make crawlStateGuard() disagree with itself.
+    assert.deepEqual(crawlStateGuard(sw), []);
+
+    // 5. Mutation probes. Each is a plausible "tidy-up" that would put the
+    // split back. A guard that stayed green under any of them proves nothing,
+    // and a mutant that is not valid JavaScript could never have been committed.
+    const parts = sourceParts(sw);
+    const probes = [
+        {
+            what: 'a second write point for the cursor alone',
+            // No `await`: these callbacks are plain `function () {}`, and an
+            // `await` inside one is a syntax error, not a mutation.
+            block: parts.swapIo((io) => io.replace(
+                /return area\.set\(\{ \[CRAWL_STATE_KEY\]: snapshot \}\);/,
+                "area.set({ 'crawl-cursor': snapshot.cursor });\n        return area.set({ [CRAWL_STATE_KEY]: snapshot });")),
+        },
+        {
+            what: 'a second read point',
+            block: parts.swapIo((io) => io.replace(
+                /return area\.get\(CRAWL_STATE_KEY\);/,
+                "const extra = area.get('crawl-cursor');\n        return area.get(CRAWL_STATE_KEY);")),
+        },
+        {
+            what: 'a stray area.set inside the read path (the real regression)',
+            // The half-state shape this PR set out to remove: restore() gaining
+            // a write of its own. The old "count area.get( / area.set( strings"
+            // guard stayed green under exactly this.
+            block: parts.swapIo((io) => io.replace(
+                /return area\.get\(CRAWL_STATE_KEY\);/,
+                'return area.get(CRAWL_STATE_KEY).then(function (r) { area.set({ kept: 1 }); return r; });')),
+        },
+        {
+            what: 'a renamed receiver for the single write',
+            block: parts.swapIo((io) => io.replace(
+                /return area\.set\(\{ \[CRAWL_STATE_KEY\]: snapshot \}\);/,
+                'return sessionArea().set({ [CRAWL_STATE_KEY]: snapshot });')),
+        },
+        {
+            what: 'a chained write back in the pass body',
+            block: parts.swapPass((b) => b.replace(
+                /await saveCrawlState\(\{/,
+                "Promise.resolve().then(function () { return area.get('x'); }).then(function () { return area.set({ x: 1 }); });\n    await saveCrawlState({")),
+        },
+        {
+            what: 'a pass that reads the sweep from a separate key again',
+            // A plain local identifier keeps this legal: the old probe put an
+            // `await` inside `filter(function (url) { ... })`, which is a
+            // non-async function and therefore a syntax error. `sweep` is
+            // read back from the old helper, so the guard's `state.sweepAt`
+            // assertion goes red.
+            block: parts.swapPass((b) => b
+                .replace(/state\.sweepAt/g, 'sweep')
+                .replace(/const\s+state\s*=\s*await\s+restoreCrawlState\(\);/,
+                    'const state = await restoreCrawlState();\n    const sweep = await readSweepCursor();')),
+        },
+        {
+            what: 'a direct area.get in the pass',
+            block: parts.swapPass((b) => b.replace(
+                /const\s+state\s*=\s*await\s+restoreCrawlState\(\);/,
+                "const state = await restoreCrawlState();\n    const peek = await area.get('crawl-state');")),
+        },
+    ];
+    assertProbesTurnGuardRed(probes, sw, crawlStateGuard);
 });
 
 test('a crawl cursor resumes on its id, never on its stored position', () => {
@@ -318,13 +493,13 @@ test('a crawl cursor resumes on its id, never on its stored position', () => {
     // hands the queue in whole (which most crawl tests do) never reaches the
     // fallback at all.
     const sw = stripJsComments(fs.readFileSync(path.join(CHROME_DIR, 'scripts/background-sw.js'), 'utf8'));
-    const restore = sw.slice(sw.indexOf('function restoreCrawlCursor()'));
-    const body = restore.slice(0, restore.indexOf('\nfunction ', 1));
+    const resume = sw.slice(sw.indexOf('function resumeIndex('));
+    const body = resume.slice(0, resume.indexOf('\nfunction ', 1));
 
     assert.match(body, /return\s*\{\s*start:\s*0,\s*resumed:\s*true\s*\}/,
         'an id that has left the list must resume from the top and keep the counts');
-    assert.doesNotMatch(body, /start:\s*cursor\.pos/,
-        'cursor.pos must not be used as a resume index');
+    assert.doesNotMatch(body, /start:\s*state\.cursor\.pos|start:\s*cursor\.pos/,
+        'the stored position must not be used as a resume index');
 });
 
 test('service worker imports its dependencies via importScripts', () => {

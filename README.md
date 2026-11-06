@@ -135,6 +135,7 @@ Bug 修复: 弹窗一行坏数据会带走后面所有区块——缓存行缺 `
 清理: 删除零发送方的消息通道残留（`CALLABLE_FUNCTIONS` / `callFunction` / `getData` / `deleteDb`），`onMessage` 现在只分发 `refreshContextMenu` / `clearFaviconCache` 两个真正在用的 action  
 清理: 启动诊断日志（SW 启动摘要、存储适配器初始化计时、db-manager 开库日志）收敛到 `storage-adapter.js` 的 `DEBUG` 开关，默认关闭；`console.warn` / `console.error` 不受影响  
 Bug 修复: 删除历史时 `document.title` 写死英文（`'Deleting...'` / `'History | Recent History'`），英文界面之外的用户也只看到英文，且恢复值与 HTML 标题不一致；现在走 i18n（`deleting` 已补 en/zh），恢复用模块加载时记下的页面原标题  
+重构: 跨 Service Worker 生命周期的爬库状态从三个独立 key（`crawl-cursor` / `crawl-heat` / `crawl-sweep`，各有自己的读写与 TTL）收敛成一个带版本号的 `crawl-state` 对象 `{v, cursor, heat, sweepAt}`——一趟爬库只读一次、只写一次，`session.set()` 原子提交，worker 在两次写之间被回收不再留下「游标没有计数 / sweep 谎称已爬完」的半截状态（近期三个爬库修复都落在这块）；版本不匹配整份丢弃，游标过期时连它的热力计数一起丢，收尾写显式清空计数但不碰 live `heatDays`；`heat` 改为必填字段、删除「忘传就隐式快照 live 累加器」的回退，空窗口 pass 不再写 state，避免把上一窗口的计数带进新窗口。配套重写静态守卫（一个 key、一次读、一次写、每次写显式传 heat、空 pass 不写，附经语法校验的变异探针）与行为用例（含空 pass 不回写上一窗口计数），e2e 手工驱动爬库前改为显式重置窗口  
 
 3.3.1 (2026/06/19)  
 修复设置丢失的bug 

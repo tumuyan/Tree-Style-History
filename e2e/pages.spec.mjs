@@ -549,11 +549,20 @@ function worker() {
  * for a page to read" is the question here.
  */
 /* eslint-disable no-undef -- inside worker().evaluate(); see above */
+// The two hand-driven crawl cases below each reset the single `crawl-state`
+// object to a fresh window first (see the comment at the call site). The
+// startup crawl may have left a completed-window sweep watermark there; that
+// watermark makes a hand-driven pass incremental and filters the seed URL out.
+// It used to be an argument to processVisits(), so calling it with no argument
+// walked the whole queue — now it is a field of the state object and has to be
+// reset explicitly. The call is written inline because an e2e-side helper is
+// not visible inside page/worker evaluate() realms.
 async function runCrawlOnOneUrl(url) {
     return worker().evaluate(async (u) => {
         const saved = urls_wait_load;
         urls_wait_load = [{ id: 'seed', url: u, title: 'Seed', lastVisitTime: Date.now() }];
         heatDays = {};
+        await saveCrawlState(emptyCrawlState());
         await processVisits();
         urls_wait_load = saved;
         globalThis.restoreHistory();
@@ -721,6 +730,7 @@ async function probeWorkerWithPlantedDay(dayKey, clearMap = false) {
         // the other cases here do.
         urls_wait_load = [{ id: 'seed', url: 'https://seed.test/heat', title: 'Seed', lastVisitTime: Date.now() }];
         heatDays = {};
+        await saveCrawlState(emptyCrawlState());
         await processVisits();
 
         // `calendar_storage2` is the worker's own hydrated copy; storage is what
