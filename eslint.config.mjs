@@ -46,6 +46,13 @@ const crossFileGlobals = {
     save_calendar_storage2: 'writable',
     calendar_storage2: 'writable',
     dayKey: 'writable',
+    // pure SW helpers flattened from modules/shared/sw-pure.js
+    evictOldest: 'writable',
+    dropExpired: 'writable',
+    expiredDayKeys: 'writable',
+    normalizeCrawlState: 'writable',
+    resumeIndexFrom: 'writable',
+    countHeatVisitInto: 'writable',
 
     // --- UMD guard in db-manager.js (dead branch in the browser) ---
     module: 'readonly',

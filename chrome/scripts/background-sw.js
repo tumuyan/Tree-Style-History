@@ -441,18 +441,11 @@ function setNegativeCache(cache) {
     }
 }
 
-/**
- * Drop the oldest entries until the cache is back under the cap.
- *
- * `Object.keys()` walks string keys in insertion order, so the front of the
- * map *is* the oldest entry — no timestamps need comparing.
- */
+/** Drop the oldest entries until the cache is back under the cap. */
 function evictNegativeCache(cache) {
-    var keys = Object.keys(cache);
-    var excess = keys.length - NEGATIVE_CACHE_MAX;
-    for (var i = 0; i < excess; i++) {
-        delete cache[keys[i]];
-    }
+    // The pure part (insertion-order eviction) lives in the shared layer; this
+    // wrapper keeps the cap policy here, where the negative cache is owned.
+    return evictOldest(cache, NEGATIVE_CACHE_MAX);
 }
 
 /**
@@ -467,16 +460,8 @@ function evictNegativeCache(cache) {
  */
 function sweepNegativeCache() {
     var cache = getNegativeCache();
-    var now = Date.now();
-    var keys = Object.keys(cache);
-    var expired = 0;
-    for (var i = 0; i < keys.length; i++) {
-        if (now - cache[keys[i]] > NEGATIVE_CACHE_TTL) {
-            delete cache[keys[i]];
-            expired++;
-        }
-    }
-    if (expired) setNegativeCache(cache);
+    // dropExpired() is pure; the TTL policy and the persistence stay here.
+    if (dropExpired(cache, Date.now(), NEGATIVE_CACHE_TTL)) setNegativeCache(cache);
 }
 
 /**
@@ -1327,6 +1312,8 @@ function scheduleAlarm(name, info) {
 
 /** A fresh window: no unfinished walk, no counted days, no completed sweep. */
 function emptyCrawlState() {
+    // Four literals, not a computation: keeping the shape here is what lets the
+    // source guard read the one versioned object without following a call.
     return { v: CRAWL_STATE_VERSION, cursor: null, heat: {}, sweepAt: 0 };
 }
 
@@ -1372,28 +1359,11 @@ function restoreCrawlState() {
     return Promise.resolve().then(function () {
         return area.get(CRAWL_STATE_KEY);
     }).then(function (result) {
-        const saved = result && result[CRAWL_STATE_KEY];
-        if (!saved || saved.v !== CRAWL_STATE_VERSION) {
-            return empty;
-        }
-        const now = Date.now();
-        const c = saved.cursor;
-        const cursor = (c && Number.isFinite(c.at) && now - c.at <= CRAWL_CURSOR_TTL)
-            ? { id: String(c.id), pos: Number(c.pos) || 0, at: c.at }
-            : null;
-        const sweepAt = (Number.isFinite(saved.sweepAt) && now - saved.sweepAt <= CRAWL_SWEEP_TTL)
-            ? saved.sweepAt : 0;
-        // Counts belong to the walk the cursor describes: with no live cursor
-        // they are orphans and are dropped (not merely left unread), so a
-        // later checkpoint in a new window cannot add them to its own sum.
-        const heat = {};
-        if (cursor && saved.heat && typeof saved.heat === 'object') {
-            for (const key of Object.keys(saved.heat)) {
-                const n = Number(saved.heat[key]);
-                if (Number.isFinite(n) && n > 0) heat[key] = n;
-            }
-        }
-        return { v: CRAWL_STATE_VERSION, cursor, heat, sweepAt };
+        // normalizeCrawlState() is pure: the version/TTL/count validation lives
+        // in the shared layer, while the single get() stays here so the source
+        // guard can still count exactly one read for the whole pass.
+        return normalizeCrawlState(result && result[CRAWL_STATE_KEY], Date.now(),
+            CRAWL_STATE_VERSION, CRAWL_CURSOR_TTL, CRAWL_SWEEP_TTL);
     }).catch(function (error) {
         console.warn('SW: could not read crawl state', error);
         return empty;
@@ -1819,14 +1789,14 @@ async function retentionCleanup() {
  * shared live binding keeps its identity for calendar.js and other contexts.
  */
 function pruneHeatMap(dayBoundary) {
-    let dropped = false;
-    for (const key of Object.keys(calendar_storage2)) {
-        if (Number(key) < dayBoundary) {
-            delete calendar_storage2[key];
-            dropped = true;
-        }
+    // expiredDayKeys() is pure; deleting in place and persisting stay here so
+    // the live calendar_storage2 binding keeps its identity.
+    var stale = expiredDayKeys(calendar_storage2, dayBoundary);
+    for (var i = 0; i < stale.length; i++) {
+        var key = stale[i];
+        delete calendar_storage2[key];
     }
-    if (dropped) localStorage['calendar-storage2'] = JSON.stringify(calendar_storage2);
+    if (stale.length) localStorage['calendar-storage2'] = JSON.stringify(calendar_storage2);
 }
 
 /**
@@ -1842,13 +1812,7 @@ function pruneHeatMap(dayBoundary) {
  * today is left to the page rather than counted here (see saveCrawledHeat()).
  */
 function countHeatVisit(days, v, url_item) {
-    const title = url_item.title;
-    const url = url_item.url;
-    if ((/^(http|https|ftp|ftps|file|chrome|chrome-extension|chrome-devtools)\:\/\/(.*)/).test(title)) return;
-    if ((/^(ftp|ftps|file|chrome|chrome-extension)\:\/\/(.*)/).test(url)) return;
-
-    const key = dayKey(v.visitTime);
-    days[key] = (days[key] || 0) + 1;
+    return countHeatVisitInto(days, v, url_item, dayKey);
 }
 
 async function crawlUrlVisits(url_item) {
@@ -1948,26 +1912,10 @@ async function crawlUrlVisits(url_item) {
  * window publishes only its own tail.
  */
 function resumeIndex(state) {
-    const cursor = state.cursor;
-    if (!cursor) return { start: 0, resumed: false };
-
-    const i = urls_wait_load.findIndex(function (u) {
-        return String(u.id) === String(cursor.id);
-    });
-    if (i >= 0) return { start: i + 1, resumed: true };
-    // Not in the list any more — normal: those URLs were walked, stamped,
-    // and filtered out. The heat accumulator from the earlier passes is
-    // still owed to the map, so this is a resumed window. Walk what is left
-    // from the top and keep the counts.
-    //
-    // The stored position is NOT a fallback here. It was an index into the
-    // list as it stood when it was written, and that list is rebuilt from the
-    // database on every start. Applying the old position to the shorter list
-    // skips the untouched middle of the window — the pass is then judged
-    // complete and publishes a partial count to a cache that never
-    // recomputes a day. Starting at 0 is safe: the walked URLs are exactly
-    // the ones that left, and `resumed` keeps the accumulated counts.
-    return { start: 0, resumed: true };
+    // The answer (id-based resume, never the stored position) is the shared
+    // pure function; the rebuilt queue is passed in explicitly. See the source
+    // guard in tests/static.test.mjs, which pins it on that function.
+    return resumeIndexFrom(state, urls_wait_load);
 }
 
 // Visit tab function — refactored from callback to async/await

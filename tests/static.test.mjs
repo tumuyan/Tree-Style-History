@@ -503,12 +503,19 @@ test('a crawl cursor resumes on its id, never on its stored position', () => {
     // hands the queue in whole (which most crawl tests do) never reaches the
     // fallback at all.
     const sw = stripJsComments(fs.readFileSync(path.join(CHROME_DIR, 'scripts/background-sw.js'), 'utf8'));
+    const utils = stripJsComments(fs.readFileSync(path.join(CHROME_DIR, 'scripts/background-utils.js'), 'utf8'));
     const resume = sw.slice(sw.indexOf('function resumeIndex('));
     const body = resume.slice(0, resume.indexOf('\nfunction ', 1));
 
-    assert.match(body, /return\s*\{\s*start:\s*0,\s*resumed:\s*true\s*\}/,
+    // The worker delegates to the shared pure function; the answer itself is
+    // pinned on that function, where it can be behaviour-tested directly.
+    assert.match(body, /resumeIndexFrom\s*\(\s*state\s*,\s*urls_wait_load\s*\)/,
+        'the worker must hand the rebuilt queue to the shared resume helper');
+    const sharedBody = utils.slice(utils.indexOf('function resumeIndexFrom('));
+    const sharedFn = sharedBody.slice(0, sharedBody.indexOf('\nfunction ', 1));
+    assert.match(sharedFn, /return\s*\{\s*start:\s*0,\s*resumed:\s*true\s*\}/,
         'an id that has left the list must resume from the top and keep the counts');
-    assert.doesNotMatch(body, /start:\s*state\.cursor\.pos|start:\s*cursor\.pos/,
+    assert.doesNotMatch(sharedFn, /start:\s*state\.cursor\.pos|start:\s*cursor\.pos/,
         'the stored position must not be used as a resume index');
 });
 
@@ -1089,6 +1096,51 @@ test('the ES module graph is acyclic', () => {
     for (const node of graph.keys()) visit(node);
 
     assert.deepEqual(cycles, [], `import cycles found:\n${cycles.join('\n')}`);
+});
+
+test('the chunked renderer owns its finish hooks and keeps a narrow API', () => {
+    // Review of #51: the shared loop used to make each of its four callers pass
+    // toggleGroup / alertLoading / beforeFinish back in, even though those are
+    // fixed for both pages and the renderInChunks -> history-core -> renderInChunks
+    // cycle (had it imported them back) is forbidden by the guard above. The
+    // leaf module keeps the graph acyclic; the renderer imports the hooks
+    // itself and exposes only draw / into / onFinish to its callers.
+    const leaf = stripJsComments(fs.readFileSync(
+        path.join(CHROME_DIR, 'scripts/modules/list-view.js'), 'utf8'));
+    assert.doesNotMatch(leaf, /history-core\.js|chunked-render\.js/,
+        'list-view.js must stay a leaf; importing a page module closes a cycle');
+    for (const fn of ['getActiveHistory', 'alertLoadingHistory', 'toggleGroup']) {
+        assert.match(leaf, new RegExp(`function\\s+${fn}\\s*\\(`),
+            `list-view.js must define ${fn}()`);
+    }
+
+    const renderer = stripJsComments(fs.readFileSync(
+        path.join(CHROME_DIR, 'scripts/modules/chunked-render.js'), 'utf8'));
+    assert.match(renderer, /import\s*\{[^}]*alertLoadingHistory[^}]*\}\s*from\s*['"]\.\/list-view\.js['"]/,
+        'the renderer must import the finish hooks itself');
+    for (const opt of ['opts.toggleGroup', 'opts.alertLoading', 'opts.beforeFinish']) {
+        assert.doesNotMatch(renderer, new RegExp(opt.replace(/\./g, '\\.')),
+            `${opt} must not be a caller-supplied option again`);
+    }
+    assert.match(renderer, /opts\.onFinish/, 'the single page-specific hook is onFinish()');
+    assert.match(renderer, /replace\(\/\^#\//,
+        'the into id must be normalised so # and bare ids both work');
+    assert.match(renderer, /\}\s*finally\s*\{/,
+        'the shared finish must sit in finally, not after the loop');
+
+    // history-core.js re-exports the three names so no caller had to change,
+    // but must not grow its own copy of them.
+    const core = stripJsComments(fs.readFileSync(
+        path.join(CHROME_DIR, 'scripts/modules/history-core.js'), 'utf8'));
+    for (const fn of ['getActiveHistory', 'alertLoadingHistory', 'toggleGroup']) {
+        assert.doesNotMatch(core, new RegExp(`function\\s+${fn}\\s*\\(`),
+            `history-core.js must re-export ${fn}(), not define a second copy`);
+    }
+    const exports = /export\s*\{([\s\S]*?)\};/.exec(core);
+    assert.ok(exports, 'history-core.js no longer has an export block');
+    for (const fn of ['getActiveHistory', 'alertLoadingHistory', 'toggleGroup']) {
+        assert.ok(exports[1].includes(fn), `history-core.js stopped re-exporting ${fn}()`);
+    }
 });
 
 test('every page script imports what it calls', () => {
@@ -3895,8 +3947,11 @@ test('the linear icon state comment matches the vector-mask implementation', () 
 });
 
 test('the group toggle state is an attribute, not an inline sprite offset', () => {
-    const core = fs.readFileSync(path.join(CHROME_DIR, 'scripts/modules/history-core.js'), 'utf8');
-    const body = functionBody(core, 'toggleGroup');
+    // toggleGroup() lives in list-view.js: it is a leaf helper shared with
+    // chunked-render.js, and history-core.js importing that renderer back
+    // would close a cycle. Pin the body there, not in the re-exporting module.
+    const view = fs.readFileSync(path.join(CHROME_DIR, 'scripts/modules/list-view.js'), 'utf8');
+    const body = functionBody(view, 'toggleGroup');
     // Both branches: a guard that only matched the first setAttribute let a
     // reverted 'expanded' branch pass while 'collapsed' still set the attribute.
     assert.equal((body.match(/setAttribute\(\s*'data-expanded'/g) || []).length, 2,

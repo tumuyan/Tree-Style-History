@@ -11,10 +11,11 @@ import {
 } from './modules/helpers.js';
 import { filtUrl } from './modules/config.js';
 import { toggleGroup, getMoreItems, alertLoadingHistory, clearRowColor, groupTitleOf } from './modules/history-core.js';
-import { modifierState, ITEM_SELECTED_COLOR, RENDER_BUDGET_MS } from './modules/ui-state.js';
+import { modifierState, ITEM_SELECTED_COLOR } from './modules/ui-state.js';
 import { initPage } from './modules/page-init.js';
 import { initSortBar } from './modules/sort-bar.js';
 import { showLoading, showNoResults } from './modules/list-status.js';
+import { renderInChunks } from './modules/chunked-render.js';
 
 initPage();
 
@@ -508,7 +509,6 @@ document.addEventListener('DOMContentLoaded', function () {
             $(into).textContent = '';
 
             var ibcv = 'grey';
-            var Counter = { counter: 0 };
             // host -> { title, holder, label }, filled as groups are created.
             // Every item used to cost five querySelector() calls, each one a
             // full scan of the container. The container was cleared just above,
@@ -516,18 +516,16 @@ document.addEventListener('DOMContentLoaded', function () {
             var groups = new Map();
 
             if (grp == 'yes') {  // 注意此处回调耗时操作
-                prh = setInterval((function () {
-                    var thisc = this;
-                    var deadline = Date.now() + RENDER_BUDGET_MS;
-                    while (thisc.counter < rha.length && Date.now() < deadline) {
-                        var host = rha[thisc.counter].host;
+                prh = renderInChunks(rha, {
+                    draw: function (i) {
+                        var host = rha[i].host;
                         if (host !== undefined) {
                             if (!groups.has(host)) {
                                 var toggleid = uniqueId('toggle');
                                 var moreid = uniqueId('more');
                                 var errorid = uniqueId('error');
                                 var groupid = uniqueId('group');
-                                var faviconUrl = rha[thisc.counter].favicon || '';
+                                var faviconUrl = rha[i].favicon || '';
                                 var escapedHost = escapeHtmlAttr(host);
                                 // Text position, so the text escaper: it leaves
                                 // quotes alone instead of rewriting them to
@@ -547,7 +545,7 @@ document.addEventListener('DOMContentLoaded', function () {
                                 $(moreid).addEventListener('click', function () {
                                     getMoreItems(this);
                                 });
-                                var _faviconFallbackUrl = getFaviconOnerror(rha[thisc.counter].url);
+                                var _faviconFallbackUrl = getFaviconOnerror(rha[i].url);
                                 setupFaviconElement($(errorid), faviconUrl, _faviconFallbackUrl);
                                 $(groupid).addEventListener('click', function () {
                                     var host = this.getAttribute('data-host');
@@ -568,9 +566,9 @@ document.addEventListener('DOMContentLoaded', function () {
                             }
 
                             var selectid = uniqueId('select');
-                            var rawUrl = rha[thisc.counter].url || '';
-                            var rawTime = rha[thisc.counter].time || '';
-                            var displayTitleText = rha[thisc.counter].title || '';
+                            var rawUrl = rha[i].url || '';
+                            var rawTime = rha[i].time || '';
+                            var displayTitleText = rha[i].title || '';
                             var escapedUrlAttr = escapeHtmlAttr(rawUrl);
                             // The time is interpolated twice, once per context:
                             // in a rel attribute and as the visible text. One
@@ -613,9 +611,9 @@ document.addEventListener('DOMContentLoaded', function () {
                             var itemHolder = createElement('div', {
                                 'rel': ibcv,
                                 'class': 'item-holder',
-                                'data-bookmark-id': rha[thisc.counter].bookmarkId,
-                                'data-bookmark-title': rha[thisc.counter].originalTitle,
-                                'data-bookmark-url': rha[thisc.counter].url
+                                'data-bookmark-id': rha[i].bookmarkId,
+                                'data-bookmark-title': rha[i].originalTitle,
+                                'data-bookmark-url': rha[i].url
                             });
                             itemHolder.innerHTML = item;
                             var groupDiv = group ? group.holder : null;
@@ -647,31 +645,19 @@ document.addEventListener('DOMContentLoaded', function () {
                             if (label != undefined && label != null)
                                 label.textContent = size;
                         }
-                        thisc.counter++;
-                    }
-                    if (thisc.counter >= rha.length) {
-                        clearInterval(prh);
-                        alertLoadingHistory(true);
-                        var uioneInput = document.body.querySelector('#rh-bar-uione input');
-                        if (uioneInput) uioneInput.checked = false;
-                        // Tips removed - native title provides tooltip
-                        var gts = $$('#' + into + ' div.group-title');
-                        if (gts.length > 0) { toggleGroup(gts[0].getAttribute('title')); }
-                        $('master-check-all').removeAttribute('disabled');
-                    }
-                }).bind(Counter), 5);
+                    },
+                    into: into
+                });
             } else if (grp == 'no') {
-                prh = setInterval((function () {
-                    var thisc = this;
-                    var deadline = Date.now() + RENDER_BUDGET_MS;
-                    while (thisc.counter < rha.length && Date.now() < deadline) {
-                        if (rha[thisc.counter] !== undefined) {
+                prh = renderInChunks(rha, {
+                    draw: function (i) {
+                        if (rha[i] !== undefined) {
 
                             var selectid = uniqueId('select');
                             var errorid = uniqueId('error');
-                            var rawUrl = rha[thisc.counter].url || '';
-                            var rawTime = rha[thisc.counter].time || '';
-                            var displayTitleText = rha[thisc.counter].title || '';
+                            var rawUrl = rha[i].url || '';
+                            var rawTime = rha[i].time || '';
+                            var displayTitleText = rha[i].title || '';
                             var escapedUrlAttr = escapeHtmlAttr(rawUrl);
                             // The time is interpolated twice, once per context:
                             // in a rel attribute and as the visible text. One
@@ -691,7 +677,7 @@ document.addEventListener('DOMContentLoaded', function () {
                             // titled by its URL showed it twice.
                             var escapedTooltip = escapeHtmlAttr(tooltipText(displayTitleText, rawUrl, rawTime));
 
-                            var faviconUrl = rha[thisc.counter].favicon || '';
+                            var faviconUrl = rha[i].favicon || '';
                             var item;
                             item = '<div class="item">';
                             item += '<span class="checkbox"><label><input class="chkbx bookmark-checkbox" type="checkbox" id="' + selectid + '" value="' + escapedUrlAttr + '" name="check"></label>&nbsp;</span>';
@@ -704,9 +690,9 @@ document.addEventListener('DOMContentLoaded', function () {
                             var itemHolder = createElement('div', { 
                                 'rel': ibcv, 
                                 'class': 'item-holder',
-                                'data-bookmark-id': rha[thisc.counter].bookmarkId,
-                                'data-bookmark-title': rha[thisc.counter].originalTitle,
-                                'data-bookmark-url': rha[thisc.counter].url
+                                'data-bookmark-id': rha[i].bookmarkId,
+                                'data-bookmark-title': rha[i].originalTitle,
+                                'data-bookmark-url': rha[i].url
                             });
                             itemHolder.innerHTML = item;
                             $(into).appendChild(itemHolder);
@@ -737,22 +723,13 @@ document.addEventListener('DOMContentLoaded', function () {
                             $(selectid).addEventListener('click', function () {
                                 selectBookmarkItem(this, 'single');
                             });
-                            var _faviconFallbackUrl = getFaviconOnerror(rha[thisc.counter].url);
+                            var _faviconFallbackUrl = getFaviconOnerror(rha[i].url);
                             setupFaviconElement($(errorid), faviconUrl, _faviconFallbackUrl);
                         }
-                        thisc.counter++;
-                    }
-                    if (thisc.counter >= rha.length) {
-                        clearInterval(prh);
-                        alertLoadingHistory(true);
-                        var uioneInput = document.body.querySelector('#rh-bar-uione input');
-                        if (uioneInput) uioneInput.checked = false;
-                        // Tips removed - native title provides tooltip
-                        var gts = $$('#' + into + ' div.group-title');
-                        if (gts.length > 0) { toggleGroup(gts[0].getAttribute('title')); }
-                        $('master-check-all').removeAttribute('disabled');
-                    }
-                }).bind(Counter), 5);
+                    },
+                    into: into
+                });
+
             }
             alertLoadingHistory(true);
         } else {

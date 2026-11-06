@@ -30,7 +30,8 @@ const FILES = [
     'format.js',
     'url.js',
     'favicon.js',
-    'calendar-storage.js'
+    'calendar-storage.js',
+    'sw-pure.js'
 ];
 
 const HEADER = `// ============================================================================

@@ -10,8 +10,10 @@ import { filtUrl } from './config.js';
 // day on screen today?" has to be the *same* expression on both sides.
 import { save_calendar_storage2, dayKey } from './shared/calendar-storage.js';
 import { paintSelectedDay } from './calendar-colors.js';
-import { modifierState, ITEM_SELECTED_COLOR, RENDER_BUDGET_MS } from './ui-state.js';
+import { modifierState, ITEM_SELECTED_COLOR } from './ui-state.js';
 import { showLoading, showNoResults } from './list-status.js';
+import { getActiveHistory, alertLoadingHistory, toggleGroup } from './list-view.js';
+import { renderInChunks } from './chunked-render.js';
 
 // Module-level variables
 var selectedItem;
@@ -26,15 +28,6 @@ var initialTitle = (typeof document !== 'undefined') ? (document.title || '') : 
 
 function alertUserHistory(pm) {
     if ($('alert-holder').style.display == 'block') {
-        $('alert-holder').style.display = 'none';
-        $('alert-holder-loading').style.marginTop = '-15px';
-    } else if ($('alert-holder').style.display == 'none') {
-        $('alert-holder').style.display = 'block';
-    }
-}
-
-function alertLoadingHistory(pm) {
-    if (pm) {
         $('alert-holder').style.display = 'none';
         $('alert-holder-loading').style.marginTop = '-15px';
     } else if ($('alert-holder').style.display == 'none') {
@@ -230,7 +223,6 @@ function history(w, q) {
                 $(into).textContent = '';
 
                 var ibcv = 'grey';
-                var Counter = { counter: 0 };
                 // host -> { title, holder }, filled as groups are created. The
                 // render loop used to look the group up with three
                 // querySelector() calls per item — each one a full scan of the
@@ -239,25 +231,23 @@ function history(w, q) {
                 var groups = new Map();
 
                 if (grp == 'yes') {
-                    prh = setInterval(function () {
-                        var thisc = Counter;
-                        var deadline = Date.now() + RENDER_BUDGET_MS;
-                        while (thisc.counter < rha.length && Date.now() < deadline) {
-                            if (rha[thisc.counter] !== undefined) {
-                                var hostKey = rha[thisc.counter].host;
+                    prh = renderInChunks(rha, {
+                        draw: function (i) {
+                            if (rha[i] !== undefined) {
+                                var hostKey = rha[i].host;
                                 if (!groups.has(hostKey)) {
                                     var toggleid = uniqueId('toggle');
                                     var moreid = uniqueId('more');
                                     var errorid = uniqueId('error');
                                     var groupid = uniqueId('group');
-                                    var faviconUrl = rha[thisc.counter].favicon || '';
+                                    var faviconUrl = rha[i].favicon || '';
                                     // The host reaches attributes three times and
                                     // the visible label once — one escaper per
                                     // context. All four used to be raw.
-                                    var hostAttr = escapeHtmlAttr(rha[thisc.counter].host);
-                                    var hostText = escapeHtmlText(rha[thisc.counter].host.replace('www.', ''));
+                                    var hostAttr = escapeHtmlAttr(rha[i].host);
+                                    var hostText = escapeHtmlText(rha[i].host.replace('www.', ''));
                                     var groupDiv = createElement('div', {
-                                        title: rha[thisc.counter].host,
+                                        title: rha[i].host,
                                         rel: ibcv,
                                         'class': 'item-holder group-title ',
                                         html: '<a href="#" class="group-title-toggle" id="' + toggleid + '" data-host="' + hostAttr + '" rel="' + hostAttr + '"></a><input type="checkbox" class="group-title-checkbox" id="' + moreid + '" value="' + hostAttr + '"><img id="' + errorid + '" class="group-title-favicon" alt="Favicon"><span id="' + groupid + '" data-host="' + hostAttr + '" class="group-title-host">' + hostText + '</span>'
@@ -270,13 +260,13 @@ function history(w, q) {
                                     $(moreid).addEventListener('click', function () {
                                         getMoreItems(this);
                                     });
-                                    var _faviconFallbackUrl = getFaviconOnerror(rha[thisc.counter].url);
+                                    var _faviconFallbackUrl = getFaviconOnerror(rha[i].url);
                                     setupFaviconElement($(errorid), faviconUrl, _faviconFallbackUrl);
                                     $(groupid).addEventListener('click', function () {
                                         var host = this.getAttribute('data-host');
                                         toggleGroup(host);
                                     });
-                                    var holderDiv = createElement('div', { 'class': 'group-holder', rel: rha[thisc.counter].host, styles: { 'display': 'none' } });
+                                    var holderDiv = createElement('div', { 'class': 'group-holder', rel: rha[i].host, styles: { 'display': 'none' } });
                                     $(into).appendChild(holderDiv);
                                     groups.set(hostKey, { title: groupDiv, holder: holderDiv });
                                     if (ibcv == 'white') {
@@ -286,7 +276,7 @@ function history(w, q) {
                                     }
                                 }
                                 if (w == 'search' && (sw == 'all' || sw == 'recent')) {
-                                    // rha[thisc.counter].time = '- - : - -';
+                                    // rha[i].time = '- - : - -';
                                 }
                                 var selectid = uniqueId('select');
                                 // The URL is attacker-controllable (it is whatever
@@ -299,13 +289,13 @@ function history(w, q) {
                                 // made it safe was title_fix() deleting the angle
                                 // brackets upstream, which the storage side no
                                 // longer does.
-                                var urlAttr = escapeHtmlAttr(rha[thisc.counter].url);
-                                var tipAttr = escapeHtmlAttr(returnLang('visits') + ': ' + rha[thisc.counter].visits + ' | ' + rha[thisc.counter].time + ' ' + rha[thisc.counter].date);
-                                var titleText = escapeHtmlText(rha[thisc.counter].title);
+                                var urlAttr = escapeHtmlAttr(rha[i].url);
+                                var tipAttr = escapeHtmlAttr(returnLang('visits') + ': ' + rha[i].visits + ' | ' + rha[i].time + ' ' + rha[i].date);
+                                var titleText = escapeHtmlText(rha[i].title);
                                 var item;
                                 item = '<div class="item">';
                                 item += '<span class="checkbox"><label><input class="chkbx" type="checkbox" id="' + selectid + '" value="' + urlAttr + '" name="check"></label>&nbsp;</span>';
-                                item += '<span class="time">' + rha[thisc.counter].time + '</span>';
+                                item += '<span class="time">' + rha[i].time + '</span>';
                                 item += '<a style="padding-left:0;" target="_blank" class="link" href="' + urlAttr + '">';
                                 item += '<span class="title" title="' + urlAttr + '" rel="' + tipAttr + '">' + titleText + '</span>';
                                 item += '</a>';
@@ -328,40 +318,30 @@ function history(w, q) {
                                     selectHistoryItem(this, 'single');
                                 });
                             }
-                            thisc.counter++;
-                        }
-                        if (thisc.counter >= rha.length) {
-                            clearInterval(prh);
-                            alertLoadingHistory(true);
-                            var input = document.body.querySelector('#rh-bar-uione input');
-                            if (input) input.checked = false;
-                            selectedItem = undefined;
-                            if ($$('#' + into + ' div.group-title').length > 0) { toggleGroup($$('#' + into + ' div.group-title')[0].getAttribute('title')); }
-                            $('master-check-all').removeAttribute('disabled');
-                        }
-                    }.bind(Counter), 5);
+                        },
+                        into: into,
+                        onFinish: function () { selectedItem = undefined; }
+                    });
                 } else if (grp == 'no') {
-                    prh = setInterval(function () {
-                        var thisc = Counter;
-                        var deadline = Date.now() + RENDER_BUDGET_MS;
-                        while (thisc.counter < rha.length && Date.now() < deadline) {
-                            if (rha[thisc.counter] !== undefined) {
+                    prh = renderInChunks(rha, {
+                        draw: function (i) {
+                            if (rha[i] !== undefined) {
                                 if (w == 'search' && (sw == 'all' || sw == 'recent')) {
-                                    // rha[thisc.counter].time = '- - : - -';
+                                    // rha[i].time = '- - : - -';
                                 }
                                 var selectid = uniqueId('select');
                                 var errorid = uniqueId('error');
-                                var faviconUrl = rha[thisc.counter].favicon || '';
+                                var faviconUrl = rha[i].favicon || '';
                                 // See the grouped branch: the URL is escaped for
                                 // the attributes (escapeHtmlAttr), the visible
                                 // title for a text position (escapeHtmlText).
-                                var urlAttr = escapeHtmlAttr(rha[thisc.counter].url);
-                                var tipAttr = escapeHtmlAttr(returnLang('visits') + ': ' + rha[thisc.counter].visits + ' | ' + rha[thisc.counter].time + ' ' + rha[thisc.counter].date);
-                                var titleText = escapeHtmlText(rha[thisc.counter].title);
+                                var urlAttr = escapeHtmlAttr(rha[i].url);
+                                var tipAttr = escapeHtmlAttr(returnLang('visits') + ': ' + rha[i].visits + ' | ' + rha[i].time + ' ' + rha[i].date);
+                                var titleText = escapeHtmlText(rha[i].title);
                                 var item;
                                 item = '<div class="item">';
                                 item += '<span class="checkbox"><label><input class="chkbx" type="checkbox" id="' + selectid + '" value="' + urlAttr + '" name="check"></label>&nbsp;</span>';
-                                item += '<span class="time">' + rha[thisc.counter].time + '</span>';
+                                item += '<span class="time">' + rha[i].time + '</span>';
                                 item += '<a target="_blank" class="link" href="' + urlAttr + '">';
                                 item += '<img id="' + errorid + '" class="favicon" alt="Favicon">';
                                 item += '<span class="title" title="' + urlAttr + '" rel="' + tipAttr + '">' + titleText + '</span>';
@@ -379,21 +359,14 @@ function history(w, q) {
                                 $(selectid).addEventListener('click', function () {
                                     selectHistoryItem(this, 'single');
                                 });
-                                var _faviconFallbackUrl = getFaviconOnerror(rha[thisc.counter].url);
+                                var _faviconFallbackUrl = getFaviconOnerror(rha[i].url);
                                 setupFaviconElement($(errorid), faviconUrl, _faviconFallbackUrl);
                             }
-                            thisc.counter++;
-                        }
-                        if (thisc.counter >= rha.length) {
-                            clearInterval(prh);
-                            alertLoadingHistory(true);
-                            var input = document.body.querySelector('#rh-bar-uione input');
-                            if (input) input.checked = false;
-                            selectedItem = undefined;
-                            if ($$('#' + into + ' div.group-title').length > 0) { toggleGroup($$('#' + into + ' div.group-title')[0].getAttribute('title')); }
-                            $('master-check-all').removeAttribute('disabled');
-                        }
-                    }.bind(Counter), 5);
+                        },
+                        into: into,
+                        onFinish: function () { selectedItem = undefined; }
+                    });
+
                 }
                 alertLoadingHistory(true);
             } else {
@@ -418,49 +391,10 @@ function history(w, q) {
 
 }
 
-// --- Group toggle ---
-
-function toggleGroup(host) {
-    if (getActiveHistory() == 'history') {
-        var into = 'rh-views-insert';
-    } else if (getActiveHistory() == 'search') {
-        into = 'rh-views-search-insert';
-    }
-    // The host comes from a visited URL, and a quote in it would close the
-    // attribute selector early — querySelector() throws rather than returning
-    // null, which propagates out of the chunked render loop and leaves the page
-    // half drawn.
-    var tgda = $(into).querySelector('a[rel="' + CSS.escape(host) + '"]');
-    var tgde = $(into).querySelector('div[rel="' + CSS.escape(host) + '"]');
-
-    if (tgda != undefined && tgde != undefined) {
-        var tgdv = tgde.style.display;
-        if (tgdv == 'block') {
-            tgde.style.display = 'none';
-            tgda.setAttribute('data-expanded', 'false');
-        } else {
-            tgde.style.display = 'block';
-            tgda.setAttribute('data-expanded', 'true');
-        }
-    } else {
-        // Reached when the group is not in the DOM: the render loop was
-        // interrupted (a delete in flight, a filtered repaint) or the caller
-        // passed a host that never got a group. Silence would make a toggle
-        // that does nothing look like a dead page.
-        console.warn('toggleGroup(): no group for ' + JSON.stringify(host));
-    }
-
-}
-
-// --- Get active history view type ---
-
-function getActiveHistory() {
-    if ($('rh-views-insert').style.display == 'block') {
-        return 'history';
-    } else if ($('rh-views-search-insert').style.display == 'block') {
-        return 'search';
-    }
-}
+// Group opening, the loading indicator and the active-view detector moved to
+// list-view.js (a leaf module): chunked-render.js imports them too, and having
+// history-core.js import that renderer back would close a cycle. They are
+// re-exported below, so the page scripts' imports are unchanged.
 
 // --- Bulk select/cancel ---
 
@@ -834,6 +768,10 @@ function deleteHistoryItem(w, redraw) {
 
 export {
     history,
+    // Re-exported from list-view.js so the page scripts' imports stay put:
+    // history.js takes getActiveHistory(), bookmark.js takes all three, and
+    // history2.js / closed.js take alertLoadingHistory() only. The names live
+    // in the leaf module; this block just forwards them.
     toggleGroup,
     getActiveHistory,
     getMoreItems,
