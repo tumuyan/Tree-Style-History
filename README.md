@@ -75,81 +75,38 @@ chrome/scripts/background-utils.js 由 chrome/scripts/modules/shared/ 自动生�
 第三方库（MooTools、jQuery、zTree、fuzzysearch.js）已全部移除，不要再引入。
 
 ## Changlog
-3.3.2 (未发布)  
-重构: 线性历史与线性书签两页的「加载中 / 无结果」两种状态收敛到 `list-status.js` 一份实现（原先 6 处手写 `textContent` 与 `.no-results` 字符串）；组件带 `role="status"` / `aria-live="polite"` 与纯 CSS 旋转指示器，长列表分片渲染时不再逐行往空白里蹦  
-重构: 工具栏、分组标题、日历展开按钮的图标全部改成内联 SVG data URI + CSS mask，删掉 11 张 1x/2x 位图与暗色下的 `toggle2.png` 补丁；图标颜色由 `--icon-ink` 主题变量控制，状态由 `data-state` / `data-expanded` 属性切换，JS 不再写内联 `backgroundPosition`（`toggleGroup()` 也改成翻属性）  
-重构: 书签页的「编辑书签」由两次原生 `prompt()` 换成一个行内面板（标题/网址两个输入框 + 保存/取消），网址合法性交给 `chrome.bookmarks.update` 判定、失败时在面板内提示 `chrome.runtime.lastError`（不再手写 URL 白名单，避免把 `mailto:` 等合法地址挡在门外）；文案走 i18n 双 locale，支持 Enter 保存 / Esc 取消。面板只换 UI，写路径与旧版等价：标题兜底仍是 `data.title || data.url || ''`，每次保存都走 `update` + 选中重置 + 列表刷新（不引入「无变化就静默关闭」的短路）  
-新增校验 (状态/图标/编辑): `tests/static.test.mjs` 盯住「两页都委托给 list-status」「不再有手写状态字符串」「位图 sprite 已从 images 删除、5 个图标都是 SVG mask」「`toggleGroup` 两个分支都翻 `data-expanded`」「编辑面板无 `prompt`/`alert`、新 i18n key 双 locale 齐全、退役的 `...Prompt` / `editBookmarkInvalidUrl` 不再回来」「编辑器不再手写 URL 白名单」「写路径保持旧版兜底链与成功收尾、注释不再描述已删除的 sprite/retina 规则」；`tests/list-status.test.mjs` 单测组件的转义与兜底；e2e 在真实 Chromium 挂起 `chrome.history.search` 的全部回调并计数、放行后断言「加载组件消失且真实行已画出」以验证「加载中 → 有结果」的往返、断言空态组件、断言 mask 与属性切换、并完整走一遍书签编辑的保存与回读（含 `mailto:` 这种非 http 合法网址只改标题也能保存）（静态 12 项、单测 4 项、e2e 4 项均做过变异验证：去掉对应代码即变红）  
-评审修订 (PR #44): 编辑面板的标题/网址两个字段与保存/取消两个按钮改由函数内局部的 `field()` / `actionButton()` 构造（原来 8 个手写变量里 label+input 组装与按钮 i18n 重复两遍），helper 只收已翻译文本、不引入跨文件抽象；Enter/Escape 的 `keydown` 在面板内 `preventDefault()` + `stopPropagation()`，保存触发的分片重渲染移除面板时不再有按键冒泡到 `document.body`。新增 2 条静态守卫（局部 helper 不外逃、手写 `createElement('label')` 不回潮、keydown 必须收口）与 1 条真实 Chromium e2e 用例（断言字段/按钮的 DOM 形状、Escape 与 Enter 都不冒泡、Enter 仍真正写入书签），均做过变异验证（去掉对应代码即变红）  
-评审修订 (PR #44, 同上流水线新提): 编辑面板的 `save` 加一次性闸门（`saving`，失败复位允许重试），Enter 只在 `!e.repeat` 时触发保存——按住 Enter 的键盘自动重复或双击原本会在异步 `chrome.bookmarks.update` 回调返回前重复提交，多个 `refreshBookmarkView()` 的 `setInterval` 分片互相 `clearInterval` 会让列表重绘被打断。新增 1 条静态守卫与 e2e 里对 `update` 调用次数的断言，变异验证（去掉闸门或 `!e.repeat`）静态守卫与 e2e 分别变红  
-评审修订 (PR #44, 流水线再次新提): e2e 里「捕获加载中间态」的桩原先只保留最后一个 `chrome.history.search` 回调且永不调用，加载态其实来自一次被永久吞掉的查询，放行后也没有断言列表真的画出行——属于「不可验证」。改成挂起全部回调并计数、显式放行后断言「加载组件消失且真实行已画出」的往返；先喂 8 条真实历史，保证放行后确实有行可画。新增 1 条静态守卫（带探针）钉死单回调桩与缺往返断言不得回潮，README 口径同步。变异验证：不喂数据 / 不放行 / 桩回潮到单回调 / 删掉往返或计数断言，静态守卫与 e2e 用例分别变红  
-评审修订 (PR #44, 同轮 ai-code-review 再提): 收掉 3 处「恒绿假守卫」——图标选择器守卫原先只查「选择器 + `{` 出现过」，删掉 `mask-image` 整块也不会红，改成收集该选择器的所有规则体、至少一条真含 `mask-image` + SVG data URI；旧注释 / URL 白名单 / 兜底链三条探针原先拿写死的字面量去匹配自己的正则（自证），改成对真实回归片段求值（旧注释原文、白名单原始行、截短的兜底链做 `doesNotMatch`）。另两条「位图 5/6 恒绿」「six call sites 数字失真」经实测为误判：6 个 basename 各自生成正则均能命中自己的 `.png`/`-@2x.png`，被替换的手写状态正是 6 处（history-core 2 + bookmark 4，注释掉的那处本就随改动删除），未改。全部做过变异验证：删 mask 声明 / 还原旧注释 / 白名单回潮 / 截短兜底链 / 改坏探针正则，对应守卫分别变红  
-重构: 线性历史与线性书签两页的「分组/排序」工具栏收敛到 `sort-bar.js` 一份实现（原先两页各有一套逐行相同的点击处理与 6 处 `backgroundPosition` 硬切）；按钮状态改由 `data-state` 属性交给 CSS，JS 不再直接写内联样式。重复初始化也不会叠加监听器  
-可访问性: 三个图标按钮补 `role="button"` 与走 i18n 的 `aria-label`/`title`，搜索框与全选补经过双 locale 翻译的 `placeholder`/`aria-label`；`* { outline: none }` 换成只在键盘聚焦时出现的 `:focus-visible` 焦点环  
-清理: 删除 `history.css` 里零引用的 `.tip-*` 与 `#pacman-iframe` 死样式；修正英文界面里 `Liner` → `Linear` 的拼写（i18n key 保持不变）  
-新增校验: 静态守卫盯住「两页都委托给 sort-bar」「`data-lang-*` key 双 locale 齐全」「焦点环与状态规则仍在」；单测覆盖状态机与冷启动，e2e 在真实 Chromium 里断言 `data-state` 真的驱动了图标（均做过变异验证）  
-评审修订 (PR #42): 排序工具栏不再替两页决定「当前显示哪个视图」——`initSortBar(refresh, getActive)` 由各页传入自己的判定（`history.js` 传 `getActiveHistory`、`bookmark.js` 传 `getActiveBookmark`），`refreshActive()` 在视图未初始化时回退到全量视图。修掉 `bookmark.html` 打开后立刻点分组/排序只改按钮与存储、列表却不重绘的回归；新增不预设 `style.display` 的单测、静态守卫与真实 Chromium e2e 用例（均变异验证）  
-评审修订 (PR #42): `page-init.js` 去掉为假想需求预留的 `data-lang-*` 属性循环，改成两次直白的查询；静态守卫盯住枚举的属性名与 HTML 一致，e2e 在真实 Chromium 里断言搜索框的 `placeholder` 与 `aria-label` 仍都完成本地化（均变异验证）  
-重构: 两个线性页的行/分组标题/工具栏从「表格 + float + 固定像素绝对定位」换成 flex/grid：每行不再追加 `<div class="clearitem">`，长标题改 `text-overflow: ellipsis`，缩放（`body.style.zoom`）下不再互相挤  
-重构: `history.html` 的日历改成两列 grid + `position: sticky`，删掉 115px 的滚动阈值监听；展开态改由 `data-expanded` 一个属性交给 CSS 控制宽度与图标，JS 不再回读宽度或用 `setTimeout` 翻 sprite。树状页的 `calendar2` 与窄屏布局不受影响  
-重构: 暗色主题改由 `:root` 上的一组 CSS 变量切换，删掉线性页那批 `!important` 覆盖（标题色、工具栏边框、斑马纹、行 hover）；两条结构性规则保留但不再用 `!important`  
-新增校验 (布局/主题): 静态守卫盯住「flex/grid 规则仍在、无 `clearitem`、无滚动监听/内联定位、展开态在 CSS、暗色块只改变量」，每条都配能区分形状的探针；e2e 在真实 Chromium 断言 flex 行、sticky 跟随、展开态、暗色变量与树状页不被误伤（静态 5 项 + e2e 2 项变异均验证变红）  
-评审修订 (PR #43): 分组标题的四列改为显式 `grid-column`（bookmark 页的计数 label 与 history 页的 checkbox 都钉在第 2 列，不再靠 DOM 顺序与「恰好 4 个可见子元素」的巧合）；日历的折叠宽度 170px 也写进 `.linear-view #calendar`，与展开态的 336px 一起由 `data-expanded` 切换，不再隐式依赖共享 `#calendar` 基础规则；窄屏（≤500px）回退补上 `position:absolute` 与 `grid-column/grid-row:auto`，否则 `.linear-view #calendar` 的 sticky 特异度更高、日历会跑到列表下方而不是浮在其上。新增 3 条静态守卫与 3 条真实 Chromium e2e 用例，均做过变异验证（去掉对应 CSS 即变红）  
-Bug 修复: 冷启动时（新装、清过数据、或 Service Worker 还没把默认配置写进存储）打开选项页，按钮会全部点不动、数字框显示 `NaN`——页面假设 worker 已经把默认值写好，抢先时就整表读到空值：先是 `loadOptions()` 抛异常中断了 `DOMContentLoaded` 里后续所有事件绑定，修好抛异常之后表单仍然是空的；现在选项页自己先 `defaultConfig(false)` 再建表单，不再依赖启动顺序（实测冷启动约 1/7 命中，刷新一次即恢复）  
-Bug 修复: `history.html?` 后面跟一个不完整的网址（如 `?http://[bad`）会让页面在解析时抛异常，而这个异常逃出了 `DOMContentLoaded` 回调——排在其后的监听器（「按范围删除」的开关）根本没绑上；现在解析失败只是不搜索  
-Bug 修复: 删除历史时 `chrome.history.deleteUrl()` 没有回调，删除失败用户毫无感知（行已经从列表里消失了）；改为读 `runtime.lastError` 并在控制台报出具体网址  
-Bug 修复: 弹窗里点「最近关闭的标签页」失败时（sessionId 过期是常态）静默无反应，点击像点空；现在会提示并写一条控制台日志  
-Bug 修复: `mv-cache` / `rh-pinned` 一旦解析失败会中断整个弹窗的初始化（后面的区块全部空白且不说原因）；两处 `JSON.parse` 都加了收口，解析出非数组也按空处理  
-Bug 修复: 树状历史/最近关闭页的占位节点「正在解析数据中」「没有找到…」写死中文，英文界面里照样显示中文；改走 i18n  
-清理: 删除 `executeBookmarklet()` 里 MV3 不可能走到的 `chrome.tabs.executeScript` 回退分支  
-清理: 删除 `formatItem()` 里两支完全相同、`history.js` 里永真的死分支，以及三个渲染文件里逐行的调试 `console.log`（`feach_History` 每次开一天打一行）  
-清理: 三处裸 `catch {}` 补上「为什么可以吞掉」的说明  
-重构: 收敛三样跨文件的重复：元素随机 id（14 处）、tooltip 拼接（3 份，其中两份已各自漂移）、月份下拉的 12 个 `<option>`（3 份逐字节相同）  
-重构: `feach_History()` 里 `t == 0` 与 `t == n` 两支原来是同一个 `openCursor` 两种区间，合并成一个区间表达式  
-新增校验: `tests/static.test.mjs` 拦住页面脚本里写死的中文（i18n 断言原来只检查「代码问的 key 存在」，看不见「根本没问 key 的字符串」）  
-Bug 修复: 日历翻到上一年时整月错位（首末日的星期按「今年」算），且所有格子的热力值都按今年查，颜色与列表对不上  
-Bug 修复: 弹窗的「最近浏览」与「最常访问」各少显示一条（配额攒到上限时那一条已经渲染，判断只能落在下一轮）  
-Bug 修复: 线性书签/线性历史取消全选后，行被刷成第三种底色；现在改为清掉内联颜色，交回样式表（任何字面量都跟不上主题切换）  
-Bug 修复: 标题含引号的页面在「最常访问」里显示成 `&amp;#34;` 这样的字面实体；写入 `mv-cache` 时不再手动转义，转义交给渲染侧  
-清理: 删除零调用的 `popup_scrollbar_fix()`、`alertUser()` 里两个指向已删除按钮的分支，以及 popup.css 中只服务于它们的四段规则  
-重构: 「显示更少的记录」的筛选抽出为 `collapseVisits()`：原来是边遍历边 splice 再重取当前位，答案一样但不好读；现在建成新数组  
-行为变更: 历史缓存不再是启动时一次性跑完整个窗口的长任务，改为定时触发、每趟最多爬 300 个网址，没爬完的部分由下一趟接着爬；整趟爬完后记录一个时间戳，之后的每趟只爬这个时间点之后新产生的记录  
-Bug 修复: 同一个 worker 里启动流程和定时器会各起一趟爬库，两趟交错执行，重叠的网址被重复爬取、热力图计数也因此写偏（那是「有值就不覆盖」的长期缓存，写偏没人纠正）；现在同一时刻只跑一趟，没跑完的由下一趟从游标续上  
-Bug 修复: 爬库空趟（整趟爬完之后没有新记录）会把工具栏徽标停在「Url」上；改成定时分趟后空趟是常态，于是这个残留也变成永久  
-Bug 修复: 爬库分趟后热力图按「趟」而不是按「窗口」计数：350 个网址两趟爬完时那天记的是 300 而不是 350，而热力图是「有值就不覆盖」的长期缓存，少了的那部分没有下一趟来补；现在各趟的计数先累加，整趟窗口走完才写一次  
-Bug 修复: 上一行那个累加量仍会被误清：爬过的网址会带上 `loadto` 并在下一趟被 `loadHistory()` 滤掉，于是游标的 id 找不到、位置又超出剩下的列表，`restoreCrawlCursor()` 回 0，而 0 同时也是「没有未完成的窗口」——第二趟被当成全新窗口，前半程的计数被当陈旧值丢掉（350 个网址最终记成 50，比修之前更偏）；现在游标额外区分「有没有未完成的窗口」与「走了多少」，续爬以窗口为准  
-Bug 修复: 游标的位置回退比 id 回退多走一条已爬的网址，重复计数会让那一天多记一次；位置统一成「已走条数」  
-Bug 修复: 爬库窗口超过两趟时，热力图会永久少记整整一趟：爬过的网址带上 `loadto` 被下一趟滤掉，列表缩水后若仍长于游标里存的位置，那个「位置回退」会指向一批从没爬过的网址并把它们跳过，该趟随即被判为「窗口完成」，少掉的一段写进「有值就不覆盖」的热力图后再也没人纠正（700 个网址实测记成 400）；现在游标只认 id，id 找不到就从剩余列表的头部续爬，`pos` 不再作为恢复依据（保留它只为诊断进度）  
-行为变更: 日历热力色块改由爬库缓存汇总：`history.html` 打开时当天色块已经画好，不必先点击一天  
-行为变更: 热力图按历史记录逐日汇总一次并长期保存，已有数值的日期不再重新计算；删除某天的历史缓存后会在下次启动时回填  
-行为变更: 热力图里的**当天**始终由页面写入，爬库只回填更早的日期；除当天外的日期，页面只填空、不覆盖  
-Bug 修复: 按范围删掉某天的全部历史后，色块会留着；现在计数归零会删掉 map 里的条目，并同时清掉格子的颜色  
-Bug 修复: 点击非当天的格子后再删除，该日期的色块会被页面的行数覆盖（爬库记的是访问数，同一天两个口径）  
-Bug 修复: 日历热力图的目标日期错位一天（写入方与读取方的两个反向偏移互相抵消，因此长期没有显形）  
-Bug 修复: 选中当天的色块只有点过一天才会出现，且任何一次日历重绘都会把它抹掉  
-清理: 删除日历里重复了三遍的颜色分级，收敛到 `calendarLevel()` / `paintDay()`  
-Bug 修复: 自定义页面缩放偶尔不生效；存储就绪之前写入的配置会被随后的快照覆盖回去  
-Bug 修复: "最常访问"的数据少于上限时，弹窗抛异常，后面的区块不再渲染  
-Bug 修复: 按范围删除历史后，日历不刷新  
-Bug 修复: "最近标签页"的快照顺序异常时，整个区块空白且不说为什么  
-清理: 删除三个没有任何代码读写的配置项（rh-time / rh-share / rhs-showbg），它们每次启动仍然被写入和同步  
-行为变更: 点「下载参数」只恢复扩展仍有默认值的配置项；此前会连同云端残留的已删除键一起写回。被删掉的键现在会同时从本地和 `chrome.storage.sync` 里清掉，不再需要单独维护废弃键名单。清理只认配置项命名空间（`rh-` / `rhs-` 前缀与几个另起名的键），不会连热力图缓存、爬库进度、favicon 负缓存一起删掉；判断以横杠拼写的本地名为准，因此 3.3.0 及更早版本以「只把第一个横杠转成下划线」写进云端的旧键（`rh_list-order` 等）不会被误判成废弃键；每次安装写的 `rh-version-<版本>` 标记也不在清理之列  
-清理: 删除 MV2 遗留的 `message-adapter.js`、弹窗每行右侧点不动的「钉住/删除」按钮，以及一批零调用的函数  
-行为变更: 弹窗每行不再显示「钉住/删除」按钮（它们从未绑定过事件）；此前钉住过的条目仍然显示  
-Bug 修复: favicon 备用服务把「不可验证的 opaque 响应」也写进了跨服务共享缓存（主路径只认 `response.ok`）；其他服务随后查同一主机名都会命中这个坏图标；现在两条写方统一只在 `response.ok` 为真时进共享键  
-Bug 修复: `options.html?p=<任意值>` 会把整页按钮搞死——`p` 直接拼成 id 后未经校验就取 `.style`/`.classList`，未知值（以及锚点被注释掉的 `translations`）会抛异常中断 `DOMContentLoaded`，后面所有监听器全丢；现在要求面板与锚点都存在，否则回退到选项页  
-破坏性变更: 最低支持的 Chrome 版本提升到 102（此前声明为 88）。低版本能安装但一运行就崩，因为需要 MV3 起才有的 `chrome.storage.session` 等 API（`manifest.json` 已于 #4 提升至 102，此处补记）  
-Bug 修复: `mostVisited` 定时器每次 Service Worker 唤醒都被重新武装，倒计时不断被重置、实际几乎不会触发（连挂在它上面的 favicon 负缓存 TTL 清扫也一起失效）；现在两个周期闹钟都走同一处「已存在则不重建」收口，与分趟爬库闹钟一致  
-Bug 修复: 弹窗一行坏数据会带走后面所有区块——缓存行缺 `favicon` 字段、或冷启动时 `mv-blocklist` 还没落库，都会让 `.indexOf()` 抛异常，而 popup.js 的区块循环没有 try/catch；两处读取都给了空串兜底  
-文档: Policy 补明默认 favicon 服务（duckduckgo）会把页面主机名发送给第三方；浏览历史本身仍只存本地，可在选项里改用浏览器内置的 `chrome://favicon/` 服务避免这类外部请求  
-行为变更: `load-range3`（选项「缓存保留天数」）此前名存实亡——只在两个树状页当查询回溯边界，从无删除逻辑，三个 IndexedDB store 与热力图只增不减，拖慢每个页面和 SW 的启动；现在 SW 按这个天数真清理：挂在 `mostVisited` 闹钟上、每天最多一次，删掉 `VisitItem` / `urls` / `closed` 里更旧的记录，并同步删掉 `calendar_storage2` 里过期的日期（0 = 永久保留，默认 120 天）  
-清理: 删除整套不可达的 RTL 分支（三个 `*-rtl.js` 的 `document.write`、三个 `*-rtl.css`、6 个页面的 `<script>` 与 5 处 `@@bidi_dir` 判断）——只发布 `en` / `zh_CN` 两个 ltr locale，没有语言能到达它  
-清理: 删除 66 张无引用的孤儿图片（`icon19-*`、整套 `scrollbar-*.gif` / `tab-*.png` / `css/img/diy/`、随 3.3.0 删按钮遗留的 `pin.png` / `star.png` / `pin-grey.png` / `star-grey.png` 等）、`history.css` 里 `.item .bookmark` / `.item .pin` / `.bookmarked` / `.pinned` 四段孤儿规则，并加一条「无孤儿图片」静态守卫（按完整 basename 匹配，附变异探针）  
-清理: 删除零发送方的消息通道残留（`CALLABLE_FUNCTIONS` / `callFunction` / `getData` / `deleteDb`），`onMessage` 现在只分发 `refreshContextMenu` / `clearFaviconCache` 两个真正在用的 action  
-清理: 启动诊断日志（SW 启动摘要、存储适配器初始化计时、db-manager 开库日志）收敛到 `storage-adapter.js` 的 `DEBUG` 开关，默认关闭；`console.warn` / `console.error` 不受影响  
-Bug 修复: 删除历史时 `document.title` 写死英文（`'Deleting...'` / `'History | Recent History'`），英文界面之外的用户也只看到英文，且恢复值与 HTML 标题不一致；现在走 i18n（`deleting` 已补 en/zh），恢复用模块加载时记下的页面原标题  
-重构: 跨 Service Worker 生命周期的爬库状态从三个独立 key（`crawl-cursor` / `crawl-heat` / `crawl-sweep`，各有自己的读写与 TTL）收敛成一个带版本号的 `crawl-state` 对象 `{v, cursor, heat, sweepAt}`——一趟爬库只读一次、只写一次，`session.set()` 原子提交，worker 在两次写之间被回收不再留下「游标没有计数 / sweep 谎称已爬完」的半截状态（近期三个爬库修复都落在这块）；版本不匹配整份丢弃，游标过期时连它的热力计数一起丢，收尾写显式清空计数但不碰 live `heatDays`；`heat` 改为必填字段、删除「忘传就隐式快照 live 累加器」的回退，空窗口 pass 不再写 state，避免把上一窗口的计数带进新窗口。配套重写静态守卫（一个 key、一次读、一次写、每次写显式传 heat、空 pass 不写，附经语法校验的变异探针）与行为用例（含空 pass 不回写上一窗口计数），e2e 手工驱动爬库前改为显式重置窗口  
-新增校验 (e2e 交互): 端到端套件此前只证明「页面不抛错 / 空列表能画」，树展开折叠、点击跳转、筛选、分组批量打开、快捷键这些核心交互仍靠人眼验收；现在补 4 条真实 Chromium 用例：往 IndexedDB 喂真实父子 VisitItem 后断言点击行精确打开对应 URL、switch 折叠/展开双向生效、过滤保留祖先链且只高亮命中项、点击 closed.html 的分组一次打开组内全部页面，并在 worker 里派发 `chrome.commands.onCommand` 断言四条快捷键各打开对应页面（全部经变异验证：改坏 tree.js / closed.js / background-sw.js 对应处即变红）；种子数据用后即删，不污染共享 context
+3.3.2 (未发布)
+
+以「收敛」为主：把 3.3.0 模块化后散落的重复实现合并，补齐自动化校验与端到端交互用例，并修掉一批边界问题。改动较多，按影响面归并如下，逐条评审与校验细节见 CODEBUDDY.md。
+
+**破坏性变更**
+- 最低支持的 Chrome 提升到 102（原声明 88）。低版本可安装但一运行就崩，因为依赖 MV3 才有的 `chrome.storage.session` 等 API。
+
+**行为变更**
+- 历史缓存改为定时分趟爬取（每趟最多 300 个网址、未完成下趟续、整趟完成后只增量抓新记录），同一时刻只跑一趟，不再启动时一次性跑完整窗口，也避免两趟交错把热力图写偏。
+- 日历热力色块改由爬库缓存按访问数逐日汇总并长期保存：`history.html` 打开即已画好，已有数值的日期不再重算；当天始终由页面按行数写入、爬库只回填更早日期；删除历史会同步清掉对应日期的计数与颜色。
+- `load-range3`（「缓存保留天数」，默认 120、0 = 永久）此前名存实亡，现在 SW 每天最多一次真清理三个 IndexedDB store 与热力图里过期的记录。
+- 「下载参数」只恢复扩展仍有默认值的配置项，不再把云端残留的已删除键写回；被删键同时从本地和 `chrome.storage.sync` 清掉（只认配置项命名空间，不碰热力图/爬库/负缓存等数据）。
+- 弹窗每行不再显示「钉住/删除」按钮（它们从未绑定过事件）；此前钉住过的条目仍显示。
+
+**界面与可访问性**
+- 两个线性页换 flex/grid 布局（长标题省略、缩放不再挤行、日历两列 grid + sticky 且由 `data-expanded` 控制展开），暗色主题改 `:root` CSS 变量切换，删掉一批 `!important` 覆盖。
+- 「加载中 / 无结果」收敛到 `list-status.js`、分组/排序工具栏收敛到 `sort-bar.js`（状态交给 `data-state` + CSS），工具栏图标改内联 SVG + CSS mask（删掉 11 张位图）。
+- 书签「编辑书签」由两次 `prompt()` 换成行内面板（标题/网址、Enter 保存 / Esc 取消），网址合法性交给 `chrome.bookmarks.update` 判定，支持 `mailto:` 等合法地址，失败在面板内提示。
+- 图标按钮补 `role="button"` 与双 locale `aria-label`/`title`，`outline: none` 换 `:focus-visible` 焦点环；写死的中文占位文案、删除标题、英文 `Liner` 拼写全部走 i18n / 修正。
+
+**Bug 修复**（同类合并）
+- 冷启动与坏数据不再拖垮整页：选项页抢在 worker 写默认值前打开会按钮全死 / 显示 `NaN`；缓存解析失败、一行缺字段、快照顺序异常、`options.html?p=` 未知值会让整个弹窗或后续监听器全丢——现改为兜底或回退。
+- 历史 / 书签操作：`history.html?` 带不完整网址、`deleteUrl()` 失败无感知、「最近关闭的标签页」失败静默、删除后日历不刷新、标题写死英文、取消全选刷成第三种底色、标题引号显示成字面实体。
+- 日历：跨年整月错位、目标日期错位一天、当天色块被重绘抹掉、颜色分级重复三处。
+- 弹窗配额：攒到上限时少显示一条、「最常访问」不足上限时抛异常中断后续区块。
+- 定时与缓存：定时器每次 SW 唤醒被重新武装而几乎不触发（连带负缓存 TTL 清扫）、favicon 备用服务把 opaque 响应写进共享缓存污染其他服务、自定义缩放偶发不生效。
+- 爬库游标 / 热力图一系列计数偏差（空趟徽标残留、按趟而非按窗口累加、续爬回退导致永久少记、跨生命周期半截状态）收敛成单个带版本号的 `crawl-state` 对象，一趟只读一次、只写一次原子提交。
+
+**清理与文档**
+- 删除 MV2 遗留的 `message-adapter.js` 与无发送方的消息分发表、整套不可达的 RTL 分支、零调用的回退 / 死分支及配置项、逐行调试日志、66 张孤儿图片与配套死样式；启动诊断日志收敛到默认关闭的 `DEBUG` 开关。
+- 新增静态守卫、单测与真实 Chromium e2e：此前只证明「页面不抛错 / 空列表能画」，现补上树展开折叠、点击跳转、筛选保留祖先链、分组批量打开与四条快捷键等核心交互。
+- Policy 补明默认 favicon 服务（duckduckgo）会把页面主机名发送给第三方；浏览历史本身仍只存本地，可在选项改用内置 `chrome://favicon/` 避免外部请求。
 
 3.3.1 (2026/06/19)  
 修复设置丢失的bug 

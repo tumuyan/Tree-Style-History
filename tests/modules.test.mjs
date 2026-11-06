@@ -3203,7 +3203,7 @@ test('a page write and a worker flush no longer erase each other', async (t) => 
     // startup and each serialise that copy over the whole key. The page counts
     // today, the worker then flushes a crawl that knows nothing about today,
     // and the page's count is gone from storage for good — the map is a
-    // long-lived cache with no one recomputing it (README 100-101).
+    // long-lived cache with no one recomputing it (see the 3.3.2 Changelog).
     //
     // Two fresh module instances stand in for the two runtimes: separate
     // in-memory maps, one storage key, both listening to onChanged.
