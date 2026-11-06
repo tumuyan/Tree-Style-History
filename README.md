@@ -82,6 +82,11 @@ chrome/scripts/background-utils.js 由 chrome/scripts/modules/shared/ 自动生�
 新增校验: 静态守卫盯住「两页都委托给 sort-bar」「`data-lang-*` key 双 locale 齐全」「焦点环与状态规则仍在」；单测覆盖状态机与冷启动，e2e 在真实 Chromium 里断言 `data-state` 真的驱动了图标（均做过变异验证）  
 评审修订 (PR #42): 排序工具栏不再替两页决定「当前显示哪个视图」——`initSortBar(refresh, getActive)` 由各页传入自己的判定（`history.js` 传 `getActiveHistory`、`bookmark.js` 传 `getActiveBookmark`），`refreshActive()` 在视图未初始化时回退到全量视图。修掉 `bookmark.html` 打开后立刻点分组/排序只改按钮与存储、列表却不重绘的回归；新增不预设 `style.display` 的单测、静态守卫与真实 Chromium e2e 用例（均变异验证）  
 评审修订 (PR #42): `page-init.js` 去掉为假想需求预留的 `data-lang-*` 属性循环，改成两次直白的查询；静态守卫盯住枚举的属性名与 HTML 一致，e2e 在真实 Chromium 里断言搜索框的 `placeholder` 与 `aria-label` 仍都完成本地化（均变异验证）  
+重构: 两个线性页的行/分组标题/工具栏从「表格 + float + 固定像素绝对定位」换成 flex/grid：每行不再追加 `<div class="clearitem">`，长标题改 `text-overflow: ellipsis`，缩放（`body.style.zoom`）下不再互相挤  
+重构: `history.html` 的日历改成两列 grid + `position: sticky`，删掉 115px 的滚动阈值监听；展开态改由 `data-expanded` 一个属性交给 CSS 控制宽度与图标，JS 不再回读宽度或用 `setTimeout` 翻 sprite。树状页的 `calendar2` 与窄屏布局不受影响  
+重构: 暗色主题改由 `:root` 上的一组 CSS 变量切换，删掉线性页那批 `!important` 覆盖（标题色、工具栏边框、斑马纹、行 hover）；两条结构性规则保留但不再用 `!important`  
+新增校验 (布局/主题): 静态守卫盯住「flex/grid 规则仍在、无 `clearitem`、无滚动监听/内联定位、展开态在 CSS、暗色块只改变量」，每条都配能区分形状的探针；e2e 在真实 Chromium 断言 flex 行、sticky 跟随、展开态、暗色变量与树状页不被误伤（静态 5 项 + e2e 2 项变异均验证变红）  
+评审修订 (PR #43): 分组标题的四列改为显式 `grid-column`（bookmark 页的计数 label 与 history 页的 checkbox 都钉在第 2 列，不再靠 DOM 顺序与「恰好 4 个可见子元素」的巧合）；日历的折叠宽度 170px 也写进 `.linear-view #calendar`，与展开态的 336px 一起由 `data-expanded` 切换，不再隐式依赖共享 `#calendar` 基础规则；窄屏（≤500px）回退补上 `position:absolute` 与 `grid-column/grid-row:auto`，否则 `.linear-view #calendar` 的 sticky 特异度更高、日历会跑到列表下方而不是浮在其上。新增 3 条静态守卫与 3 条真实 Chromium e2e 用例，均做过变异验证（去掉对应 CSS 即变红）  
 Bug 修复: 冷启动时（新装、清过数据、或 Service Worker 还没把默认配置写进存储）打开选项页，按钮会全部点不动、数字框显示 `NaN`——页面假设 worker 已经把默认值写好，抢先时就整表读到空值：先是 `loadOptions()` 抛异常中断了 `DOMContentLoaded` 里后续所有事件绑定，修好抛异常之后表单仍然是空的；现在选项页自己先 `defaultConfig(false)` 再建表单，不再依赖启动顺序（实测冷启动约 1/7 命中，刷新一次即恢复）  
 Bug 修复: `history.html?` 后面跟一个不完整的网址（如 `?http://[bad`）会让页面在解析时抛异常，而这个异常逃出了 `DOMContentLoaded` 回调——排在其后的监听器（「按范围删除」的开关）根本没绑上；现在解析失败只是不搜索  
 Bug 修复: 删除历史时 `chrome.history.deleteUrl()` 没有回调，删除失败用户毫无感知（行已经从列表里消失了）；改为读 `runtime.lastError` 并在控制台报出具体网址  

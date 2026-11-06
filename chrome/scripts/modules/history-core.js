@@ -316,7 +316,7 @@ function history(w, q) {
                                     'rel': ibcv,
                                     'class': 'item-holder'
                                 });
-                                itemHolder.innerHTML = item + '<div class="clearitem" style="clear:both;"></div>';
+                                itemHolder.innerHTML = item;
                                 var groupHolder = group ? group.holder : null;
                                 if (groupHolder) {
                                     groupHolder.appendChild(itemHolder);
@@ -367,7 +367,7 @@ function history(w, q) {
                                 item += '</a>';
                                 item += '</div>';
                                 var itemHolder = createElement('div', { 'rel': ibcv, 'class': 'item-holder ' });
-                                itemHolder.innerHTML = item + '<div class="clearitem" style="clear:both;"></div>';
+                                itemHolder.innerHTML = item;
                                 $(into).appendChild(itemHolder);
 
                                 if (ibcv == 'white') {

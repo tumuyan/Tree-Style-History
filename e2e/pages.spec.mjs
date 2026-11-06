@@ -1465,6 +1465,16 @@ test('bookmark.html re-renders its list when the toolbar is clicked on the initi
             await cleanup.evaluate((id) => chrome.bookmarks.remove(id), bookmarkId);
             await cleanup.close();
         }
+        // The click above toggles rh-group in shared storage. Restore it: the
+        // layout cases below rely on grouped rows and should not have to
+        // re-seed history just to undo this case's side effect.
+        const restore = await context.newPage();
+        await restore.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: 'load' });
+        await restore.evaluate(async () => {
+            localStorage['rh-group'] = 'yes';
+            await window.storageAdapter?.ready();
+        });
+        await restore.close();
     }
 });
 
@@ -1495,4 +1505,303 @@ test('the linear pages localise both placeholder and aria-label on the search bo
         assert.ok(attrs.selectAll && attrs.selectAll.length > 0,
             `${file}: the select-all aria-label was not translated`);
     }
+});
+
+// ---------------------------------------------------------------------------
+// Linear pages: flex/grid layout, sticky calendar and theme tokens
+// (issue #40, step 2). The static guards prove the CSS/JS shape; these prove
+// the browser really lays it out that way.
+// ---------------------------------------------------------------------------
+
+/**
+ * Open a page in `ctx`, wait for the storage cache, and return it with its
+ * error buckets. The shared `context` is light-only; the dark case below owns
+ * a second persistent context.
+ */
+async function openForLayout(ctx, extId, file) {
+    const page = await ctx.newPage();
+    const errors = collectErrors(page);
+    await page.goto(`chrome-extension://${extId}/${file}`, { waitUntil: 'load' });
+    await settle(page);
+    return { page, ...errors };
+}
+
+/** Seed a handful of visits so the linear render loop actually draws rows. */
+async function seedLinearHistory(ctx, extId, count = 24) {
+    const seed = await ctx.newPage();
+    await seed.goto(`chrome-extension://${extId}/options.html`, { waitUntil: 'load' });
+    await settle(seed);
+    await seed.evaluate(async (n) => {
+        localStorage['rh-group'] = 'yes';
+        await window.storageAdapter?.ready();
+        for (let i = 0; i < n; i++) {
+            await chrome.history.addUrl({ url: `https://layout-probe-${i}.test/a/long/path/segment` });
+        }
+    }, count);
+    await seed.close();
+}
+
+test('the linear rows are a flex line and the group title is a grid, with no clear-float div', { skip: SKIP }, async () => {
+    const { page, jsErrors, netErrors } = await openForLayout(context, extensionId, 'bookmark.html');
+    // bookmark.html renders from chrome.bookmarks, so no history seed here:
+    // group the row locally and create the one bookmark the loop needs.
+    await page.evaluate(async () => {
+        localStorage['rh-group'] = 'yes';
+        await window.storageAdapter?.ready();
+        await chrome.bookmarks.create({
+            title: 'Layout probe with a long title that should ellipsise',
+            url: 'https://layout-flex-probe.test/a/long/path/segment',
+        });
+    });
+    await page.reload({ waitUntil: 'load' });
+    await settle(page);
+
+    const shape = await page.evaluate(() => {
+        const item = document.querySelector('.item');
+        const group = document.querySelector('.group-title');
+        const title = document.querySelector('.title');
+        const bar = document.getElementById('rh-bar');
+        return {
+            itemDisplay: item && getComputedStyle(item).display,
+            itemFloat: item && getComputedStyle(item).float,
+            groupDisplay: group && getComputedStyle(group).display,
+            barDisplay: bar && getComputedStyle(bar).display,
+            titleOverflow: title && getComputedStyle(title).textOverflow,
+            clearitems: document.querySelectorAll('.clearitem').length,
+            rows: document.querySelectorAll('#rh-views-insert .item-holder').length,
+        };
+    });
+    await page.close();
+
+    assert.deepEqual(jsErrors, [], `the linear row threw (${netErrors.length} network error(s) ignored)`);
+    assert.ok(shape.rows > 0, 'the render loop drew no rows; the shape was never exercised');
+    assert.equal(shape.itemDisplay, 'flex', 'the row is not a flex line');
+    assert.equal(shape.itemFloat, 'none', 'the row still floats its children');
+    assert.equal(shape.groupDisplay, 'grid', 'the group title is not a grid');
+    assert.equal(shape.barDisplay, 'flex', 'the toolbar is not a flex row');
+    assert.equal(shape.titleOverflow, 'ellipsis', 'a long title is not ellipsised');
+    assert.equal(shape.clearitems, 0, 'a clear-float div is still emitted per row');
+});
+
+test('history.html keeps the calendar beside the list and sticky while scrolling', { skip: SKIP }, async () => {
+    await seedLinearHistory(context, extensionId, 60);
+    const { page, jsErrors, netErrors } = await openForLayout(context, extensionId, 'history.html');
+    const read = () => page.evaluate(() => {
+        const cal = document.getElementById('calendar');
+        const table = document.getElementById('main-table');
+        const c = cal.getBoundingClientRect();
+        const t = table.getBoundingClientRect();
+        return {
+            position: getComputedStyle(cal).position,
+            top: Math.round(c.top),
+            width: Math.round(c.width),
+            overlapsList: c.left < t.right - 1,
+            docHeight: document.documentElement.scrollHeight,
+            rows: document.querySelectorAll('#rh-views-insert .item-holder').length,
+        };
+    });
+
+    const atTop = await read();
+    assert.ok(atTop.rows > 0, 'the list did not render, so the calendar had nothing to sit beside');
+    assert.equal(atTop.position, 'sticky', 'the calendar is not sticky');
+    assert.equal(atTop.overlapsList, false, 'the calendar still floats over the list');
+
+    // A real scroll: the old implementation flipped to `position: fixed` at a
+    // hard-coded 115px. sticky must hold the calendar at top:15px on its own.
+    await page.evaluate(() => window.scrollTo(0, 700));
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const scrolled = await read();
+    assert.ok(scrolled.docHeight > 700, 'the page is not tall enough to scroll');
+    assert.equal(scrolled.position, 'sticky', 'the calendar switched to fixed on scroll');
+    assert.equal(scrolled.top, 15, 'the calendar did not stay pinned at the top');
+
+    // Expanding is one attribute now; CSS owns both the width and the sprite.
+    await page.click('#delete-range-toggle-button');
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    const expanded = await page.evaluate(() => {
+        const cal = document.getElementById('calendar');
+        return {
+            state: cal.getAttribute('data-expanded'),
+            width: Math.round(cal.getBoundingClientRect().width),
+            sprite: getComputedStyle(document.getElementById('delete-range-toggle-button')).backgroundPosition,
+        };
+    });
+    await page.close();
+
+    assert.deepEqual(jsErrors, [], `the sticky calendar threw (${netErrors.length} network error(s) ignored)`);
+    assert.equal(expanded.state, 'true', 'the toggle did not set data-expanded');
+    assert.ok(expanded.width > atTop.width + 100, 'the calendar did not widen to its expanded column');
+    assert.match(expanded.sprite, /100%|right/, 'the toggle sprite did not follow the expand state');
+});
+
+test('dark mode swaps the linear theme tokens, not per-selector overrides', { skip: SKIP }, async () => {
+    // A second persistent context: colorScheme is fixed when the context is
+    // launched, and the shared one is light. The extension id is read off its
+    // own service worker, as in before().
+    const darkContext = await chromium.launchPersistentContext('', {
+        channel: 'chromium',
+        colorScheme: 'dark',
+        args: [
+            `--disable-extensions-except=${CHROME_DIR}`,
+            `--load-extension=${CHROME_DIR}`,
+        ],
+    });
+    await darkContext.route(
+        (url) => url.protocol !== 'chrome-extension:' && isFaviconServiceUrl(url),
+        (route) => route.abort(),
+    );
+    try {
+        let [sw] = darkContext.serviceWorkers();
+        if (!sw) sw = await darkContext.waitForEvent('serviceworker');
+        const darkId = sw.url().split('/')[2];
+
+        const { page, jsErrors, netErrors } = await openForLayout(darkContext, darkId, 'bookmark.html');
+        await page.evaluate(async () => {
+            await chrome.bookmarks.create({ title: 'Dark theme probe', url: 'https://dark-theme-probe.test/x' });
+        });
+        await page.reload({ waitUntil: 'load' });
+        await settle(page);
+        const colors = await page.evaluate(() => {
+            const title = document.querySelector('.title');
+            const host = document.querySelector('.group-title-host');
+            const bar = document.getElementById('rh-bar');
+            const white = document.querySelector('div[rel="white"]');
+            return {
+                title: title && getComputedStyle(title).color,
+                host: host && getComputedStyle(host).color,
+                barBorder: bar && getComputedStyle(bar).borderTopColor,
+                stripe: white && getComputedStyle(white).backgroundColor,
+            };
+        });
+        await page.close();
+        assert.deepEqual(jsErrors, [], `the dark page threw (${netErrors.length} network error(s) ignored)`);
+        assert.equal(colors.title, 'rgb(255, 255, 255)', 'the title did not pick up --item-title-color');
+        assert.equal(colors.host, 'rgb(222, 184, 135)', 'the group host did not pick up --group-host-color');
+        assert.equal(colors.barBorder, 'rgb(102, 102, 102)', 'the toolbar border did not pick up --bar-border-color');
+        assert.equal(colors.stripe, 'rgb(74, 74, 74)', 'the zebra stripe did not flatten in dark mode');
+    } finally {
+        await darkContext.close();
+    }
+});
+
+test('the tree pages are untouched by the linear-page grid rules', { skip: SKIP }, async () => {
+    // history.css is shared by four pages. .linear-view is on history.html
+    // only, so history2.html / closed.html must keep their old absolute
+    // calendar (their calendar2 class is fixed at top:59px).
+    for (const file of ['history2.html', 'closed.html']) {
+        const { page, jsErrors } = await openForLayout(context, extensionId, file);
+        const shape = await page.evaluate(() => {
+            const cal = document.getElementById('calendar');
+            const container = document.getElementById('history-container');
+            return {
+                linearClass: container.classList.contains('linear-view'),
+                containerDisplay: getComputedStyle(container).display,
+                calPosition: cal && getComputedStyle(cal).position,
+                treeRows: document.querySelectorAll('#treeDemo li[data-tid]').length,
+            };
+        });
+        await page.close();
+        assert.deepEqual(jsErrors, [], `${file} threw`);
+        assert.equal(shape.linearClass, false, `${file} picked up the linear-view class`);
+        assert.equal(shape.containerDisplay, 'block', `${file} became a two-column grid`);
+        assert.equal(shape.calPosition, 'fixed', `${file}'s calendar2 lost its fixed position`);
+        assert.ok(shape.treeRows > 0, `${file}'s tree did not render`);
+    }
+});
+
+test('the narrow layout puts the calendar back over the list, not below it', { skip: SKIP }, async () => {
+    await seedLinearHistory(context, extensionId, 24);
+    const page = await context.newPage();
+    await page.setViewportSize({ width: 480, height: 800 });
+    const errors = collectErrors(page);
+    await page.goto(`chrome-extension://${extensionId}/history.html`, { waitUntil: 'load' });
+    await settle(page);
+    const shape = await page.evaluate(() => {
+        const cal = document.getElementById('calendar');
+        const cs = getComputedStyle(cal);
+        return {
+            containerDisplay: getComputedStyle(document.getElementById('history-container')).display,
+            position: cs.position,
+            gridColumn: cs.gridColumn,
+            gridRow: cs.gridRow,
+            top: Math.round(cal.getBoundingClientRect().top),
+            toggle: getComputedStyle(document.getElementById('showCalendar')).display,
+        };
+    });
+    await page.close();
+    assert.deepEqual(errors.jsErrors, [], `the narrow page threw (${errors.netErrors.length} network error(s) ignored)`);
+    assert.equal(shape.containerDisplay, 'block', 'the container kept its two-column grid');
+    assert.equal(shape.position, 'absolute', 'the calendar is still sticky on a narrow screen');
+    assert.equal(shape.gridColumn, 'auto', 'the calendar kept its wide-screen grid column');
+    assert.equal(shape.gridRow, 'auto', 'the calendar kept its wide-screen grid row');
+    assert.equal(shape.top, 19, 'the calendar did not return to the shared 19px offset');
+    assert.equal(shape.toggle, 'inline', 'the #showCalendar toggle is not available');
+});
+
+test('group columns are pinned explicitly on both list pages', { skip: SKIP }, async () => {
+    // history.html rows come from the history seeded by the calendar cases
+    // above (shared persistent context); bookmark.html seeds its own rows below.
+    const read = (page) => page.evaluate(() => {
+        const g = document.querySelector('.group-title');
+        if (!g) return null;
+        const col = (sel) => {
+            const el = g.querySelector(sel);
+            return el && getComputedStyle(el).gridColumn;
+        };
+        return {
+            toggle: col('.group-title-toggle'),
+            count: col('label.group-title-toggle-count'),
+            checkbox: col('.group-title-checkbox'),
+            favicon: col('.group-title-favicon'),
+            host: col('.group-title-host'),
+            countAlign: g.querySelector('label.group-title-toggle-count')
+                && getComputedStyle(g.querySelector('label.group-title-toggle-count')).textAlign,
+        };
+    });
+
+    const hp = await context.newPage();
+    await hp.goto(`chrome-extension://${extensionId}/history.html`, { waitUntil: 'load' });
+    await settle(hp);
+    const history = await read(hp);
+    await hp.close();
+    assert.ok(history, 'history.html rendered no group row');
+    assert.equal(history.toggle, '1', 'history toggle lost column 1');
+    assert.equal(history.checkbox, '2', 'history checkbox lost column 2');
+    assert.equal(history.favicon, '3', 'history favicon lost column 3');
+    assert.equal(history.host, '4', 'history host lost column 4');
+
+    const bp = await context.newPage();
+    await bp.goto(`chrome-extension://${extensionId}/bookmark.html`, { waitUntil: 'load' });
+    await bp.evaluate(async () => {
+        await chrome.bookmarks.create({ title: 'Column probe A', url: 'https://column-probe-a.test/x' });
+        await chrome.bookmarks.create({ title: 'Column probe B', url: 'https://column-probe-b.test/x' });
+    });
+    await bp.reload({ waitUntil: 'load' });
+    await settle(bp);
+    const bookmark = await read(bp);
+    await bp.close();
+    assert.ok(bookmark, 'bookmark.html rendered no group row');
+    assert.equal(bookmark.toggle, '1', 'bookmark toggle lost column 1');
+    assert.equal(bookmark.count, '2', 'the count label is not pinned to column 2');
+    assert.equal(bookmark.checkbox, '2', 'bookmark checkbox lost column 2');
+    assert.equal(bookmark.favicon, '3', 'bookmark favicon lost column 3');
+    assert.equal(bookmark.host, '4', 'bookmark host lost column 4');
+    assert.equal(bookmark.countAlign, 'center', 'the group count is not centred');
+});
+
+test('the calendar width really follows data-expanded in both directions', { skip: SKIP }, async () => {
+    await seedLinearHistory(context, extensionId, 8);
+    const { page, jsErrors, netErrors } = await openForLayout(context, extensionId, 'history.html');
+    const width = () => page.evaluate(() => Math.round(document.getElementById('calendar').getBoundingClientRect().width));
+    const collapsed = await width();
+    await page.click('#delete-range-toggle-button');
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    const expanded = await width();
+    await page.click('#delete-range-toggle-button');
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    const back = await width();
+    await page.close();
+    assert.deepEqual(jsErrors, [], `the calendar toggle threw (${netErrors.length} network error(s) ignored)`);
+    assert.ok(expanded > collapsed + 100, 'expanding did not widen the calendar');
+    assert.equal(back, collapsed, 'collapsing did not restore the narrow width');
 });

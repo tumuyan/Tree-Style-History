@@ -1,3 +1,14 @@
+/* Linear-page theme tokens. Light values live here; the dark block at the
+   bottom only redefines these variables. The dark theme used to restyle each
+   selector with its own !important rule, which is what this replaces. */
+:root {
+    --row-odd-bg: #fff;
+    --row-even-bg: #fafafa;
+    --item-title-color: rgb(17, 85, 204);
+    --group-host-color: #333;
+    --bar-border-color: #eee;
+}
+
 /* A keyboard focus ring, without the mouse-click flash that `outline: none`
    used to suppress along with it. Shared by all four pages using this file. */
 :focus-visible {
@@ -138,6 +149,23 @@ input[type="text"]:focus {
     display: block;
 }
 
+/* Only history.html carries this class: it is the one linear page with a
+   calendar. The calendar used to float over the list at a fixed pixel offset
+   while a scroll listener flipped it between absolute and fixed at a hard-coded
+   115px. A two-column grid gives it its own column and position:sticky keeps
+   it in view, with no JS threshold and nothing covering the list. */
+.linear-view#history-container {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 10px;
+    align-items: start;
+}
+
+.linear-view #main-table {
+    grid-column: 1;
+    grid-row: 1;
+}
+
 #alert-holder {
     background: url('../images/alert-bg.png');
     position: fixed;
@@ -162,21 +190,20 @@ input[type="text"]:focus {
     padding: 5px;
 }
 
+/* A row is one flex line: checkbox, time, then a link that owns the favicon
+   and the (ellipsised) title. The old layout floated every child left and
+   dropped a <div class="clearitem"> after each row; it also pinned the
+   checkbox and favicon at fixed pixel offsets, which fell apart as soon as
+   applyZoom() changed the body zoom. */
 .item {
-    display: block;
-    white-space: nowrap;
-    clear: both;
-    float: left;
-}
-
-.item .checkbox, .item .time {
-    display: block;
-    float: left;
+    display: flex;
+    align-items: center;
+    min-width: 0;
 }
 
 .item .checkbox {
+    flex: 0 0 auto;
     margin: 0 10px 0 0;
-    padding-left: 13px;
 }
 
 .item .checkbox label input {
@@ -184,92 +211,95 @@ input[type="text"]:focus {
     margin: 0;
 }
 
-.item .checkbox label {
-    display: block;
-    position: absolute;
-    padding: 1px 5px 2px 5px;
-    left: 3px;
-    top: 3px;
-}
-
 .item .time {
+    flex: 0 0 auto;
     margin: 0 19px 0 0;
     color: #999;
 }
 
 .item .link {
+    display: flex;
+    align-items: center;
+    flex: 1 1 auto;
+    min-width: 0;
     text-decoration: none;
-    position: relative;
-    padding: 0 0 0 18px;
 }
 
 .item .favicon {
-    position: absolute;
-    left: 0;
-    top: 0;
+    flex: 0 0 16px;
     height: 16px;
     width: 16px;
+    margin-right: 3px;
 }
 
 .item .title {
+    flex: 1 1 auto;
+    min-width: 0;
     overflow: hidden;
-    padding: 0 0 1px 3px;
-    color: rgb(17, 85, 204) !important;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--item-title-color);
 }
 
 .item .title:hover {
     text-decoration: underline;
 }
 
+/* Four columns: toggle, checkbox (on history.html) or count label (on
+   bookmark.html), favicon, host. The old rules pinned all four at
+   left:8/36/69px and padded the host to 85px. Columns are declared
+   explicitly: bookmark.html hides its checkbox, so relying on DOM order
+   would put the count label in the wrong column the moment both elements
+   were present. */
 .group-title {
-    position: relative;
+    display: grid;
+    grid-template-columns: 12px 20px 16px minmax(0, 1fr);
+    align-items: center;
+    column-gap: 6px;
 }
 
 .group-title-toggle {
     background: url('../images/toggle.png') no-repeat left center;
     display: block;
-    position: absolute;
     height: 12px;
     width: 12px;
-    left: 8px;
-    top: 8px;
+    grid-column: 1;
 }
 
 @media (-webkit-min-device-pixel-ratio: 1.5), (min-resolution: 144dpi) {
     .group-title-toggle {
-        background: url('../images/toggle-@2x.png') no-repeat left center;
+        background-image: url('../images/toggle-@2x.png');
         background-size: 200%;
     }
 }
 
-
 label.group-title-toggle-count {
-    left: 39px;
     display: block;
-    position: absolute;
+    grid-column: 2;
+    text-align: center;
 }
 
 .group-title-checkbox {
-    position: absolute;
     height: 12px;
     width: 12px;
-    left: 36px;
-    top: 5px;
+    grid-column: 2;
 }
 
 .group-title-favicon {
-    position: absolute;
     height: 16px;
     width: 16px;
-    left: 69px;
-    top: 6px;
+    grid-column: 3;
 }
 
 .group-title-host {
     cursor: pointer;
-    padding-left: 85px;
+    min-width: 0;
+    grid-column: 4;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-weight: bold;
-    color: #333;
+    color: var(--group-host-color);
 }
 
 .no-results span {
@@ -315,44 +345,41 @@ label.group-title-toggle-count {
 }
 
 #rh-bar {
-    border-top: 1px solid #eee;
-    border-bottom: 1px solid #eee;
-    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border-top: 1px solid var(--bar-border-color);
+    border-bottom: 1px solid var(--bar-border-color);
     font-size: small;
     font-weight: bold;
     margin-top: 9px;
-    display: block;
     padding: 4px 5px;
 }
 
+/* The master checkbox stays on the left; the three icon buttons line up on
+   the right. They used to be absolutely positioned at right:62/33/4px. */
 #rh-bar-uione {
-    position: absolute;
+    margin-right: auto;
     padding: 3px;
-    left: 1px;
-    top: -1px;
 }
 
 #rh-bar-group, #rh-bar-orderby, #rh-bar-order {
     display: block;
+    flex: 0 0 24px;
     height: 17px;
     width: 24px;
-    position: absolute;
-    top: 3px;
 }
 
 #rh-bar-group {
     background: url('../images/group-toggle.png') no-repeat left center;
-    right: 62px;
 }
 
 #rh-bar-orderby {
     background: url('../images/orderby-toggle.png') no-repeat left center;
-    right: 33px;
 }
 
 #rh-bar-order {
     background: url('../images/order-toggle.png') no-repeat left center;
-    right: 4px;
 }
 
 #rh-bar-group[role="button"]:focus-visible,
@@ -430,6 +457,36 @@ label.group-title-toggle-count {
     display: none;
 }
 
+/* history.html only. The shared #calendar rule below still supplies the
+   absolute positioning the tree pages (and the narrow-screen layout) need.
+   The two widths used to be written (and read back) in JavaScript, with a
+   350ms timeout to flip the toggle sprite; both are now one attribute. */
+.linear-view #calendar {
+    position: sticky;
+    top: 15px;
+    right: auto;
+    grid-column: 2;
+    grid-row: 1;
+    align-self: start;
+    width: 170px;
+    transition: width 0.35s linear;
+}
+
+/* Both widths live in this scope now: the shared #calendar rule below keeps
+   170px for the tree pages and the narrow-screen layout, while the attribute
+   flips the linear page between 170px (collapsed) and 336px (expanded). */
+.linear-view #calendar[data-expanded="true"] {
+    width: 336px;
+}
+
+#calendar #delete-range-toggle-button {
+    background-position: left top;
+}
+
+.linear-view #calendar[data-expanded="true"] #delete-range-toggle-button {
+    background-position: right top;
+}
+
 #calendar {
     -webkit-box-shadow: 0 0 5px #ccc;
     background-color: #fff;
@@ -464,7 +521,8 @@ label.group-title-toggle-count {
 #calendar #delete-range-toggle-button {
     display: block;
     position: absolute;
-    background: url('../images/drtb.png') no-repeat left top;
+    background-image: url('../images/drtb.png');
+    background-repeat: no-repeat;
     width: 17px;
     height: 35px;
     left: -1px;
@@ -473,7 +531,7 @@ label.group-title-toggle-count {
 
 @media (-webkit-min-device-pixel-ratio: 1.5), (min-resolution: 144dpi) {
     #calendar #delete-range-toggle-button {
-        background: url('../images/drtb-@2x.png') no-repeat left center;
+        background-image: url('../images/drtb-@2x.png');
         background-size: 200%;
     }
 }
@@ -658,11 +716,11 @@ ul.ztree {
 }
 
 div[rel="white"] {
-    background-color: #fff;
+    background-color: var(--row-odd-bg);
 }
 
 div[rel="grey"] {
-    background-color: #fafafa;
+    background-color: var(--row-even-bg);
 }
 
 
@@ -674,11 +732,24 @@ div[rel="grey"] {
 
 
 @media (prefers-color-scheme: dark) {
-    div[rel="white"] {
-        background-color: #555;
+    /* Linear-page colours are one set of tokens, not a pile of per-selector
+       !important overrides. The main view still flattens its zebra stripes in
+       dark mode (it always did); the search view keeps the pair above. */
+    :root {
+        --row-odd-bg: #555;
+        --row-even-bg: #444;
+        --item-title-color: #fff;
+        --group-host-color: burlywood;
+        --bar-border-color: #666;
     }
-    div[rel="grey"] {
-        background-color: #444;
+    /* Two structural rules, not theme colours: the main view flattens its
+       zebra stripes and a hovered row gets a highlight. Both outrank
+       div[rel=white|grey] by specificity, so they no longer need !important. */
+    #rh-views-insert .item-holder {
+        background-color: rgb(74, 74, 74);
+    }
+    .item:hover {
+        background-color: #666;
     }
     body {
         background: none;
@@ -710,7 +781,7 @@ div[rel="grey"] {
         border: 1px solid #aaa;
         color: #fff;
     }
-    #tab-options-content label, a, .group-title-host, #popup-footer-right a {
+    #tab-options-content label, a, #popup-footer-right a {
         color: burlywood;
     }
     hr {
@@ -721,16 +792,6 @@ div[rel="grey"] {
         background-image: none;
         color: #fff;
     }
-    #rh-bar {
-        border-top: 1px solid #666;
-        border-bottom: 1px solid #666;
-    }
-    #rh-views-insert .item-holder {
-        background-color: rgb(74, 74, 74) !important;
-    }
-    .item .title {
-        color: #fff !important;
-    }
     .group-title-toggle {
         background: url(../images/toggle2.png) no-repeat left center;
     }
@@ -739,9 +800,6 @@ div[rel="grey"] {
     }
     #alert-holder {
         background: #222;
-    }
-    .item:hover {
-        background-color: #666 !important;
     }
     #rh-views .ztree li a.curSelectedNode {
         background-color: #000;
@@ -754,6 +812,23 @@ div[rel="grey"] {
 
 @media screen and (max-width:500px)
 {
+
+    /* No room for a second column: the calendar goes back to the shared
+       absolute layout below, over the list, behind the #showCalendar toggle.
+       #history-container #calendar's `top: 19px !important` still wins. */
+    .linear-view#history-container {
+        display: block;
+    }
+
+    /* The shared #calendar rule is absolute, but .linear-view #calendar is
+       sticky and more specific, so it wins unless we put the narrow layout
+       back here too. Without this the calendar becomes a normal-flow block
+       below the list and the #showCalendar toggle no longer floats it. */
+    .linear-view #calendar {
+        position: absolute;
+        grid-column: auto;
+        grid-row: auto;
+    }
 
     #history-container, #options{
         margin-left: 20px !important;

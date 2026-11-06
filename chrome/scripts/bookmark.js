@@ -630,7 +630,7 @@ document.addEventListener('DOMContentLoaded', function () {
                                 'data-bookmark-title': rha[thisc.counter].originalTitle,
                                 'data-bookmark-url': rha[thisc.counter].url
                             });
-                            itemHolder.innerHTML = item + '<div class="clearitem" style="clear:both;"></div>';
+                            itemHolder.innerHTML = item;
                             var groupDiv = group ? group.holder : null;
                             if (groupDiv) groupDiv.appendChild(itemHolder);
                             else $(into).appendChild(itemHolder);
@@ -721,7 +721,7 @@ document.addEventListener('DOMContentLoaded', function () {
                                 'data-bookmark-title': rha[thisc.counter].originalTitle,
                                 'data-bookmark-url': rha[thisc.counter].url
                             });
-                            itemHolder.innerHTML = item + '<div class="clearitem" style="clear:both;"></div>';
+                            itemHolder.innerHTML = item;
                             $(into).appendChild(itemHolder);
                             var linkElement = itemHolder.querySelector('a.link');
                             if (linkElement) {

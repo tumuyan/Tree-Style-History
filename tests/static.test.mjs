@@ -3518,3 +3518,261 @@ test('history.css keeps a keyboard focus ring and the toolbar state rule', () =>
             `the ${state} toolbar state has no CSS rule`);
     }
 });
+
+// ---------------------------------------------------------------------------
+// The linear pages' flex/grid layout + theme tokens (issue #40, step 2)
+//
+// history.css styles four pages, so the new rules hang off `.linear-view`
+// (history.html only) or off selectors only the two list pages produce
+// (.item / .group-title). These guards pin the shape that keeps the tree pages
+// untouched and stops the old pixel-pinned, JS-driven layout from coming back.
+// ---------------------------------------------------------------------------
+
+test('history.css gives the linear rows a flex/grid layout with no float-clearing', () => {
+    const css = fs.readFileSync(path.join(CHROME_DIR, 'css/history.css'), 'utf8');
+    // Probe: a regex that quietly stops matching would keep every assertion
+    // below green, so each rule it claims to find is checked with a shape the
+    // old file cannot satisfy.
+    const rule = (selector) => {
+        const m = new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([^}]*)\\}`).exec(css);
+        assert.ok(m, `no rule for ${selector}`);
+        return m[1];
+    };
+    assert.match(rule('.item'), /display:\s*flex/, 'the row is not a flex line');
+    assert.match(rule('.group-title'), /display:\s*grid/, 'the group title is not a grid');
+    assert.match(rule('#rh-bar'), /display:\s*flex/, 'the toolbar is not a flex row');
+    assert.doesNotMatch(css, /\.item\s*\{[^}]*\bfloat:\s*left/,
+        'the row floats its children again');
+    // The three icons were pinned at right:62/33/4px and the group columns at
+    // left:8/36/69px. A single surviving absolute offset is the regression.
+    assert.doesNotMatch(css, /#rh-bar-(?:group|orderby|order)\s*\{[^}]*position:\s*absolute/,
+        'a toolbar button is absolutely positioned again');
+    assert.doesNotMatch(css, /\.group-title-(?:toggle|checkbox|favicon|host)\s*\{[^}]*\b(?:left|right):\s*\d+px/,
+        'a group column is pinned at a pixel offset again');
+    // text-overflow is what stops a long title from stretching the row.
+    assert.match(rule('.item .title'), /text-overflow:\s*ellipsis/, 'long titles are not ellipsised');
+});
+
+test('the layout guards match the shapes they claim to catch', () => {
+    // Same convention as the sort-bar guards: pin the matchers themselves with
+    // a copy of the old CSS, so a guard that stops matching is visible.
+    const old = `.item { display: block; float: left; }
+.group-title { display: block; }
+.group-title-host { position: absolute; left: 69px; }
+#rh-bar { display: block; }
+#rh-bar-group { position: absolute; right: 62px; }
+.item .title { overflow: hidden; }
+`;
+    const css = fs.readFileSync(path.join(CHROME_DIR, 'css/history.css'), 'utf8');
+    assert.doesNotMatch(css, /\.item\s*\{[^}]*\bfloat:\s*left/);
+    assert.match(old, /\.item\s*\{[^}]*\bfloat:\s*left/,
+        'the float probe stopped reading the old row');
+    assert.match(old, /\.group-title-host\s*\{[^}]*\bleft:\s*\d+px/,
+        'the pixel-offset probe stopped reading the old group rule');
+    assert.match(old, /#rh-bar-group\s*\{[^}]*position:\s*absolute/,
+        'the absolute-position probe stopped reading the old toolbar rule');
+});
+
+test('no list page emits a clear-float div any more', () => {
+    // A flex row has no floats to clear. The <div class="clearitem"> was
+    // appended to every rendered row in both render loops; leaving it in is a
+    // dead element on each row (and it used to carry inline `clear:both`).
+    for (const file of ['scripts/modules/history-core.js', 'scripts/bookmark.js']) {
+        const src = fs.readFileSync(path.join(CHROME_DIR, file), 'utf8');
+        assert.doesNotMatch(src, /clearitem/, `${file} still emits a clear-float div`);
+    }
+});
+
+test('the calendar follows by sticky positioning, not a JS scroll threshold', () => {
+    const css = fs.readFileSync(path.join(CHROME_DIR, 'css/history.css'), 'utf8');
+    const js = fs.readFileSync(path.join(CHROME_DIR, 'scripts/history.js'), 'utf8');
+    const html = fs.readFileSync(path.join(CHROME_DIR, 'history.html'), 'utf8');
+    assert.match(html, /id="history-container" class="linear-view"/,
+        'history.html lost the class that scopes the two-column grid');
+    assert.match(css, /\.linear-view#history-container\s*\{[^}]*display:\s*grid/,
+        'the linear page has no two-column grid');
+    // Brace-pair the wide-screen rule: a `[^}]*` match is tied to declaration
+    // order and could drift onto the narrow-screen override further down.
+    const head = /\.linear-view #calendar\s*\{/.exec(css);
+    assert.ok(head, 'the wide-screen .linear-view #calendar rule is gone');
+    let depth = 0, end = -1;
+    for (let i = css.indexOf('{', head.index); i < css.length; i++) {
+        if (css[i] === '{') depth++;
+        else if (css[i] === '}' && --depth === 0) { end = i; break; }
+    }
+    assert.ok(end > 0, 'the wide-screen .linear-view #calendar rule is unterminated');
+    const wideBlock = stripCommentsOf(css.slice(head.index, end));
+    assert.match(wideBlock, /position:\s*sticky/, 'the calendar is not sticky');
+    assert.doesNotMatch(wideBlock, /position:\s*absolute/,
+        'the wide-screen calendar fell back to absolute');
+    // The old handler read scrollY/pageYOffset and flipped position at 115px.
+    assert.doesNotMatch(js, /addEventListener\(\s*['"]scroll['"]/,
+        'history.js added a scroll listener back');
+    assert.doesNotMatch(js, /\b(?:scrollY|pageYOffset)\b/,
+        'history.js reads the scroll position again');
+    assert.doesNotMatch(js, /cal\.style\.(?:position|top)/,
+        'history.js writes the calendar position inline again');
+    // The two widths and the toggle sprite now live on one attribute.
+    assert.match(html, /id="calendar" data-expanded="false"/,
+        'the calendar has no initial expand state');
+    // Pin the JS toggle too: matching only the HTML literal would miss a
+    // handler that always writes 'true' (or otherwise stops flipping).
+    assert.match(stripJsComments(js),
+        /setAttribute\(\s*['"]data-expanded['"]\s*,\s*[^;]*===\s*['"]true['"]\s*\?\s*['"]false['"]\s*:\s*['"]true['"]/,
+        'the toggle no longer flips data-expanded between true and false');
+    assert.match(css, /#calendar\[data-expanded="true"\]\s*\{[^}]*width:\s*336px/,
+        'the expanded width is not in CSS');
+    assert.match(css, /#calendar\[data-expanded="true"\][^{]*#delete-range-toggle-button/,
+        'the toggle sprite does not follow the expand state');
+    // Comments in history.js quote the old handler, so scan stripped code.
+    assert.doesNotMatch(stripJsComments(js),
+        /getStyle\s*\(|backgroundPosition|cal\.style\.width|setTimeout/,
+        'history.js still measures width or flips the sprite by hand');
+});
+
+test('the calendar guard matches the JS it forbids', () => {
+    const old = `window.addEventListener('scroll', function(){
+  var wcv = window.scrollY || window.pageYOffset;
+  if (wcv > 115) { var cal = $('calendar'); cal.style.position = 'fixed'; cal.style.top = '15px'; }
+  else { cal.style.position = 'absolute'; cal.style.top = '129px'; }
+});`;
+    assert.match(old, /addEventListener\(\s*['"]scroll['"]/, 'the scroll probe stopped matching');
+    assert.match(old, /\b(?:scrollY|pageYOffset)\b/, 'the scrollY probe stopped matching');
+    assert.match(old, /cal\.style\.(?:position|top)/, 'the inline-position probe stopped matching');
+});
+
+test('the linear theme is a set of tokens, not per-selector dark overrides', () => {
+    const css = fs.readFileSync(path.join(CHROME_DIR, 'css/history.css'), 'utf8');
+    // Brace-balanced extraction: a regex stops at :root's closing brace and
+    // reads only the first half of the block.
+    const head = /@media[^{]*prefers-color-scheme: dark[^{]*\{/.exec(css);
+    assert.ok(head, 'the dark block is gone');
+    let depth = 0, end = -1;
+    for (let i = css.indexOf('{', head.index); i < css.length; i++) {
+        if (css[i] === '{') depth++;
+        else if (css[i] === '}' && --depth === 0) { end = i; break; }
+    }
+    assert.ok(end > 0, 'the dark block is unterminated');
+    // Comments explain why !important was removed; scanning them would flag
+    // the explanation rather than the code.
+    const block = stripCommentsOf(css.slice(head.index, end));
+    for (const token of ['--row-odd-bg', '--row-even-bg', '--item-title-color',
+        '--group-host-color', '--bar-border-color']) {
+        assert.match(block, new RegExp(`${token.replace(/-/g, '\\-')}:`),
+            `the dark theme does not redefine ${token}`);
+    }
+    // The old block restyled the title colour, the toolbar border, the main
+    // rows and the hover each with its own !important rule. The first two now
+    // come from tokens, so they must be gone entirely.
+    for (const selector of ['.item .title', '#rh-bar']) {
+        assert.doesNotMatch(block, new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^{]*\\{`),
+            `the dark block still overrides ${selector} directly`);
+    }
+    // Two structural rules legitimately stay: the main view flattens its zebra
+    // stripes and a hovered row gets a highlight. They are not theme COLOURS
+    // in the token sense; what must not return is the !important that made
+    // them outrank div[rel=white|grey].
+    for (const selector of ['#rh-views-insert .item-holder', '.item:hover']) {
+        const m = new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^{]*\\{([^}]*)\\}`).exec(block);
+        assert.ok(m, `the dark block lost the structural rule ${selector}`);
+        assert.doesNotMatch(m[1], /!important|(?<![-\w])color\s*:/,
+            `${selector} became a theme/colour override again`);
+    }
+    assert.doesNotMatch(block, /!important/, 'the dark block still uses !important');
+    // The light values are the defaults; a missing var() means a selector
+    // hard-coded its colour and no longer follows the theme.
+    for (const token of ['--row-odd-bg', '--row-even-bg', '--item-title-color',
+        '--group-host-color', '--bar-border-color']) {
+        assert.match(css, new RegExp(`var\\(${token.replace(/-/g, '\\-')}\\)`),
+            `no light rule consumes ${token}`);
+    }
+});
+
+// ---------------------------------------------------------------------------
+// Review follow-ups (PR #43): the group columns, the calendar's collapsed
+// width and the narrow-screen fallback are all explicit in CSS now.
+// ---------------------------------------------------------------------------
+
+test('the group-title columns are declared explicitly, not inferred from DOM order', () => {
+    const css = fs.readFileSync(path.join(CHROME_DIR, 'css/history.css'), 'utf8');
+    const code = stripCommentsOf(css);
+    const rule = (selector) => {
+        const m = new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([^}]*)\\}`).exec(code);
+        assert.ok(m, `no rule for ${selector}`);
+        return m[1];
+    };
+    // bookmark.html hides its checkbox and shows a count label instead;
+    // both must claim column 2 so neither depends on being the only child.
+    const columns = {
+        '.group-title-toggle': 1,
+        'label.group-title-toggle-count': 2,
+        '.group-title-checkbox': 2,
+        '.group-title-favicon': 3,
+        '.group-title-host': 4,
+    };
+    for (const [selector, col] of Object.entries(columns)) {
+        assert.match(rule(selector), new RegExp(`grid-column:\\s*${col}\\b`),
+            `${selector} does not pin itself to column ${col}`);
+    }
+    // The count label also needs to sit in the middle of its 20px column.
+    assert.match(rule('label.group-title-toggle-count'), /text-align:\s*center/,
+        'the group count is no longer centred in its column');
+
+    // Probe: the pre-review rules had no grid-column at all, so a matcher that
+    // quietly stopped reading the block would keep every assertion above green.
+    const old = `.group-title { display: grid; grid-template-columns: 12px 20px 16px 1fr; }
+.group-title-toggle { display: block; width: 12px; }
+label.group-title-toggle-count { display: block; }
+.group-title-checkbox { width: 12px; }
+.group-title-favicon { width: 16px; }
+.group-title-host { cursor: pointer; }
+`;
+    for (const selector of Object.keys(columns)) {
+        const m = new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([^}]*)\\}`).exec(old);
+        assert.ok(m, `the column probe lost ${selector}`);
+        assert.doesNotMatch(m[1], /grid-column/, `the column probe already pins ${selector}`);
+    }
+});
+
+test('both calendar widths live in the linear-view scope, switched by the attribute', () => {
+    const css = fs.readFileSync(path.join(CHROME_DIR, 'css/history.css'), 'utf8');
+    const code = stripCommentsOf(css);
+    const base = /\.linear-view #calendar\s*\{([^}]*)\}/.exec(code);
+    assert.ok(base, 'the linear calendar rule is gone');
+    assert.match(base[1], /width:\s*170px/, 'the collapsed width is not bound in the linear scope');
+    const expanded = /\.linear-view #calendar\[data-expanded="true"\]\s*\{([^}]*)\}/.exec(code);
+    assert.ok(expanded, 'the expanded rule is gone');
+    assert.match(expanded[1], /width:\s*336px/, 'the expanded width is not bound to the attribute');
+    // The shared #calendar rule keeps 170px for the tree pages; the linear
+    // scope must not be the only place that knows the collapsed width.
+    const shared = /(?:^|\})\s*#calendar\s*\{([^}]*)\}/.exec(code);
+    assert.ok(shared, 'the shared #calendar rule is gone');
+    assert.match(shared[1], /width:\s*170px/, 'the shared rule lost its own 170px default');
+});
+
+test('the narrow-screen fallback resets the calendar position and grid placement', () => {
+    const css = fs.readFileSync(path.join(CHROME_DIR, 'css/history.css'), 'utf8');
+    // Isolate the <=500px block: a plain search would also match the sticky
+    // rule above and let a broken fallback look correct.
+    const head = /@media[^{]*max-width:\s*500px[^{]*\{/.exec(css);
+    assert.ok(head, 'the narrow-screen media block is gone');
+    let depth = 0, end = -1;
+    for (let i = css.indexOf('{', head.index); i < css.length; i++) {
+        if (css[i] === '{') depth++;
+        else if (css[i] === '}' && --depth === 0) { end = i; break; }
+    }
+    assert.ok(end > 0, 'the narrow-screen block is unterminated');
+    const block = stripCommentsOf(css.slice(head.index, end));
+    const rule = /\.linear-view #calendar\s*\{([^}]*)\}/.exec(block);
+    assert.ok(rule, 'the narrow block does not override .linear-view #calendar');
+    assert.match(rule[1], /position:\s*absolute/, 'the calendar is still sticky on narrow screens');
+    assert.match(rule[1], /grid-column:\s*auto/, 'the calendar keeps its wide-screen grid column');
+    assert.match(rule[1], /grid-row:\s*auto/, 'the calendar keeps its wide-screen grid row');
+    // Probe: the pre-review fallback only had display:block on the container.
+    const old = `@media screen and (max-width:500px) {
+    .linear-view#history-container { display: block; }
+    #history-container #calendar { top: 19px !important; }
+}`;
+    assert.doesNotMatch(old, /\.linear-view #calendar\s*\{[^}]*position:\s*absolute/,
+        'the narrow fallback probe already contains the fix');
+});

@@ -2,7 +2,7 @@
 //
 // An ES module: every function it calls is imported, not read off `window`.
 
-import { $, $$, getStyle } from './dom-helper.js';
+import { $, $$ } from './dom-helper.js';
 import { returnLang, dateFormat, monthOptionsHtml } from './modules/helpers.js';
 import { calendar, showCalendar } from './modules/calendar.js';
 import {
@@ -34,21 +34,6 @@ document.addEventListener('DOMContentLoaded', function(){
     // Sort/group toolbar: shared by history.js and bookmark.js.
     initSortBar(historyView, getActiveHistory);
 
-    // Scroll events
-    
-    window.addEventListener('scroll', function(){
-      var wcv = window.scrollY || window.pageYOffset;
-      if(wcv > 115){
-        var cal = $('calendar');
-        cal.style.position = 'fixed';
-        cal.style.top = '15px';
-      }else{
-        cal = $('calendar');
-        cal.style.position = 'absolute';
-        cal.style.top = '129px';
-      }
-    });
-    
     // Shift listener
     
     document.body.addEventListener('keydown', function(e){
@@ -130,23 +115,16 @@ document.addEventListener('DOMContentLoaded', function(){
     
     // Calendar range toggle
     
+    // The two widths and the toggle sprite now live in CSS: one attribute on
+    // the calendar, read by `.linear-view #calendar[data-expanded="true"]`. The old
+    // handler measured `width` back out of the DOM and used a 350ms timeout to
+    // flip `backgroundPosition` after the transition, which could disagree
+    // with the width if the click landed mid-animation.
     $('delete-range-toggle-button').addEventListener('click', function(){
-      var drtb = this;
-      var drtbcs = parseInt(getStyle($('calendar'), 'width'), 10) || 0;
       var cal = $('calendar');
       if (cal) {
-          cal.style.transition = 'width 0.35s linear';
-          if(drtbcs == 336){
-              cal.style.width = '170px';
-              setTimeout(function(){
-                  drtb.style.backgroundPosition = 'left top';
-              }, 350);
-          } else if(drtbcs == 170){
-              cal.style.width = '336px';
-              setTimeout(function(){
-                  drtb.style.backgroundPosition = 'right top';
-              }, 350);
-          }
+          cal.setAttribute('data-expanded',
+              cal.getAttribute('data-expanded') === 'true' ? 'false' : 'true');
       }
     });
     
