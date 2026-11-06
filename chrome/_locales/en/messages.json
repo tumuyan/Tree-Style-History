@@ -521,12 +521,6 @@
     "editBookmark": {
         "message": "Edit Bookmark"
     },
-    "editBookmarkTitlePrompt": {
-        "message": "Enter bookmark title:"
-    },
-    "editBookmarkUrlPrompt": {
-        "message": "Enter bookmark URL:"
-    },
     "optionloadrange4": {
         "message": "Minimum number of items to load"
     },
@@ -565,6 +559,18 @@
     },
     "selectAll": {
         "message": "Select all"
+    },
+    "editBookmarkTitleLabel": {
+        "message": "Title"
+    },
+    "editBookmarkUrlLabel": {
+        "message": "URL"
+    },
+    "save": {
+        "message": "Save"
+    },
+    "cancel": {
+        "message": "Cancel"
     }
 
 }

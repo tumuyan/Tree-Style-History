@@ -1342,9 +1342,9 @@ test('options.html?p=<unknown tab> falls back instead of killing the page', { sk
 
 test('the linear pages drive their sort toolbar through data-state', { skip: SKIP }, async () => {
     // The unit suite proves the module's state machine with a DOM shim; only a
-    // real browser proves the CSS rule actually picks the right half of the
-    // sprite. Both linear pages share the toolbar, so one of them is enough to
-    // pin the wiring and the other is covered by the static guard.
+    // real browser proves the CSS mask actually picks the right half of the
+    // vector icon. Both linear pages share the toolbar, so one of them is
+    // enough to pin the wiring and the other is covered by the static guard.
     const page = await context.newPage();
     const { jsErrors, netErrors } = collectErrors(page);
     await page.goto(`chrome-extension://${extensionId}/history.html`, { waitUntil: 'load' });
@@ -1354,7 +1354,7 @@ test('the linear pages drive their sort toolbar through data-state', { skip: SKI
         const el = document.getElementById('rh-bar-group');
         return {
             state: el.getAttribute('data-state'),
-            position: getComputedStyle(el).backgroundPosition,
+            position: getComputedStyle(el).maskPosition || getComputedStyle(el).webkitMaskPosition,
             label: el.getAttribute('aria-label'),
             bound: el.getAttribute('data-sortbar-bound'),
         };
@@ -1364,16 +1364,16 @@ test('the linear pages drive their sort toolbar through data-state', { skip: SKI
     assert.ok(before.label && before.label.length > 0, 'the button has no accessible label');
 
     await page.click('#rh-bar-group');
-    // `a { transition: all 0.2s linear }` animates background-position too:
-    // reading the computed value immediately catches it mid-transition (a
-    // percentage between 0% and 100%), not the state the CSS rule settles on.
+    // `a { transition: all 0.2s linear }` animates mask-position too: reading
+    // the computed value immediately catches it mid-transition (a percentage
+    // between 0% and 100%), not the state the CSS rule settles on.
     await new Promise((resolve) => setTimeout(resolve, 300));
 
     const after = await page.evaluate(() => {
         const el = document.getElementById('rh-bar-group');
         return {
             state: el.getAttribute('data-state'),
-            position: getComputedStyle(el).backgroundPosition,
+            position: getComputedStyle(el).maskPosition || getComputedStyle(el).webkitMaskPosition,
             stored: localStorage['rh-group'],
         };
     });
@@ -1384,7 +1384,7 @@ test('the linear pages drive their sort toolbar through data-state', { skip: SKI
     assert.notEqual(after.state, before.state, 'a click did not change the button state');
     assert.equal(after.stored, after.state, 'the painted state disagrees with the stored key');
     assert.notEqual(after.position, before.position,
-        `CSS did not move the sprite: before=${JSON.stringify(before)} after=${JSON.stringify(after)}`);
+        `CSS did not move the icon mask: before=${JSON.stringify(before)} after=${JSON.stringify(after)}`);
 });
 
 test('bookmark.html re-renders its list when the toolbar is clicked on the initial view', { skip: SKIP }, async () => {
@@ -1623,7 +1623,8 @@ test('history.html keeps the calendar beside the list and sticky while scrolling
         return {
             state: cal.getAttribute('data-expanded'),
             width: Math.round(cal.getBoundingClientRect().width),
-            sprite: getComputedStyle(document.getElementById('delete-range-toggle-button')).backgroundPosition,
+            sprite: getComputedStyle(document.getElementById('delete-range-toggle-button')).maskPosition ||
+                getComputedStyle(document.getElementById('delete-range-toggle-button')).webkitMaskPosition,
         };
     });
     await page.close();
@@ -1631,7 +1632,7 @@ test('history.html keeps the calendar beside the list and sticky while scrolling
     assert.deepEqual(jsErrors, [], `the sticky calendar threw (${netErrors.length} network error(s) ignored)`);
     assert.equal(expanded.state, 'true', 'the toggle did not set data-expanded');
     assert.ok(expanded.width > atTop.width + 100, 'the calendar did not widen to its expanded column');
-    assert.match(expanded.sprite, /100%|right/, 'the toggle sprite did not follow the expand state');
+    assert.match(expanded.sprite, /100%|right/, 'the toggle icon mask did not follow the expand state');
 });
 
 test('dark mode swaps the linear theme tokens, not per-selector overrides', { skip: SKIP }, async () => {
@@ -1804,4 +1805,370 @@ test('the calendar width really follows data-expanded in both directions', { ski
     assert.deepEqual(jsErrors, [], `the calendar toggle threw (${netErrors.length} network error(s) ignored)`);
     assert.ok(expanded > collapsed + 100, 'expanding did not widen the calendar');
     assert.equal(back, collapsed, 'collapsing did not restore the narrow width');
+});
+
+// ---------------------------------------------------------------------------
+// issue #40, step 3: shared status component, vector icons, inline editor
+// ---------------------------------------------------------------------------
+
+test('the linear pages render their loading and empty states through one component', { skip: SKIP }, async () => {
+    // Seed real rows first: after the held search is released, the page must
+    // transition from the loading component to those rows. Without data the
+    // round-trip would just prove loading -> empty, not loading -> rendered.
+    await seedLinearHistory(context, extensionId, 8);
+
+    // The loading state is transient: by settle() a non-empty list has already
+    // replaced it. Hold chrome.history.search's callbacks so the container is
+    // caught mid-render in a real browser, then release every held callback.
+    // The stub queues *all* held calls and counts them: a single swallowed
+    // query would leave the page stuck in loading forever, which is exactly
+    // the "unverifiable" shape this case used to have.
+    const page = await context.newPage();
+    const { jsErrors, netErrors } = collectErrors(page);
+    await page.addInitScript(() => {
+        const real = chrome.history.search.bind(chrome.history);
+        window.__holdSearch = true;
+        window.__searchPending = [];
+        window.__searchHeld = 0;
+        chrome.history.search = (query, cb) => real(query, (items) => {
+            if (!window.__holdSearch) return cb(items);
+            window.__searchHeld++;
+            window.__searchPending.push(() => cb(items));
+        });
+    });
+    await page.goto(`chrome-extension://${extensionId}/history.html`, { waitUntil: 'load' });
+    await settle(page);
+    const loading = await page.evaluate(() => {
+        const el = document.querySelector('#rh-views-insert .list-status-loading');
+        return el ? {
+            cls: el.className,
+            role: el.getAttribute('role'),
+            live: el.getAttribute('aria-live'),
+            spinner: !!el.querySelector('.list-status-spinner'),
+            text: el.textContent,
+            held: window.__searchHeld,
+        } : { held: window.__searchHeld };
+    });
+    // Release every held callback, then assert the page actually rendered the
+    // seeded rows. That "loading -> real rows" round-trip is the proof that the
+    // loading component was an in-progress state, not a permanently stuck one.
+    await page.evaluate(() => {
+        window.__holdSearch = false;
+        window.__searchPending.splice(0).forEach((f) => f());
+    });
+    await settle(page);
+    const afterRelease = await page.evaluate(() => ({
+        stillLoading: !!document.querySelector('#rh-views-insert .list-status-loading'),
+        rows: document.querySelectorAll('#rh-views-insert .item-holder').length,
+    }));
+    await page.close();
+    assert.deepEqual(jsErrors, [], `the loading state threw (${netErrors.length} network error(s) ignored)`);
+    assert.ok(loading.held > 0, 'the search callback was never held, so the loading state was not captured');
+    assert.ok(loading.cls, 'the page did not render the shared loading component');
+    assert.match(loading.cls, /list-status list-status-loading/, 'the loading component class is missing');
+    assert.equal(loading.role, 'status', 'the loading status is not announced');
+    assert.equal(loading.live, 'polite', 'the loading state is not live');
+    assert.ok(loading.spinner, 'the loading spinner is missing');
+    assert.ok(loading.text.length > 0, 'the loading state has no text');
+    assert.equal(afterRelease.stillLoading, false, 'releasing the search left the container stuck in loading');
+    assert.ok(afterRelease.rows > 0, 'the held query never rendered its rows after release');
+
+    // Force an empty result through the search view and assert the empty state.
+    const searchPage = await context.newPage();
+    const errs = collectErrors(searchPage);
+    await searchPage.goto(`chrome-extension://${extensionId}/history.html`, { waitUntil: 'load' });
+    await settle(searchPage);
+    await searchPage.evaluate(() => {
+        document.getElementById('rh-what').value = 'all';
+        document.getElementById('rh-what').dispatchEvent(new Event('change'));
+        const input = document.getElementById('rh-search');
+        input.value = 'zzzz-no-such-host-zzzz';
+        input.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
+    });
+    await settle(searchPage);
+    const empty = await searchPage.evaluate(() => {
+        const el = document.querySelector('#rh-views-search-insert .no-results');
+        return el ? { cls: el.className, role: el.getAttribute('role'), text: el.textContent } : null;
+    });
+    await searchPage.close();
+    assert.deepEqual(errs.jsErrors, [], `the empty state threw (${errs.netErrors.length} network error(s) ignored)`);
+    assert.ok(empty, 'the empty state did not render the shared component');
+    assert.match(empty.cls, /list-status/, 'the empty state is not the shared component');
+    assert.equal(empty.role, 'status', 'the empty state is not announced');
+    assert.ok(empty.text.length > 0, 'the empty state has no text');
+});
+
+test('the linear icons are CSS masks and the group toggle state is an attribute', { skip: SKIP }, async () => {
+    await seedLinearHistory(context, extensionId, 12);
+    const { page, jsErrors, netErrors } = await openForLayout(context, extensionId, 'history.html');
+    const icons = await page.evaluate(() => {
+        const bar = document.getElementById('rh-bar-group');
+        const toggle = document.querySelector('#rh-views-insert .group-title-toggle');
+        const range = document.getElementById('delete-range-toggle-button');
+        const mask = (el) => getComputedStyle(el).maskImage || getComputedStyle(el).webkitMaskImage;
+        return {
+            bar: mask(bar),
+            barPos: getComputedStyle(bar).maskPosition || getComputedStyle(bar).webkitMaskPosition,
+            toggle: toggle ? mask(toggle) : null,
+            toggleState: toggle ? toggle.getAttribute('data-expanded') : null,
+            range: mask(range),
+        };
+    });
+    // Toggle a group and read the state the CSS consumes.
+    const toggled = await page.evaluate(() => {
+        const t = document.querySelector('#rh-views-insert .group-title-toggle');
+        if (t) t.click();
+        const a = document.querySelector('#rh-views-insert .group-title-toggle');
+        return a ? a.getAttribute('data-expanded') : null;
+    });
+    await page.close();
+    assert.deepEqual(jsErrors, [], `the icon masks threw (${netErrors.length} network error(s) ignored)`);
+    for (const [name, value] of Object.entries(icons)) {
+        if (name.endsWith('Pos') || name.endsWith('State')) continue;
+        assert.match(value, /data:image\/svg\+xml/, `${name} is not an inline SVG mask`);
+    }
+    assert.ok(icons.barPos.length > 0, 'the toolbar icon has no mask position');
+    assert.notEqual(toggled, icons.toggleState, 'toggleGroup did not flip data-expanded');
+});
+
+test('bookmark editing uses an inline panel and really writes the bookmark', { skip: SKIP }, async () => {
+    const URL = 'https://edit-probe.test/before';
+    const TITLE = 'Before edit';
+    let bookmarkId;
+    try {
+        {
+            const seed = await context.newPage();
+            await seed.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: 'load' });
+            await settle(seed);
+            bookmarkId = await seed.evaluate(async ({ title, url }) => {
+                localStorage['rh-group'] = 'no';
+                await window.storageAdapter?.ready();
+                const node = await chrome.bookmarks.create({ title, url });
+                return node.id;
+            }, { title: TITLE, url: URL });
+            await seed.close();
+        }
+
+        const { page, jsErrors, netErrors } = await openForLayout(context, extensionId, 'bookmark.html');
+        // Select the single row so the Edit button becomes visible.
+        await page.click('#rh-views-insert .chkbx');
+        await page.click('#edit-bookmark-button');
+        const opened = await page.evaluate(() => {
+            const panel = document.querySelector('.bookmark-edit');
+            if (!panel) return null;
+            const inputs = panel.querySelectorAll('input[type="text"]');
+            return {
+                fields: inputs.length,
+                title: inputs[0] ? inputs[0].value : null,
+                url: inputs[1] ? inputs[1].value : null,
+                buttons: [...panel.querySelectorAll('input[type="button"]')].map((b) => b.value),
+                nativePrompts: typeof window.prompt,
+            };
+        });
+        assert.ok(opened, 'the inline editor did not open');
+        assert.equal(opened.fields, 2, 'the editor needs title and URL fields');
+        assert.equal(opened.title, TITLE, 'the title field was not prefilled');
+        assert.equal(opened.url, URL, 'the URL field was not prefilled');
+        assert.equal(opened.buttons.length, 2, 'the editor needs save and cancel');
+
+        // Invalid URL: the panel stays open and shows an inline error.
+        await page.evaluate(() => {
+            const inputs = document.querySelectorAll('.bookmark-edit input[type="text"]');
+            inputs[1].value = 'not a url';
+            document.querySelector('.bookmark-edit input[type="button"]').click();
+        });
+        const invalid = await page.evaluate(() => ({
+            panel: !!document.querySelector('.bookmark-edit'),
+            error: document.querySelector('.bookmark-edit-error')?.textContent || '',
+        }));
+        assert.ok(invalid.panel, 'an invalid URL closed the editor');
+        assert.ok(invalid.error.length > 0, 'an invalid URL produced no inline error');
+
+        // A non-HTTP URL is legal for chrome.bookmarks.update. A title-only edit
+        // on a mailto: bookmark used to be rejected by a hand-written scheme
+        // allow-list, so the panel stayed open and the title could never be
+        // changed. Let the API decide: it accepts the URL and the panel closes.
+        await page.evaluate(() => {
+            const inputs = document.querySelectorAll('.bookmark-edit input[type="text"]');
+            inputs[0].value = 'mailto title only';
+            inputs[1].value = 'mailto:foo@bar.test';
+            document.querySelector('.bookmark-edit input[type="button"]').click();
+        });
+        await settle(page);
+        const mailto = await page.evaluate(async (id) => {
+            const nodes = await chrome.bookmarks.get(id);
+            return { title: nodes[0].title, url: nodes[0].url, panel: !!document.querySelector('.bookmark-edit') };
+        }, bookmarkId);
+        assert.equal(mailto.title, 'mailto title only', 'a title-only edit on mailto: was blocked');
+        assert.equal(mailto.url, 'mailto:foo@bar.test', 'the legal mailto: URL was not saved');
+        assert.equal(mailto.panel, false, 'the editor stayed open after a legal mailto: edit');
+
+        // The successful save re-rendered the list and cleared the selection,
+        // so re-open the editor for the final (HTTP) edit.
+        await page.click('#rh-views-insert .chkbx');
+        await page.click('#edit-bookmark-button');
+        // Save a real edit and assert chrome.bookmarks really changed.
+        await page.evaluate(() => {
+            const inputs = document.querySelectorAll('.bookmark-edit input[type="text"]');
+            inputs[0].value = 'After edit';
+            inputs[1].value = 'https://edit-probe.test/after';
+            document.querySelector('.bookmark-edit input[type="button"]').click();
+        });
+        await settle(page);
+        const saved = await page.evaluate(async (id) => {
+            const nodes = await chrome.bookmarks.get(id);
+            return { title: nodes[0].title, url: nodes[0].url, panel: !!document.querySelector('.bookmark-edit') };
+        }, bookmarkId);
+        const listed = await page.evaluate(() => document.body.textContent.includes('After edit'));
+        await page.close();
+        assert.deepEqual(jsErrors, [], `the editor threw (${netErrors.length} network error(s) ignored)`);
+        assert.equal(saved.title, 'After edit', 'chrome.bookmarks.update did not save the title');
+        assert.equal(saved.url, 'https://edit-probe.test/after', 'chrome.bookmarks.update did not save the URL');
+        assert.equal(saved.panel, false, 'the editor stayed open after saving');
+        assert.ok(listed, 'the re-rendered list does not show the new title');
+    } finally {
+        if (bookmarkId) {
+            const cleanup = await context.newPage();
+            await cleanup.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: 'load' });
+            await cleanup.evaluate((id) => chrome.bookmarks.remove(id), bookmarkId);
+            await cleanup.close();
+            // rh-group was flipped by this case; restore it for the cases below.
+            const restore = await context.newPage();
+            await restore.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: 'load' });
+            await restore.evaluate(async () => {
+                localStorage['rh-group'] = 'yes';
+                await window.storageAdapter?.ready();
+            });
+            await restore.close();
+        }
+    }
+});
+
+test('bookmark editor fields come from local helpers and Enter is consumed inside the panel', { skip: SKIP }, async () => {
+    // Review follow-up: the panel's fields/buttons were hand-assembled in
+    // eight variables, and an Enter/Escape key press could escape the panel
+    // while a save re-render was about to remove it. Both are now pinned in a
+    // real browser: the rendered shape must match the local builders, and the
+    // keydown must not reach document.body.
+    const URL = 'https://edit-keys-probe.test/before';
+    const TITLE = 'Before key edit';
+    let bookmarkId;
+    try {
+        {
+            const seed = await context.newPage();
+            await seed.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: 'load' });
+            await settle(seed);
+            bookmarkId = await seed.evaluate(async ({ title, url }) => {
+                localStorage['rh-group'] = 'no';
+                await window.storageAdapter?.ready();
+                const node = await chrome.bookmarks.create({ title, url });
+                return node.id;
+            }, { title: TITLE, url: URL });
+            await seed.close();
+        }
+
+        const { page, jsErrors, netErrors } = await openForLayout(context, extensionId, 'bookmark.html');
+        await page.click('#rh-views-insert .chkbx');
+        await page.click('#edit-bookmark-button');
+
+        const shape = await page.evaluate(() => {
+            const panel = document.querySelector('.bookmark-edit');
+            if (!panel) return null;
+            const labels = panel.querySelectorAll('label');
+            const inputs = panel.querySelectorAll('input[type="text"]');
+            const buttons = panel.querySelectorAll('input[type="button"]');
+            return {
+                labels: labels.length,
+                inputs: inputs.length,
+                buttons: buttons.length,
+                // field() sets aria-label = the translated label text and
+                // appends the input inside the label element.
+                labelOwnsInput: [...labels].every((l) => l.querySelector('input[type="text"]')),
+                ariaMatchesLabel: [...inputs].every((i, n) => i.getAttribute('aria-label') === labels[n].textContent),
+                buttonsHaveClass: [...buttons].every((b) => b.classList.contains('button')),
+            };
+        });
+        assert.ok(shape, 'the inline editor did not open');
+        assert.equal(shape.labels, 2, 'the local field() builder did not produce two labels');
+        assert.equal(shape.inputs, 2, 'the local field() builder did not produce two inputs');
+        assert.equal(shape.buttons, 2, 'the local actionButton() builder did not produce two buttons');
+        assert.ok(shape.labelOwnsInput, 'the input is not nested in its label');
+        assert.ok(shape.ariaMatchesLabel, 'the aria-label drifted from the translated label');
+        assert.ok(shape.buttonsHaveClass, 'the action buttons lost their .button class');
+
+        // Count keydowns that reach body. A bubbled Enter/Escape would show up
+        // here; the panel's handler must consume both before propagation.
+        await page.evaluate(() => {
+            window.__bodyKeydowns = 0;
+            document.body.addEventListener('keydown', () => { window.__bodyKeydowns++; });
+            const panel = document.querySelector('.bookmark-edit');
+            const fire = (key) => panel.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+            fire('Escape');
+        });
+        const afterEscape = await page.evaluate(() => ({
+            body: window.__bodyKeydowns,
+            panel: !!document.querySelector('.bookmark-edit'),
+        }));
+        assert.equal(afterEscape.panel, false, 'Escape did not close the editor');
+        assert.equal(afterEscape.body, 0, 'Escape bubbled out of the panel to document.body');
+
+        // Re-open and save via Enter. The row is still selected (Escape only
+        // removed the panel), so a second click on the checkbox would just
+        // deselect it and hide the Edit button. The keydown must be consumed
+        // (body sees nothing) and chrome.bookmarks.update must still persist.
+        await page.click('#edit-bookmark-button');
+        await page.evaluate(() => {
+            window.__bodyKeydowns = 0;
+            // Count real update() calls: a held Enter (auto-repeat) or a
+            // double-click used to fire several async updates whose chunked
+            // redraws cancelled each other. The gate must allow exactly one.
+            window.__updateCalls = 0;
+            const realUpdate = chrome.bookmarks.update.bind(chrome.bookmarks);
+            chrome.bookmarks.update = function (...args) {
+                window.__updateCalls++;
+                return realUpdate(...args);
+            };
+            const inputs = document.querySelectorAll('.bookmark-edit input[type="text"]');
+            inputs[0].value = 'After key edit';
+            inputs[1].value = 'https://edit-keys-probe.test/after';
+            const panel = document.querySelector('.bookmark-edit');
+            const fire = (repeat) => panel.dispatchEvent(
+                new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, repeat }));
+            fire(false);
+            fire(true);  // key auto-repeat while update is still in flight
+            fire(true);
+        });
+        await settle(page);
+        const saved = await page.evaluate(async (id) => {
+            const nodes = await chrome.bookmarks.get(id);
+            return {
+                title: nodes[0].title,
+                url: nodes[0].url,
+                panel: !!document.querySelector('.bookmark-edit'),
+                body: window.__bodyKeydowns,
+                updates: window.__updateCalls,
+            };
+        }, bookmarkId);
+        assert.equal(saved.body, 0, 'Enter bubbled out of the panel to document.body');
+        assert.equal(saved.updates, 1, 'key auto-repeat fired more than one bookmark update');
+        assert.equal(saved.panel, false, 'the editor stayed open after an Enter save');
+        assert.equal(saved.title, 'After key edit', 'Enter save did not write the title');
+        assert.equal(saved.url, 'https://edit-keys-probe.test/after', 'Enter save did not write the URL');
+        await page.close();
+        assert.deepEqual(jsErrors, [], `the editor threw (${netErrors.length} network error(s) ignored)`);
+    } finally {
+        if (bookmarkId) {
+            const cleanup = await context.newPage();
+            await cleanup.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: 'load' });
+            await cleanup.evaluate((id) => chrome.bookmarks.remove(id), bookmarkId);
+            await cleanup.close();
+            const restore = await context.newPage();
+            await restore.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: 'load' });
+            await restore.evaluate(async () => {
+                localStorage['rh-group'] = 'yes';
+                await window.storageAdapter?.ready();
+            });
+            await restore.close();
+        }
+    }
 });

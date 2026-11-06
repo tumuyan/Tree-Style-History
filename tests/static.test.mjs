@@ -3776,3 +3776,313 @@ test('the narrow-screen fallback resets the calendar position and grid placement
     assert.doesNotMatch(old, /\.linear-view #calendar\s*\{[^}]*position:\s*absolute/,
         'the narrow fallback probe already contains the fix');
 });
+
+// ---------------------------------------------------------------------------
+// The linear pages' shared list status, vector icons and bookmark editor
+// (issue #40, step 3)
+//
+// Loading / empty states used to be written by hand from six call sites, the
+// toolbar and group/calendar icons were 1x/2x bitmap sprites (with a dark
+// theme override) and a JS-written backgroundPosition, and editing a bookmark
+// used two native prompt() boxes. These guards stop each of them coming back.
+// ---------------------------------------------------------------------------
+
+test('the linear pages render both list states through list-status.js', () => {
+    const files = ['scripts/modules/history-core.js', 'scripts/bookmark.js'];
+    for (const file of files) {
+        const src = stripJsComments(fs.readFileSync(path.join(CHROME_DIR, file), 'utf8'));
+        assert.match(src, /from\s*'\.\/modules\/list-status\.js'|from\s*'\.\/list-status\.js'/,
+            `${file} does not import the shared status module`);
+        assert.match(src, /\bshowLoading\s*\(/, `${file} never shows the loading state`);
+        assert.match(src, /\bshowNoResults\s*\(/, `${file} never shows the empty state`);
+        // A hand-written state is the duplication the module replaced.
+        assert.doesNotMatch(src, /returnLang\(\s*'loading'\s*\)/,
+            `${file} still renders "Loading..." by itself`);
+        assert.doesNotMatch(src, /class="no-results"/,
+            `${file} still writes the no-results markup by hand`);
+    }
+    const mod = fs.readFileSync(path.join(CHROME_DIR, 'scripts/modules/list-status.js'), 'utf8');
+    assert.match(mod, /escapeHtmlText\(returnLang\('loading'\)\)/,
+        'the loading text is interpolated without escaping');
+    assert.match(mod, /role="status"/, 'the status is not announced to screen readers');
+    assert.match(mod, /aria-live="polite"/, 'the loading state is not live');
+});
+
+test('the list status guard sees the states it forbids', () => {
+    const old = `$(into).textContent = returnLang('loading');
+$(into).innerHTML = '<div class="no-results"><span>' + returnLang('noResults') + '</span></div>';`;
+    assert.match(old, /returnLang\(\s*'loading'\s*\)/, 'the loading probe is invisible');
+    assert.match(old, /class="no-results"/, 'the empty-state probe is invisible');
+});
+
+test('the linear icons are vector masks, not bitmap sprites', () => {
+    const css = fs.readFileSync(path.join(CHROME_DIR, 'css/history.css'), 'utf8');
+    // Every icon the linear pages ship used to be a PNG (with an @2x twin and
+    // a toggle2.png dark-theme patch). Those assets are gone from chrome/images.
+    const bitmaps = ['group-toggle', 'orderby-toggle', 'order-toggle', 'toggle', 'toggle2', 'drtb'];
+    for (const base of bitmaps) {
+        assert.doesNotMatch(css, new RegExp(`images/${base}(?:-@2x)?\\.png`),
+            `history.css still references the ${base} bitmap`);
+        assert.ok(!exists(`images/${base}.png`), `images/${base}.png is still shipped`);
+        assert.ok(!exists(`images/${base}-@2x.png`), `images/${base}-@2x.png is still shipped`);
+    }
+    // The vector icons are data-URI SVG masks; the ink colour is a theme token
+    // so the dark block only has to redefine the token, not swap an image.
+    // Check each selector's RULE BODIES, not just that the selector appears:
+    // a bare selector + brace still passed the old existence check even with
+    // the mask-image declaration deleted (the icon would vanish into a box).
+    // Icons have several rules (layout, mask-position, mask-image), so scan
+    // ALL of them: at least one must actually carry the SVG mask.
+    for (const id of ['#rh-bar-group', '#rh-bar-orderby', '#rh-bar-order',
+        '.group-title-toggle', '#calendar #delete-range-toggle-button']) {
+        const escaped = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const rules = [...css.matchAll(new RegExp(escaped + '[^{]*\\{([^}]*)\\}', 'g'))]
+            .map((m) => m[1]);
+        assert.ok(rules.length > 0, 'no CSS rule for ' + id);
+        assert.ok(rules.some((body) => /mask-image:/.test(body) && /data:image\/svg\+xml/.test(body)),
+            id + ' has no rule declaring an inline SVG mask');
+    }
+    assert.ok((css.match(/data:image\/svg\+xml/g) || []).length >= 5,
+        'the five icon shapes are not inline SVG data URIs');
+    assert.match(css, /--icon-ink:/, 'the icon colour is not a theme token');
+    assert.match(css, /mask-image:/, 'the icons are not CSS masks');
+    assert.match(css, /--icon-ink:\s*#c9d2de/, 'the dark theme does not restyle the icon ink');
+    // No JS may flip the icon by writing an inline background position.
+    const files = ['scripts/modules/history-core.js', 'scripts/history.js', 'scripts/bookmark.js'];
+    for (const file of files) {
+        const src = stripJsComments(fs.readFileSync(path.join(CHROME_DIR, file), 'utf8'));
+        assert.doesNotMatch(src, /\.style\.backgroundPosition/,
+            `${file} flips an icon with an inline backgroundPosition again`);
+    }
+});
+
+test('the linear icon state comment matches the vector-mask implementation', () => {
+    // The old comment described a bitmap sprite and claimed the rules sat
+    // after retina rules that reset `background` shorthand. Those bitmaps and
+    // retina blocks are gone; leaving the prose would send the next reader
+    // hunting for a sprite (and possibly restoring inline backgroundPosition).
+    const css = fs.readFileSync(path.join(CHROME_DIR, 'css/history.css'), 'utf8');
+    const head = css.indexOf('#rh-bar a[data-state="yes"]');
+    assert.ok(head > 0, 'the icon-state rules are gone; update this guard');
+    const commentStart = css.lastIndexOf('/*', head);
+    const commentEnd = css.indexOf('*/', commentStart);
+    assert.ok(commentStart >= 0 && commentEnd > commentStart && commentEnd < head,
+        'no comment sits immediately before the icon-state rules');
+    const block = css.slice(commentStart, commentEnd);
+    const stale = /one sprite|retina rules|background shorthand|style\.backgroundPosition/i;
+    // Probe against the old comment TEXT, not an inline literal: an inline
+    // literal only proves the regex matches itself, so a typo in `stale`
+    // would leave this guard green while a real regression slipped through.
+    const OLD_ICON_COMMENT = 'The two icons live in one sprite. It sits AFTER the retina ' +
+        'rules on purpose: those used to redeclare the whole background shorthand ' +
+        'and flipped style.backgroundPosition.';
+    assert.match(OLD_ICON_COMMENT, stale,
+        'the stale-comment probe is invisible to the guard');
+    assert.doesNotMatch(block, stale,
+        'the icon-state comment still describes the removed sprite/retina rules');
+    assert.match(css, /mask-position:\s*left center/, 'the left mask state is gone');
+    assert.match(css, /mask-position:\s*right center/, 'the right mask state is gone');
+});
+
+test('the group toggle state is an attribute, not an inline sprite offset', () => {
+    const core = fs.readFileSync(path.join(CHROME_DIR, 'scripts/modules/history-core.js'), 'utf8');
+    const body = functionBody(core, 'toggleGroup');
+    // Both branches: a guard that only matched the first setAttribute let a
+    // reverted 'expanded' branch pass while 'collapsed' still set the attribute.
+    assert.equal((body.match(/setAttribute\(\s*'data-expanded'/g) || []).length, 2,
+        'toggleGroup must set the state attribute in both branches');
+    assert.doesNotMatch(body, /style\.backgroundPosition/,
+        'toggleGroup writes an inline sprite offset again');
+    const css = fs.readFileSync(path.join(CHROME_DIR, 'css/history.css'), 'utf8');
+    assert.match(css, /\.group-title-toggle\[data-expanded="true"\]/,
+        'the expanded group icon has no CSS rule');
+});
+
+test('bookmark editing is an inline panel, not two native prompts', () => {
+    const src = stripJsComments(fs.readFileSync(path.join(CHROME_DIR, 'scripts/bookmark.js'), 'utf8'));
+    assert.doesNotMatch(src, /\bprompt\s*\(/, 'the page still opens a native prompt()');
+    assert.doesNotMatch(src, /\balert\s*\(/, 'the page still opens a native alert()');
+    assert.match(src, /['"]class['"]:\s*['"]bookmark-edit['"]/, 'the inline editor is not built');
+    assert.match(src, /bookmark-edit-error/, 'the editor has no inline error target');
+    assert.match(src, /chrome\.bookmarks\.update\(/, 'the editor never writes the bookmark');
+    const css = fs.readFileSync(path.join(CHROME_DIR, 'css/history.css'), 'utf8');
+    assert.match(css, /\.bookmark-edit\s*\{/, 'the editor has no styles');
+    // Every visible label goes through i18n; a hard-coded one would ship
+    // English into the Chinese UI.
+    for (const key of ['editBookmarkTitleLabel', 'editBookmarkUrlLabel', 'save', 'cancel']) {
+        assert.match(src, new RegExp(`returnLang\\(\\s*'${key}'\\s*\\)`),
+            `the editor does not translate ${key}`);
+        assert.ok(EN[key] && ZH[key], `the ${key} i18n key is missing from a locale`);
+    }
+    // Retired together with the prompt() editor: these keys had no reader left.
+    // Keeping them would send the next translator to a string the UI no longer
+    // renders. Same for the URL allow-list's error message — see the guard below.
+    for (const key of ['editBookmarkTitlePrompt', 'editBookmarkUrlPrompt', 'editBookmarkInvalidUrl']) {
+        assert.ok(!(key in EN) && !(key in ZH), `the dead i18n key ${key} came back`);
+    }
+});
+
+test('the bookmark editor does not pre-validate the URL', () => {
+    // chrome.bookmarks.update accepts mailto:/about:/relative URLs and reports
+    // genuinely invalid ones through chrome.runtime.lastError. A hand-written
+    // allow-list rejected those legal schemes (so a title-only edit on a
+    // mailto: bookmark could never be saved) and duplicated that one source of
+    // truth. Let the API decide; the panel already surfaces its lastError.
+    const src = stripJsComments(fs.readFileSync(path.join(CHROME_DIR, 'scripts/bookmark.js'), 'utf8'));
+    assert.doesNotMatch(src, /editBookmarkInvalidUrl/,
+        'the editor still renders a hand-written invalid-URL message');
+    // The exact shape the old guard used; a probe keeps this from going green
+    // on a typo. (stripJsComments leaves regex literals intact.)
+    const legacy = /\^\(https\?:\|ftp:\|file:\|chrome:\|javascript:\)/;
+    // Feed the exact line the old allow-list used. A probe built from the
+    // regex's own source would only ever prove the regex matches itself.
+    const OLD_ALLOW_LIST = "if (!/^(https?:|ftp:|file:|chrome:|javascript:)/i.test(newUrl)) {";
+    assert.match(OLD_ALLOW_LIST, legacy,
+        'the allow-list probe is invisible to the guard');
+    assert.doesNotMatch(src, legacy, 'a URL scheme allow-list came back');
+    assert.match(src, /chrome\.runtime\.lastError/,
+        'the editor no longer reports the API failure inside the panel');
+});
+
+test('the bookmark editor keeps the prompt() write path equivalent', () => {
+    // Replacing prompt() with an inline panel must not quietly change what a
+    // save does. Two regressions were flagged on the review of this PR:
+    //   1. the old title fallback was `data.title || data.url || ''` (a
+    //      title-less bookmark prefilled its URL); the panel used only
+    //      `data.title` and could write an empty title over a real bookmark;
+    //   2. a "no change -> silently close" shortcut skipped the success tail
+    //      (selection reset + list refresh) and gave the user no feedback.
+    // Keep both pinned so the editor stays a pure UI swap.
+    const src = stripJsComments(fs.readFileSync(path.join(CHROME_DIR, 'scripts/bookmark.js'), 'utf8'));
+    const body = functionBody(src, 'editBookmarkItem');
+
+    // Prefill and the save-time fallback both carry the full chain. A probe
+    // keeps a shortened chain (or a typo) from turning this green accidentally.
+    const chain = /data\.title\s*\|\|\s*data\.url\s*\|\|\s*''/;
+    // A shortened chain must NOT match: that is the regression this guard
+    // exists to catch. Matching a hand-written full chain only proved the
+    // regex matched a literal, nothing about production code.
+    const SHORTENED_CHAIN = "var newTitle = title.input.value.trim() || data.title || '';";
+    assert.doesNotMatch(SHORTENED_CHAIN, chain, 'the shortened chain is invisible to the guard');
+    const chainAll = new RegExp(chain.source, 'g');
+    assert.ok((body.match(chainAll) || []).length >= 2,
+        'the title fallback dropped the data.title || data.url || \'\' chain');
+
+    // Every save goes through update(); no early "unchanged" close that skips
+    // resetBookmarkSelectionState() / refreshBookmarkView().
+    assert.doesNotMatch(body, /newTitle\s*===\s*\(?\s*data\.title/,
+        'a no-change shortcut bypasses the update + refresh tail again');
+    assert.match(body,
+        /chrome\.bookmarks\.update\([\s\S]*?resetBookmarkSelectionState\(\)[\s\S]*?refreshBookmarkView\(\)/,
+        'the success tail no longer runs update, reset and refresh together');
+});
+
+test('the bookmark editor builds its fields/buttons through local helpers', () => {
+    // Review follow-up: the two labels+inputs and the two buttons were eight
+    // hand-assembled variables with the label/input and i18n work duplicated.
+    // Keep the two builders local to editBookmarkItem (one call site, no new
+    // cross-file abstraction) and keep returnLang() at the call site so a
+    // translated string can never silently become a hard-coded one.
+    const src = stripJsComments(fs.readFileSync(path.join(CHROME_DIR, 'scripts/bookmark.js'), 'utf8'));
+    const body = functionBody(src, 'editBookmarkItem');
+
+    assert.match(body, /function\s+field\s*\(/, 'the local field() builder is gone');
+    assert.match(body, /function\s+actionButton\s*\(/, 'the local actionButton() builder is gone');
+    assert.match(body, /field\(\s*returnLang\(\s*'editBookmarkTitleLabel'\s*\)/,
+        'the title field no longer asks for its translated label');
+    assert.match(body, /field\(\s*returnLang\(\s*'editBookmarkUrlLabel'\s*\)/,
+        'the URL field no longer asks for its translated label');
+    assert.match(body, /actionButton\(\s*returnLang\(\s*'save'\s*\)/,
+        'the save button no longer asks for its translated label');
+    assert.match(body, /actionButton\(\s*returnLang\(\s*'cancel'\s*\)/,
+        'the cancel button no longer asks for its translated label');
+
+    // field() itself must be the only place that builds a label by hand.
+    // A probe keeps the "no second assembly site" check from going green on
+    // a typo: add a stray createElement('label') outside field() and it turns
+    // red, while field()'s own (legitimate) call stays allowed.
+    const probe = "var label = createElement('label'); var input = createElement('input', { type: 'text' });";
+    assert.match(probe, /createElement\(\s*'label'\s*\)/,
+        'the hand-built-label probe is invisible');
+    const labelBuilds = (body.match(/createElement\(\s*'label'\s*\)/g) || []).length;
+    assert.equal(labelBuilds, 1,
+        'a label is assembled by hand outside the local field() builder');
+
+    // The helpers must stay inside this function, not become a module-level
+    // or cross-file abstraction (the review explicitly asked for local ones).
+    assert.doesNotMatch(src.slice(0, src.indexOf('function editBookmarkItem')),
+        /function\s+field\s*\(/, 'field() escaped editBookmarkItem');
+    assert.doesNotMatch(src.slice(0, src.indexOf('function editBookmarkItem')),
+        /function\s+actionButton\s*\(/, 'actionButton() escaped editBookmarkItem');
+});
+
+test('the bookmark editor keeps key presses from escaping the panel', () => {
+    // Review follow-up (bug): save/re-render removes the panel while a key is
+    // still on its propagation path. Enter/Escape must be consumed inside the
+    // panel so no half-detached key event reaches document.body afterwards.
+    const src = stripJsComments(fs.readFileSync(path.join(CHROME_DIR, 'scripts/bookmark.js'), 'utf8'));
+    const body = functionBody(src, 'editBookmarkItem');
+    const keydown = /panel\.addEventListener\(\s*'keydown'\s*,\s*function\s*\([\s\S]*?\}\s*\);/.exec(body);
+    assert.ok(keydown, 'the panel keydown handler is gone');
+
+    const handler = keydown[0];
+    assert.match(handler, /e\.key\s*===\s*'Escape'/, 'Escape is not handled');
+    assert.match(handler, /e\.key\s*===\s*'Enter'/, 'Enter is not handled');
+    assert.match(handler, /e\.stopPropagation\(\)/, 'the key press can still bubble out of the panel');
+    assert.match(handler, /e\.preventDefault\(\)/, 'the key press still triggers its default action');
+});
+
+test('the bookmark editor submits only once per panel', () => {
+    // Review follow-up (bug): chrome.bookmarks.update is async. Holding Enter
+    // repeats keydown and a double-click fires two clicks, so without a gate
+    // two update callbacks each run refreshBookmarkView() and their chunked
+    // redraws cancel each other. A failed save must stay retryable.
+    const src = stripJsComments(fs.readFileSync(path.join(CHROME_DIR, 'scripts/bookmark.js'), 'utf8'));
+    const body = functionBody(src, 'editBookmarkItem');
+
+    assert.match(body, /var\s+saving\s*=\s*false/, 'the one-shot saving gate is gone');
+    assert.match(body, /if\s*\(\s*saving\s*\)\s*return/, 'save can be re-entered');
+    assert.match(body, /saving\s*=\s*true/, 'save never arms the gate');
+    assert.match(body, /e\.key\s*===\s*'Enter'\s*&&\s*!e\.repeat/,
+        'key auto-repeat can still trigger save.click() on every frame');
+
+    // lastError must release the gate so the user can fix the URL and retry.
+    const lastError = /chrome\.runtime\.lastError[\s\S]*?error\.textContent/.exec(body);
+    assert.ok(lastError, 'the lastError branch is gone');
+    assert.match(lastError[0], /saving\s*=\s*false/,
+        'a failed save is not retryable');
+});
+
+test('the e2e loading stub verifies a loading-to-rows round trip', () => {
+    // Review follow-up (unverifiable): the old stub kept only the LAST
+    // chrome.history.search callback and never called it, so the asserted
+    // loading state came from a query that was permanently swallowed, with
+    // nothing after release proving rows were ever rendered. The stub must
+    // queue/count held callbacks, release them all, and then assert that the
+    // loading component is gone and real rows were drawn.
+    const spec = stripJsComments(fs.readFileSync(path.resolve(CHROME_DIR, '../e2e/pages.spec.mjs'), 'utf8'));
+    const testBlock = /test\('the linear pages render their loading and empty states[\s\S]*?\n\}\);/.exec(spec);
+    assert.ok(testBlock, 'the shared-status e2e case is gone');
+
+    const body = testBlock[0];
+    assert.doesNotMatch(body, /__releaseSearch/,
+        'the stub regressed to keeping only one swallowed callback');
+    assert.match(body, /__searchPending/, 'held callbacks are no longer queued');
+    assert.match(body, /__searchHeld/, 'held searches are no longer counted');
+    assert.match(body, /window\.__holdSearch\s*=\s*false/,
+        'the held callbacks are never released');
+    assert.match(body, /afterRelease\.rows\s*>\s*0/,
+        'the round trip does not assert that real rows were rendered after release');
+    assert.match(body, /afterRelease\.stillLoading,\s*false/,
+        'the round trip does not assert that loading disappeared');
+    assert.match(body, /loading\.held\s*>\s*0/,
+        'nothing proves a search was actually held to capture the loading state');
+
+    // Probe: the old single-callback shape must be rejected, otherwise this
+    // guard would pass an "always green" stub that never round-trips.
+    const probe = `chrome.history.search = (query, cb) => real(query, (items) => {
+        if (!window.__releaseSearch) window.__releaseSearch = () => cb(items);
+        else cb(items);
+    });`;
+    assert.match(probe, /__releaseSearch/, 'the regression probe is invisible');
+});

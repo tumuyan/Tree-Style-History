@@ -533,12 +533,6 @@
     "editBookmark": {
         "message": "编辑书签"
     },
-    "editBookmarkTitlePrompt": {
-        "message": "输入书签标题："
-    },
-    "editBookmarkUrlPrompt": {
-        "message": "输入书签地址："
-    },
     "deleteCacheTip": {
         "message": "清除缓存"
     },
@@ -565,6 +559,18 @@
     },
     "selectAll": {
         "message": "全选"
+    },
+    "editBookmarkTitleLabel": {
+        "message": "标题"
+    },
+    "editBookmarkUrlLabel": {
+        "message": "网址"
+    },
+    "save": {
+        "message": "保存"
+    },
+    "cancel": {
+        "message": "取消"
     }
 
 }

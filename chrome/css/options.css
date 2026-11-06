@@ -490,10 +490,6 @@ input[type="button"]:active {
         color: #fff  !important;
     }
 
-    .group-title-toggle {
-        background: url(../images/toggle2.png) no-repeat left center;
-    }
-
     #calendar #selected{
         color: #fff;
     }

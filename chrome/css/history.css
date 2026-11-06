@@ -2,6 +2,7 @@
    bottom only redefines these variables. The dark theme used to restyle each
    selector with its own !important rule, which is what this replaces. */
 :root {
+    --icon-ink: #5a6472;
     --row-odd-bg: #fff;
     --row-even-bg: #fafafa;
     --item-title-color: rgb(17, 85, 204);
@@ -259,18 +260,25 @@ input[type="text"]:focus {
 }
 
 .group-title-toggle {
-    background: url('../images/toggle.png') no-repeat left center;
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='12' viewBox='0 0 24 12'%3E%3Crect x='0.5' y='0.5' width='11' height='11' rx='2' fill='none' stroke='%238b96a5'/%3E%3Crect x='3.0' y='5' width='7' height='2' fill='%232f6fd0'/%3E%3Crect x='5.5' y='3' width='2' height='6' fill='%232f6fd0'/%3E%3Crect x='12.5' y='0.5' width='11' height='11' rx='2' fill='none' stroke='%238b96a5'/%3E%3Crect x='15.0' y='5' width='7' height='2' fill='%232f6fd0'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='12' viewBox='0 0 24 12'%3E%3Crect x='0.5' y='0.5' width='11' height='11' rx='2' fill='none' stroke='%238b96a5'/%3E%3Crect x='3.0' y='5' width='7' height='2' fill='%232f6fd0'/%3E%3Crect x='5.5' y='3' width='2' height='6' fill='%232f6fd0'/%3E%3Crect x='12.5' y='0.5' width='11' height='11' rx='2' fill='none' stroke='%238b96a5'/%3E%3Crect x='15.0' y='5' width='7' height='2' fill='%232f6fd0'/%3E%3C/svg%3E");
+    -webkit-mask-size: 200% 100%;
+    mask-size: 200% 100%;
+    -webkit-mask-position: left center;
+    mask-position: left center;
+    background-color: var(--icon-ink);
     display: block;
     height: 12px;
     width: 12px;
     grid-column: 1;
 }
 
-@media (-webkit-min-device-pixel-ratio: 1.5), (min-resolution: 144dpi) {
-    .group-title-toggle {
-        background-image: url('../images/toggle-@2x.png');
-        background-size: 200%;
-    }
+/* A collapsed group shows the plus half; an expanded one the minus half.
+   toggleGroup() flips this one attribute instead of writing an inline
+   backgroundPosition, so the icon follows the state in CSS on every theme. */
+.group-title-toggle[data-expanded="true"] {
+    -webkit-mask-position: right center;
+    mask-position: right center;
 }
 
 label.group-title-toggle-count {
@@ -302,9 +310,40 @@ label.group-title-toggle-count {
     color: var(--group-host-color);
 }
 
+/* One status component for both linear pages: loading while a chunked
+   render is in flight, empty when the query has no rows. The old code wrote
+   plain "Loading..." text and a bare .no-results div from six call sites. */
+.list-status {
+    align-items: center;
+    color: var(--group-host-color);
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    min-height: 48px;
+    padding: 16px 8px;
+}
+
+.list-status-spinner {
+    -webkit-animation: list-status-spin 0.8s linear infinite;
+    animation: list-status-spin 0.8s linear infinite;
+    border: 2px solid var(--bar-border-color);
+    border-top-color: var(--item-title-color);
+    border-radius: 50%;
+    box-sizing: border-box;
+    height: 16px;
+    width: 16px;
+}
+
+@-webkit-keyframes list-status-spin { to { -webkit-transform: rotate(360deg); } }
+@keyframes list-status-spin { to { transform: rotate(360deg); } }
+
 .no-results span {
     background: url('../images/remove.png') no-repeat left center;
     padding-left: 20px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .list-status-spinner { -webkit-animation: none; animation: none; }
 }
 
 #main-table {
@@ -370,16 +409,27 @@ label.group-title-toggle-count {
     width: 24px;
 }
 
+#rh-bar-group, #rh-bar-orderby, #rh-bar-order {
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-size: 200% 100%;
+    mask-size: 200% 100%;
+    background-color: var(--icon-ink);
+}
+
 #rh-bar-group {
-    background: url('../images/group-toggle.png') no-repeat left center;
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='17' viewBox='0 0 48 17'%3E%3Crect x='0.5' y='0.5' width='23.0' height='16' rx='2' fill='none' stroke='%238b96a5'/%3E%3Crect x='24.5' y='0.5' width='23.0' height='16' rx='2' fill='none' stroke='%238b96a5'/%3E%3Crect x='4.0' y='4' width='15.0' height='1.5' fill='%236b7280'/%3E%3Crect x='4.0' y='7' width='15.0' height='1.5' fill='%236b7280'/%3E%3Crect x='4.0' y='10' width='15.0' height='1.5' fill='%236b7280'/%3E%3Crect x='4.0' y='13' width='15.0' height='1.5' fill='%236b7280'/%3E%3Crect x='29' y='4' width='14' height='1.5' fill='%236b7280'/%3E%3Crect x='29' y='7' width='14' height='1.5' fill='%236b7280'/%3E%3Crect x='29' y='10' width='14' height='1.5' fill='%236b7280'/%3E%3Crect x='29' y='13' width='14' height='1.5' fill='%236b7280'/%3E%3Crect x='26' y='4' width='1.5' height='10' fill='%236b7280'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='17' viewBox='0 0 48 17'%3E%3Crect x='0.5' y='0.5' width='23.0' height='16' rx='2' fill='none' stroke='%238b96a5'/%3E%3Crect x='24.5' y='0.5' width='23.0' height='16' rx='2' fill='none' stroke='%238b96a5'/%3E%3Crect x='4.0' y='4' width='15.0' height='1.5' fill='%236b7280'/%3E%3Crect x='4.0' y='7' width='15.0' height='1.5' fill='%236b7280'/%3E%3Crect x='4.0' y='10' width='15.0' height='1.5' fill='%236b7280'/%3E%3Crect x='4.0' y='13' width='15.0' height='1.5' fill='%236b7280'/%3E%3Crect x='29' y='4' width='14' height='1.5' fill='%236b7280'/%3E%3Crect x='29' y='7' width='14' height='1.5' fill='%236b7280'/%3E%3Crect x='29' y='10' width='14' height='1.5' fill='%236b7280'/%3E%3Crect x='29' y='13' width='14' height='1.5' fill='%236b7280'/%3E%3Crect x='26' y='4' width='1.5' height='10' fill='%236b7280'/%3E%3C/svg%3E");
 }
 
 #rh-bar-orderby {
-    background: url('../images/orderby-toggle.png') no-repeat left center;
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='17' viewBox='0 0 48 17'%3E%3Crect x='0.5' y='0.5' width='23.0' height='16' rx='2' fill='none' stroke='%238b96a5'/%3E%3Ctext x='3.5' y='7.5' font-family='Arial' font-size='7' fill='%236b7280'%3EA%3C/text%3E%3Ctext x='3.5' y='14.5' font-family='Arial' font-size='7' fill='%236b7280'%3EB%3C/text%3E%3Crect x='11.0' y='5' width='11' height='1.5' fill='%236b7280'/%3E%3Crect x='11.0' y='11' width='11' height='1.5' fill='%236b7280'/%3E%3Crect x='24.5' y='0.5' width='23.0' height='16' rx='2' fill='none' stroke='%238b96a5'/%3E%3Ctext x='27.5' y='7.5' font-family='Arial' font-size='7' fill='%236b7280'%3E1%3C/text%3E%3Ctext x='27.5' y='14.5' font-family='Arial' font-size='7' fill='%236b7280'%3E2%3C/text%3E%3Crect x='35.0' y='5' width='11' height='1.5' fill='%236b7280'/%3E%3Crect x='35.0' y='11' width='11' height='1.5' fill='%236b7280'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='17' viewBox='0 0 48 17'%3E%3Crect x='0.5' y='0.5' width='23.0' height='16' rx='2' fill='none' stroke='%238b96a5'/%3E%3Ctext x='3.5' y='7.5' font-family='Arial' font-size='7' fill='%236b7280'%3EA%3C/text%3E%3Ctext x='3.5' y='14.5' font-family='Arial' font-size='7' fill='%236b7280'%3EB%3C/text%3E%3Crect x='11.0' y='5' width='11' height='1.5' fill='%236b7280'/%3E%3Crect x='11.0' y='11' width='11' height='1.5' fill='%236b7280'/%3E%3Crect x='24.5' y='0.5' width='23.0' height='16' rx='2' fill='none' stroke='%238b96a5'/%3E%3Ctext x='27.5' y='7.5' font-family='Arial' font-size='7' fill='%236b7280'%3E1%3C/text%3E%3Ctext x='27.5' y='14.5' font-family='Arial' font-size='7' fill='%236b7280'%3E2%3C/text%3E%3Crect x='35.0' y='5' width='11' height='1.5' fill='%236b7280'/%3E%3Crect x='35.0' y='11' width='11' height='1.5' fill='%236b7280'/%3E%3C/svg%3E");
 }
 
 #rh-bar-order {
-    background: url('../images/order-toggle.png') no-repeat left center;
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='17' viewBox='0 0 48 17'%3E%3Crect x='0.5' y='0.5' width='23.0' height='16' rx='2' fill='none' stroke='%238b96a5'/%3E%3Crect x='24.5' y='0.5' width='23.0' height='16' rx='2' fill='none' stroke='%238b96a5'/%3E%3Cpath d='M12 3 L16 9 L14 9 L14 14 L10 14 L10 9 L8 9 L8 9 Z' fill='%235a6472'/%3E%3Cpath d='M36 14 L40 8 L38 8 L38 3 L34 3 L34 8 L32 8 L32 8 Z' fill='%235a6472'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='17' viewBox='0 0 48 17'%3E%3Crect x='0.5' y='0.5' width='23.0' height='16' rx='2' fill='none' stroke='%238b96a5'/%3E%3Crect x='24.5' y='0.5' width='23.0' height='16' rx='2' fill='none' stroke='%238b96a5'/%3E%3Cpath d='M12 3 L16 9 L14 9 L14 14 L10 14 L10 9 L8 9 L8 9 Z' fill='%235a6472'/%3E%3Cpath d='M36 14 L40 8 L38 8 L38 3 L34 3 L34 8 L32 8 L32 8 Z' fill='%235a6472'/%3E%3C/svg%3E");
 }
 
 #rh-bar-group[role="button"]:focus-visible,
@@ -401,36 +451,22 @@ label.group-title-toggle-count {
     display: none;
 }
 
-@media (-webkit-min-device-pixel-ratio: 1.5), (min-resolution: 144dpi) {
-    #rh-bar-group {
-        background-image: url('../images/group-toggle-@2x.png');
-        background-size: 200%;
-    }
-    #rh-bar-orderby {
-        background-image: url('../images/orderby-toggle-@2x.png');
-        background-size: 200%;
-    }
-    #rh-bar-order {
-        background-image: url('../images/order-toggle-@2x.png');
-        background-size: 200%;
-    }
-}
-
-/* The two icons live in one sprite (left/right half). The old page scripts
-   flipped `style.backgroundPosition` from six places; the state now lives on
-   the element and the visual rule lives here. It sits AFTER the retina rules
-   on purpose: those used to redeclare the whole `background` shorthand and
-   silently reset the position back to `left center` on high-DPI screens. */
+/* Each icon is one inline SVG mask with two states (left/right half of the
+   same image). These rules must sit AFTER the base `mask-image` declarations
+   above so they win on `mask-position`; the page scripts only flip the
+   `data-state` attribute, never an inline style. */
 #rh-bar a[data-state="yes"],
 #rh-bar a[data-state="date"],
 #rh-bar a[data-state="desc"] {
-    background-position: left center;
+    -webkit-mask-position: left center;
+    mask-position: left center;
 }
 
 #rh-bar a[data-state="no"],
 #rh-bar a[data-state="title"],
 #rh-bar a[data-state="asc"] {
-    background-position: right center;
+    -webkit-mask-position: right center;
+    mask-position: right center;
 }
 
 #rh-clear-search {
@@ -480,11 +516,13 @@ label.group-title-toggle-count {
 }
 
 #calendar #delete-range-toggle-button {
-    background-position: left top;
+    -webkit-mask-position: left center;
+    mask-position: left center;
 }
 
 .linear-view #calendar[data-expanded="true"] #delete-range-toggle-button {
-    background-position: right top;
+    -webkit-mask-position: right center;
+    mask-position: right center;
 }
 
 #calendar {
@@ -521,19 +559,17 @@ label.group-title-toggle-count {
 #calendar #delete-range-toggle-button {
     display: block;
     position: absolute;
-    background-image: url('../images/drtb.png');
-    background-repeat: no-repeat;
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='34' height='35' viewBox='0 0 34 35'%3E%3Crect x='0.5' y='0.5' width='16' height='34' rx='2' fill='none' stroke='%23b9c0c9'/%3E%3Cpath d='M11 10 L6 17.5 L11 25' fill='none' stroke='%235a6472' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3Crect x='17.5' y='0.5' width='16' height='34' rx='2' fill='none' stroke='%23b9c0c9'/%3E%3Cpath d='M23 10 L28 17.5 L23 25' fill='none' stroke='%235a6472' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='34' height='35' viewBox='0 0 34 35'%3E%3Crect x='0.5' y='0.5' width='16' height='34' rx='2' fill='none' stroke='%23b9c0c9'/%3E%3Cpath d='M11 10 L6 17.5 L11 25' fill='none' stroke='%235a6472' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3Crect x='17.5' y='0.5' width='16' height='34' rx='2' fill='none' stroke='%23b9c0c9'/%3E%3Cpath d='M23 10 L28 17.5 L23 25' fill='none' stroke='%235a6472' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-size: 200% 100%;
+    mask-size: 200% 100%;
+    background-color: var(--icon-ink);
     width: 17px;
     height: 35px;
     left: -1px;
     bottom: 10px;
-}
-
-@media (-webkit-min-device-pixel-ratio: 1.5), (min-resolution: 144dpi) {
-    #calendar #delete-range-toggle-button {
-        background-image: url('../images/drtb-@2x.png');
-        background-size: 200%;
-    }
 }
 
 #calendar #calendar-table {
@@ -741,6 +777,7 @@ div[rel="grey"] {
         --item-title-color: #fff;
         --group-host-color: burlywood;
         --bar-border-color: #666;
+        --icon-ink: #c9d2de;
     }
     /* Two structural rules, not theme colours: the main view flattens its
        zebra stripes and a hovered row gets a highlight. Both outrank
@@ -791,9 +828,6 @@ div[rel="grey"] {
         background-color: rgb(128, 128, 128);
         background-image: none;
         color: #fff;
-    }
-    .group-title-toggle {
-        background: url(../images/toggle2.png) no-repeat left center;
     }
     #calendar #selected {
         color: #fff;
@@ -856,3 +890,45 @@ div[rel="grey"] {
 
 
 }
+/* Bookmark edit: a light inline panel, replacing two native prompt() boxes.
+   It is inserted at the top of the active view container, so it follows the
+   list instead of covering it and needs no overlay/z-index stack. */
+.bookmark-edit {
+    align-items: flex-end;
+    border: 1px solid var(--bar-border-color);
+    border-radius: 3px;
+    box-sizing: border-box;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 8px 0;
+    padding: 10px;
+    width: 100%;
+}
+
+.bookmark-edit label {
+    display: flex;
+    flex: 1 1 220px;
+    flex-direction: column;
+    gap: 4px;
+    color: var(--group-host-color);
+    font-weight: bold;
+}
+
+.bookmark-edit input[type="text"] {
+    box-sizing: border-box;
+    width: 100%;
+}
+
+.bookmark-edit-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.bookmark-edit-error {
+    color: #c0392b;
+    flex: 1 1 100%;
+    min-height: 0;
+}
+
+.bookmark-edit-error:empty { display: none; }

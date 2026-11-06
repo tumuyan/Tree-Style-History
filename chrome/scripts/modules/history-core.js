@@ -11,6 +11,7 @@ import { filtUrl } from './config.js';
 import { save_calendar_storage2, dayKey } from './shared/calendar-storage.js';
 import { paintSelectedDay } from './calendar-colors.js';
 import { modifierState, ITEM_SELECTED_COLOR, RENDER_BUDGET_MS } from './ui-state.js';
+import { showLoading, showNoResults } from './list-status.js';
 
 // Module-level variables
 var selectedItem;
@@ -66,7 +67,7 @@ function finishEmptyDay(into) {
         $('calendar-total-value').textContent = '0';
         paintSelectedDay(0);
     }
-    $(into).innerHTML = '<div class="no-results"><span>' + returnLang('noResults') + '</span></div>';
+    showNoResults(into);
 }
 
 function history(w, q) {
@@ -126,7 +127,7 @@ function history(w, q) {
         $('rh-views-insert').style.display = 'none';
     }
 
-    $(into).textContent = returnLang('loading');
+    showLoading(into);
 
     chrome.history.search(obj, function (hi) {
 
@@ -436,10 +437,10 @@ function toggleGroup(host) {
         var tgdv = tgde.style.display;
         if (tgdv == 'block') {
             tgde.style.display = 'none';
-            tgda.style.backgroundPosition = 'left center';
+            tgda.setAttribute('data-expanded', 'false');
         } else {
             tgde.style.display = 'block';
-            tgda.style.backgroundPosition = 'right center';
+            tgda.setAttribute('data-expanded', 'true');
         }
     } else {
         // Reached when the group is not in the DOM: the render loop was

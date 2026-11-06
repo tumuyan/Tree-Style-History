@@ -14,6 +14,7 @@ import { toggleGroup, getMoreItems, alertLoadingHistory, clearRowColor, groupTit
 import { modifierState, ITEM_SELECTED_COLOR, RENDER_BUDGET_MS } from './modules/ui-state.js';
 import { initPage } from './modules/page-init.js';
 import { initSortBar } from './modules/sort-bar.js';
+import { showLoading, showNoResults } from './modules/list-status.js';
 
 initPage();
 
@@ -357,7 +358,7 @@ document.addEventListener('DOMContentLoaded', function () {
             $('rh-search').value = '';
         }
 
-        $(into).textContent = returnLang('loading');
+        showLoading(into);
 
         /*  可以进行排序的内容有：
                 按照网站分组
@@ -376,23 +377,9 @@ document.addEventListener('DOMContentLoaded', function () {
                     //            alertLoadingHistory(true);
                 } else {
                     // $('calendar-total-value').set('text', '0');
-                    $(into).innerHTML = '<div class="no-results"><span>' + returnLang('noResults') + '</span></div>';
+                    showNoResults(into);
                 }
             })
-
-            /* 
-                        chrome.bookmarks.getRecent(10000, function (hi) {
-                            // console.log(hi);
-            
-                            if (hi.length > 0) {
-                                showData(hi,into);
-                                //            alertLoadingHistory(true);
-                            } else {
-                                // $('calendar-total-value').set('text', '0');
-                                $(into).set('html', '<div class="no-results"><span>' + returnLang('noResults') + '</span></div>');
-                            }
-            
-                        }); */
 
         } else {
             chrome.bookmarks.search(q, (hi) => {
@@ -401,7 +388,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (hi.length > 0) {
                     showData(hi, into);
                 } else {
-                    $(into).innerHTML = '<div class="no-results"><span>' + returnLang('noResults') + '</span></div>';
+                    showNoResults(into);
                 }
 
             })
@@ -771,7 +758,7 @@ document.addEventListener('DOMContentLoaded', function () {
         } else {
             alertLoadingHistory(true);
             // $('calendar-total-value').set('text', '0');
-            $(into).innerHTML = '<div class="no-results"><span>' + returnLang('noResults') + '</span></div>';
+            showNoResults(into);
         }
 
     }
@@ -864,48 +851,92 @@ document.addEventListener('DOMContentLoaded', function () {
     function editBookmarkItem() {
         var containerSelector = getBookmarkContainerSelector();
         var checkedItems = $$(containerSelector + ' .chkbx:checked');
-
-        if (checkedItems.length !== 1) {
-            return;
-        }
+        if (checkedItems.length !== 1) return;
 
         var data = getBookmarkDataFromCheckbox(checkedItems[0]);
-        if (!data || !data.id) {
-            return;
+        if (!data || !data.id) return;
+
+        // Only one editor at a time: clicking "Edit" again shouldn't stack
+        // panels or leave a stale one bound to a row that has been re-rendered.
+        var previous = document.querySelector('.bookmark-edit');
+        if (previous) previous.remove();
+
+        // Local builders: the two fields and the two buttons used to be eight
+        // hand-assembled variables with the label/input and i18n work repeated.
+        // They take already-translated text so returnLang() stays at the call
+        // site and the helpers stay free of i18n concerns.
+        function field(labelText, value) {
+            var label = createElement('label');
+            label.appendChild(document.createTextNode(labelText));
+            var input = createElement('input', { type: 'text', 'aria-label': labelText });
+            input.value = value;
+            label.appendChild(input);
+            return { label: label, input: input };
         }
 
-        var currentTitle = data.title || data.url || '';
-        var currentUrl = data.url || '';
-
-        var newTitle = prompt(returnLang('editBookmarkTitlePrompt'), currentTitle);
-        if (newTitle === null) {
-            return;
-        }
-        newTitle = newTitle.trim();
-        if (newTitle === '') {
-            newTitle = currentTitle;
+        function actionButton(text) {
+            var button = createElement('input', { type: 'button', 'class': 'button' });
+            button.value = text;
+            return button;
         }
 
-        var newUrl = prompt(returnLang('editBookmarkUrlPrompt'), currentUrl);
-        if (newUrl === null) {
-            return;
-        }
-        newUrl = newUrl.trim();
-        if (newUrl === '') {
-            newUrl = currentUrl;
-        }
+        var panel = createElement('div', { 'class': 'bookmark-edit' });
+        var title = field(returnLang('editBookmarkTitleLabel'), data.title || data.url || '');
+        var url = field(returnLang('editBookmarkUrlLabel'), data.url || '');
+        var actions = createElement('div', { 'class': 'bookmark-edit-actions' });
+        var save = actionButton(returnLang('save'));
+        var cancel = actionButton(returnLang('cancel'));
+        var error = createElement('div', { 'class': 'bookmark-edit-error', role: 'alert' });
 
-        if (newTitle === currentTitle && newUrl === currentUrl) {
-            return;
-        }
+        actions.appendChild(save);
+        actions.appendChild(cancel);
+        panel.appendChild(title.label);
+        panel.appendChild(url.label);
+        panel.appendChild(actions);
+        panel.appendChild(error);
 
-        chrome.bookmarks.update(data.id, { title: newTitle, url: newUrl }, function () {
-            if (chrome.runtime.lastError) {
-                alert('Error updating bookmark: ' + chrome.runtime.lastError.message);
-                return;
+        var container = document.querySelector(containerSelector);
+        if (!container) return;
+        container.insertBefore(panel, container.firstChild);
+        title.input.focus();
+
+        // One submit at a time: holding Enter repeats keydown every frame,
+        // and a double-click would otherwise fire two async updates whose
+        // refreshBookmarkView() tails cancel each other's chunked redraw.
+        var saving = false;
+
+        cancel.addEventListener('click', function () { panel.remove(); });
+        panel.addEventListener('keydown', function (e) {
+            // Saving/re-rendering removes the panel while a key press is still
+            // on its propagation path. Keep Enter/Escape inside the panel so
+            // no half-detached key event reaches document.body afterwards.
+            if (e.key === 'Escape' || e.key === 'Enter') {
+                e.preventDefault();
+                e.stopPropagation();
             }
-            resetBookmarkSelectionState();
-            refreshBookmarkView();
+            if (e.key === 'Escape') { panel.remove(); }
+            if (e.key === 'Enter' && !e.repeat) { save.click(); }
+        });
+
+        save.addEventListener('click', function () {
+            if (saving) return;
+            saving = true;
+            // Keep the old prompt() editor's fallback chain: a bookmark with no
+            // title used to prefill its URL and could be saved unchanged. Save
+            // always goes through update + the same success tail, so a click
+            // with no edits still closes the panel and refreshes the list.
+            var newTitle = title.input.value.trim() || data.title || data.url || '';
+            var newUrl = url.input.value.trim() || data.url || '';
+            chrome.bookmarks.update(data.id, { title: newTitle, url: newUrl }, function () {
+                if (chrome.runtime.lastError) {
+                    saving = false; // a failed save stays retryable
+                    error.textContent = chrome.runtime.lastError.message;
+                    return;
+                }
+                panel.remove();
+                resetBookmarkSelectionState();
+                refreshBookmarkView();
+            });
         });
     }
 
