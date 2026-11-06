@@ -2172,3 +2172,348 @@ test('bookmark editor fields come from local helpers and Enter is consumed insid
         }
     }
 });
+
+// ---------------------------------------------------------------------------
+// Core interactions (issue #38, item 8). Real data through dbManager, so the
+// loop under test is the shipped one. Offline, a real popup lands on
+// chrome-error://chromewebdata/, so `window.open` is stubbed to record its
+// arguments; commands are dispatched in the worker realm, where the MV3
+// onCommand listener actually lives.
+// ---------------------------------------------------------------------------
+
+// Fresh keys keep each case independent: a crawl pass can putVisitItem() at
+// any moment, and cleanup deletes by key. ReferringVisitId makes a child row
+// (foldable branch); seedKeys() stays clear of chrome.history's string ids.
+let nextSeedKey = 2_000_000_000;
+function seedKeys(count) {
+    const keys = Array.from({ length: count }, (_, i) => nextSeedKey + i);
+    nextSeedKey += count;
+    return keys;
+}
+
+/** Every row's text/title/switch state, in DOM order (used to report a dead tree). */
+function treeRows(page) {
+    return page.evaluate(() => [...document.querySelectorAll('#treeDemo li[data-tid]')].map((li) => {
+        const sw = li.querySelector('span.switch');
+        const ul = li.querySelector('ul');
+        return {
+            text: li.querySelector('a')?.textContent ?? '',
+            title: li.querySelector('a')?.getAttribute('title') ?? '',
+            switchClass: sw ? sw.className : '',
+            childList: ul ? ul.style.display : null,
+        };
+    }));
+}
+
+// Put a parent/child pair into `VisitItem` (the tree pages read that store,
+// not chrome.history). `rh-filtered` must be false or an inherited filter
+// list drops both rows. Returns the seeded rows' URLs, ids and a cleanup().
+// `withUnrelated` adds a third root so a filter that never ran is detectable.
+async function seedTreeVisits(page, tag, withUnrelated = false) {
+    await page.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: 'load' });
+    await settle(page);
+    const [parentId, childId, unrelatedId] = seedKeys(withUnrelated ? 3 : 2);
+    const seeded = await page.evaluate(async ({ t, withUnrelated, parentId, childId, unrelatedId }) => {
+        await window.storageAdapter.ready();
+        localStorage['rh-filtered'] = 'false';
+        localStorage['less-item'] = 'no';
+        const parent = `https://${t}-parent.test/page`;
+        const child = `https://${t}-child.test/page`;
+        const base = Date.now();
+        const rows = [
+            { visitId: parentId, referringVisitId: 0, url: parent, title: `${t} PARENT`, visitTime: base - 120000, transition: 'link' },
+            { visitId: childId, referringVisitId: parentId, url: child, title: `${t} CHILD`, visitTime: base - 60000, transition: 'link' },
+        ];
+        if (withUnrelated) {
+            rows.push({
+                visitId: unrelatedId, referringVisitId: 0,
+                url: `https://${t}-unrelated.test/page`, title: `${t} UNRELATED`,
+                visitTime: base - 30000, transition: 'link',
+            });
+        }
+        await Promise.all(rows.map((r) => window.dbManager.putVisitItem(r)));
+        return { parent, child, ids: rows.map((r) => r.visitId) };
+    }, { t: tag, withUnrelated, parentId, childId, unrelatedId });
+    return {
+        ...seeded,
+        cleanup: () => page.evaluate((ids) => Promise.all(
+            ids.map((id) => window.dbManager.deleteVisitItem(id)),
+        ), seeded.ids),
+    };
+}
+
+// Two closed tabs sharing one `oid` make closed.html draw a group row with
+// two page children. dbManager has no deleteClosedTab(), so cleanup uses a
+// readwrite transaction on the same store (see putClosedTab).
+async function seedClosedGroup(page, tag) {
+    await page.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: 'load' });
+    await settle(page);
+    const [aId, bId, groupOid] = seedKeys(3);
+    const seeded = await page.evaluate(async ({ t, aId, bId, groupOid }) => {
+        await window.storageAdapter.ready();
+        localStorage['rh-filtered'] = 'false';
+        const a = `https://${t}-group-a.test/1`;
+        const b = `https://${t}-group-b.test/2`;
+        const base = Date.now();
+        const rows = [
+            { id: aId, oid: groupOid, url: a, title: `${t} GROUP A`, closeTime: base - 120000, close: 0 },
+            { id: bId, oid: groupOid, url: b, title: `${t} GROUP B`, closeTime: base - 119000, close: 0 },
+        ];
+        await Promise.all(rows.map((r) => window.dbManager.putClosedTab(r)));
+        return { a, b, ids: rows.map((r) => r.id) };
+    }, { t: tag, aId, bId, groupOid });
+    return {
+        ...seeded,
+        cleanup: () => page.evaluate((ids) => new Promise((resolve, reject) => {
+            const tx = window.dbManager.db.transaction(['closed'], 'readwrite');
+            const store = tx.objectStore('closed');
+            for (const id of ids) store.delete(id);
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+        }), seeded.ids),
+    };
+}
+
+// Stub `window.open` in a page: `urls()` reads the recorded calls, `restore()`
+// puts the original back. Both are page.evaluate calls on an open page.
+async function recordWindowOpen(page) {
+    await page.evaluate(() => {
+        window.__opened = [];
+        window.__restoreOpen = window.open;
+        window.open = (url, target) => {
+            window.__opened.push({ url, target });
+            return null;
+        };
+    });
+    return {
+        urls: () => page.evaluate(() => window.__opened.map((o) => o.url)),
+        restore: () => page.evaluate(() => { window.open = window.__restoreOpen; }),
+    };
+}
+
+test('clicking a tree row opens its URL, and the switch folds and unfolds the branch', { skip: SKIP }, async () => {
+    // createTree() wires both the click and the collapse/expand through one
+    // delegated listener on the container — a regression there kills the tree
+    // silently, with no exception and no log.
+    const tag = `tree-click-${Date.now()}`;
+    const seed = await context.newPage();
+    const s = await seedTreeVisits(seed, tag);
+
+    const page = await context.newPage();
+    const { jsErrors, netErrors } = collectErrors(page);
+    let open;
+    try {
+        await page.goto(`chrome-extension://${extensionId}/history2.html`, { waitUntil: 'load' });
+        await settle(page);
+        open = await recordWindowOpen(page);
+
+        // `:scope >` is required: an unscoped descendant match also hits the
+        // parent li, whose <ul> contains the child's <a>.
+        const rows = page.locator('#treeDemo li[data-tid]');
+        const parentRow = rows.filter({ has: page.locator(`:scope > a[title="${s.parent}"]`) });
+        const childRow = rows.filter({ has: page.locator(`:scope > a[title="${s.child}"]`) });
+        const parentSwitch = parentRow.locator(':scope > span.switch');
+        assert.equal(await parentRow.count(), 1, 'the seeded parent did not render');
+        assert.equal(await childRow.count(), 1, 'the seeded child did not render');
+        assert.equal(await parentRow.locator(':scope > ul').count(), 1,
+            'the parent has no child list — the case has nothing to fold');
+        assert.equal(await parentRow.locator(':scope > ul').evaluate((ul) => ul.style.display), 'block',
+            'the parent started folded — the case has nothing to fold');
+        assert.match(await parentSwitch.getAttribute('class'), /root_open/,
+            'the parent switch is not drawn as an open branch');
+
+        await childRow.locator(':scope > a').click();
+        assert.deepEqual(await open.urls(), [s.child],
+            'the click opened the wrong URL — the row is not mapped back to its node');
+
+        await parentSwitch.click();
+        assert.equal(await parentRow.locator(':scope > ul').evaluate((ul) => ul.style.display), 'none',
+            'the switch did not hide the child list');
+        assert.match(await parentSwitch.getAttribute('class'), /root_close/,
+            'the switch icon did not follow the folded state');
+        assert.equal(await childRow.count(), 1,
+            'folding must hide the child with CSS, not drop it from the data');
+        assert.deepEqual(await open.urls(), [s.child], 'folding a branch must not navigate');
+
+        await parentSwitch.click();
+        assert.equal(await parentRow.locator(':scope > ul').evaluate((ul) => ul.style.display), 'block',
+            'the switch did not restore the child list');
+        assert.match(await parentSwitch.getAttribute('class'), /root_open/,
+            'the switch icon did not follow the unfolded state');
+
+        await parentRow.locator(':scope > a').click();
+        assert.deepEqual(await open.urls(), [s.child, s.parent],
+            'each row must open its own URL');
+
+        assert.deepEqual(jsErrors, [], `the tree interaction threw (${netErrors.length} network error(s) ignored)`);
+    } finally {
+        if (open) await open.restore();
+        await page.close();
+        await s.cleanup();
+        await seed.close();
+    }
+});
+
+test('the tree filter keeps the ancestor chain and highlights only the match', { skip: SKIP }, async () => {
+    // bindTreeSearch() debounces 500ms, then treeHtml() filters by keyword and
+    // keeps every ancestor of a hit. Neither the debounce nor the ancestor
+    // rule is exercised by a page that merely opens.
+    const tag = `tree-filter-${Date.now()}`;
+    const seed = await context.newPage();
+    const s = await seedTreeVisits(seed, tag, true);
+
+    const page = await context.newPage();
+    const { jsErrors, netErrors } = collectErrors(page);
+    try {
+        await page.goto(`chrome-extension://${extensionId}/history2.html`, { waitUntil: 'load' });
+        await settle(page);
+
+        // Scope every assertion to this case's tag: the shared context holds
+        // other VisitItem rows from the crawl cases above.
+        const unfiltered = await treeRows(page);
+        assert.equal(unfiltered.filter((r) => r.text.includes(tag)).length, 3,
+            'the seed must draw the pair plus one unrelated root');
+
+        // Wait for the tree to CHANGE, not for the row's text: the unfiltered
+        // tree already shows the matching title, so a text-based wait returns
+        // immediately and catches the pre-debounce tree with no highlight.
+        await page.fill('#rh-search', `${tag} CHILD`);
+        const filteredInTime = await page.waitForFunction(
+            (t) => {
+                const rows = [...document.querySelectorAll('#treeDemo li[data-tid]')];
+                const mine = rows.filter((li) => (li.textContent || '').includes(t));
+                return mine.length === 2
+                    && document.querySelectorAll('#treeDemo span[style*="darkred"]').length > 0;
+            },
+            tag,
+            { timeout: 5000 },
+        ).then(() => true, () => false);
+        if (!filteredInTime) {
+            const dead = await treeRows(page);
+            assert.fail(`the filter never produced a filtered, highlighted tree (rows: ${JSON.stringify(dead)})`);
+        }
+
+        const shape = await page.evaluate((t) => {
+            const rows = [...document.querySelectorAll('#treeDemo li[data-tid]')];
+            const mine = rows.filter((li) => (li.textContent || '').includes(t));
+            return {
+                texts: mine.map((li) => li.querySelector('a')?.textContent ?? ''),
+                highlights: [...document.querySelectorAll('#treeDemo span[style*="darkred"]')]
+                    .map((s) => s.textContent),
+                parentKept: mine.some((li) => (li.textContent || '').includes(`${t} PARENT`)),
+                childKept: mine.some((li) => (li.textContent || '').includes(`${t} CHILD`)),
+                unrelatedKept: mine.some((li) => (li.textContent || '').includes('UNRELATED')),
+            };
+        }, tag);
+
+        assert.equal(shape.texts.length, 2,
+            'the filter must keep the match AND its ancestor, and drop the unrelated root');
+        assert.equal(shape.parentKept, true, 'the ancestor chain of the match was dropped');
+        assert.equal(shape.childKept, true, 'the matching row itself was dropped');
+        assert.equal(shape.unrelatedKept, false,
+            'a row that matches nothing must be filtered out — the filter never ran');
+        assert.deepEqual(shape.highlights, [`${tag} CHILD`],
+            'only the typed keyword may be highlighted, on the matching row');
+        assert.deepEqual(jsErrors, [], `the filter threw (${netErrors.length} network error(s) ignored)`);
+    } finally {
+        await page.close();
+        await s.cleanup();
+        await seed.close();
+    }
+});
+
+test('clicking a closed-tab group reopens every page under it', { skip: SKIP }, async () => {
+    // onClickNodeUrl() walks tree.childrenOf() and opens every page below a
+    // group — it used to walk freshly drawn <a href="#"> elements, which a
+    // re-render broke. No other suite clicks a group at all.
+    const tag = `closed-group-${Date.now()}`;
+    const seed = await context.newPage();
+    const s = await seedClosedGroup(seed, tag);
+
+    const page = await context.newPage();
+    const { jsErrors, netErrors } = collectErrors(page);
+    let open;
+    try {
+        await page.goto(`chrome-extension://${extensionId}/closed.html`, { waitUntil: 'load' });
+        await settle(page);
+        open = await recordWindowOpen(page);
+
+        const group = page.locator('#treeDemo li[data-tid]:has(ul)')
+            .filter({ has: page.locator(`a[title="${s.a}"]`) })
+            .first();
+        assert.equal(await group.count(), 1, 'the seeded session group did not render');
+        // `:scope > a` is the group's OWN row; its children's <a> elements
+        // carry real URLs in their title.
+        const groupTitle = await group.locator(':scope > a').getAttribute('title');
+        assert.equal(/^https?:/.test(groupTitle), false,
+            'the group row must carry a label, not a URL');
+
+        await group.locator(':scope > a').click();
+        const urls = await open.urls();
+        assert.deepEqual(urls.slice().sort(), [s.a, s.b].sort(),
+            'the group did not reopen exactly the two pages under it');
+        assert.equal(urls.length, 2, 'a group click must open every child once, not more');
+        assert.deepEqual(jsErrors, [], `the group click threw (${netErrors.length} network error(s) ignored)`);
+    } finally {
+        if (open) await open.restore();
+        await page.close();
+        await s.cleanup();
+        await seed.close();
+    }
+});
+
+test('a keyboard shortcut opens its page through the service worker listener', { skip: SKIP }, async () => {
+    // dispatch() fires the registered listener rather than calling the handler
+    // directly — the same path a real key press takes — and must run in the
+    // worker realm, where MV3 registers onCommand. All four mappings are
+    // asserted because the handler is a chain of `if`s.
+    const sw = context.serviceWorkers()[0];
+    assert.ok(sw, 'the service worker must be up to receive commands');
+
+    const commands = [
+        ['open_history2', 'history2.html'],
+        ['open_history1', 'history.html'],
+        ['open_closed', 'closed.html'],
+        ['open_bookmark', 'bookmark.html'],
+    ];
+    const isCasePage = (url) => commands.some(([, file]) => url.endsWith(`/${file}`));
+    const urlOf = (p) => {
+        try { return p.isClosed() ? '' : p.url(); } catch { return ''; }
+    };
+
+    // Keep PAGE OBJECTS, not URL strings: a URL snapshot stays green even if
+    // a handler creates a tab and immediately removes it.
+    const opened = [];
+    const onPage = (p) => opened.push(p);
+    context.on('page', onPage);
+    try {
+        const registered = await sw.evaluate(() => chrome.commands.onCommand.hasListeners());
+        assert.equal(registered, true, 'the worker has no onCommand listener registered');
+
+        for (const [command] of commands) {
+            await sw.evaluate((c) => chrome.commands.onCommand.dispatch(c), command);
+        }
+
+        // tabs.create() and navigation are both async in the worker; poll for
+        // the four live pages instead of a fixed sleep.
+        const deadline = Date.now() + 10000;
+        let live = [];
+        do {
+            live = opened.filter((p) => isCasePage(urlOf(p)));
+            if (commands.every(([, file]) => live.some((p) => urlOf(p).endsWith(`/${file}`)))) break;
+            await new Promise((resolve) => setTimeout(resolve, 100));
+        } while (Date.now() < deadline);
+
+        for (const [command, file] of commands) {
+            assert.ok(
+                live.some((p) => urlOf(p).endsWith(`/${file}`)),
+                `${command} did not leave ${file} open (opened: ${JSON.stringify(opened.map(urlOf))})`,
+            );
+        }
+    } finally {
+        context.off('page', onPage);
+        for (const p of opened.slice()) {
+            if (!p.isClosed()) await p.close().catch(() => {});
+        }
+    }
+});

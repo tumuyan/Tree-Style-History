@@ -2,8 +2,9 @@ include:
   # AI 自动评审模板，其中已带 runner.cpus: 2
   - https://cnb.cool/v5.0/temple/-/blob/main/.pipeline-ai-review.yml
 # 云原生开发环境：带 noVNC 桌面，用来人工验收浏览器扩展。
-# 本仓库本体是 MV3 扩展，`npm run test:e2e` 只能证明「页面没抛错」，
-# 证明不了「树渲染 / favicon 降级 / 小书签点击」这些要人眼+鼠标的事；之前只能靠本地浏览器。
+# 本仓库本体是 MV3 扩展，`npm run test:e2e` 除了证明文件「没抛错」，
+# 现在也覆盖了树展开/折叠、点击跳转、筛选、分组批量打开、快捷键这些核心交互；
+# favicon 降级与小书签点击仍需人眼+鼠标验收（浏览器手势与商店策略），见 CODEBUDDY.md。
 #
 # 进入环境后：WebIDE 的 PORTS 面板点 3001（或终端 open-here）即得到完整桌面；
 # 桌面里的 Chromium **已经自动带上了本仓库的扩展**（下面的 stages 会跑
