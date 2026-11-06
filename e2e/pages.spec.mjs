@@ -1329,3 +1329,160 @@ test('options.html?p=<unknown tab> falls back instead of killing the page', { sk
         assert.equal(shape.optionsTabCurrent, true, `?p=${p}: must mark the options tab current`);
     }
 });
+
+test('the linear pages drive their sort toolbar through data-state', { skip: SKIP }, async () => {
+    // The unit suite proves the module's state machine with a DOM shim; only a
+    // real browser proves the CSS rule actually picks the right half of the
+    // sprite. Both linear pages share the toolbar, so one of them is enough to
+    // pin the wiring and the other is covered by the static guard.
+    const page = await context.newPage();
+    const { jsErrors, netErrors } = collectErrors(page);
+    await page.goto(`chrome-extension://${extensionId}/history.html`, { waitUntil: 'load' });
+    await settle(page);
+
+    const before = await page.evaluate(() => {
+        const el = document.getElementById('rh-bar-group');
+        return {
+            state: el.getAttribute('data-state'),
+            position: getComputedStyle(el).backgroundPosition,
+            label: el.getAttribute('aria-label'),
+            bound: el.getAttribute('data-sortbar-bound'),
+        };
+    });
+    assert.ok(before.state, 'the toolbar painted no data-state on load');
+    assert.equal(before.bound, '1', 'initSortBar did not bind the button');
+    assert.ok(before.label && before.label.length > 0, 'the button has no accessible label');
+
+    await page.click('#rh-bar-group');
+    // `a { transition: all 0.2s linear }` animates background-position too:
+    // reading the computed value immediately catches it mid-transition (a
+    // percentage between 0% and 100%), not the state the CSS rule settles on.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    const after = await page.evaluate(() => {
+        const el = document.getElementById('rh-bar-group');
+        return {
+            state: el.getAttribute('data-state'),
+            position: getComputedStyle(el).backgroundPosition,
+            stored: localStorage['rh-group'],
+        };
+    });
+    await page.close();
+
+    assert.deepEqual(jsErrors, [],
+        `the toolbar threw on click (${netErrors.length} network error(s) ignored)`);
+    assert.notEqual(after.state, before.state, 'a click did not change the button state');
+    assert.equal(after.stored, after.state, 'the painted state disagrees with the stored key');
+    assert.notEqual(after.position, before.position,
+        `CSS did not move the sprite: before=${JSON.stringify(before)} after=${JSON.stringify(after)}`);
+});
+
+test('bookmark.html re-renders its list when the toolbar is clicked on the initial view', { skip: SKIP }, async () => {
+    // Review on PR #42: the shared toolbar used getActiveHistory() for BOTH
+    // pages. bookmark.html's containers start with no inline `style.display`
+    // (history.css gives them `inline` / `none`), so that detector answered
+    // undefined and a click changed localStorage + the button state while the
+    // list itself was never re-rendered. The page now passes its own
+    // getActiveBookmark() and refreshActive() falls back to the full view.
+    //
+    // This is the real-browser proof: seed a bookmark, open the page, RESET the
+    // containers to the raw CSS state (the initial render has already written
+    // inline `display: block`), click a toolbar button, and assert the render
+    // loop ran again. bookmark() sets `display: block` at the top of a render;
+    // a page that only paints the button leaves the inline style empty.
+    const TITLE = 'Sort bar regression probe';
+    let bookmarkId;
+    {
+        const seed = await context.newPage();
+        await seed.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: 'load' });
+        await settle(seed);
+        bookmarkId = await seed.evaluate(async (title) => {
+            localStorage['rh-group'] = 'yes';
+            await window.storageAdapter?.ready();
+            const node = await chrome.bookmarks.create({
+                title,
+                url: 'https://sort-bar-regression.test/page',
+            });
+            return node.id;
+        }, TITLE);
+        await seed.close();
+    }
+
+    const page = await context.newPage();
+    const { jsErrors, netErrors } = collectErrors(page);
+    try {
+        await page.goto(`chrome-extension://${extensionId}/bookmark.html`, { waitUntil: 'load' });
+        await settle(page);
+
+        const before = await page.evaluate(() => {
+            const main = document.getElementById('rh-views-insert');
+            const search = document.getElementById('rh-views-search-insert');
+            // Reproduce the raw shipped state: no inline style, only the CSS.
+            main.style.removeProperty('display');
+            search.style.removeProperty('display');
+            return {
+                rows: document.querySelectorAll('#rh-views-insert .item-holder').length,
+                computed: getComputedStyle(main).display,
+                inline: main.style.display,
+                state: document.getElementById('rh-bar-group').getAttribute('data-state'),
+            };
+        });
+        assert.ok(before.rows > 0, 'the bookmark list did not render at all');
+        assert.equal(before.inline, '', 'the test did not reproduce the initial CSS state');
+        assert.equal(before.computed, 'inline', 'history.css no longer declares display: inline');
+
+        await page.click('#rh-bar-group');
+        await settle(page);
+        const after = await page.evaluate(() => ({
+            display: document.getElementById('rh-views-insert').style.display,
+            state: document.getElementById('rh-bar-group').getAttribute('data-state'),
+            rows: document.querySelectorAll('#rh-views-insert .item-holder').length,
+        }));
+
+        assert.notEqual(after.state, before.state, 'the click did not toggle the button state');
+        // bookmark() sets `display: block` on the main container at the top of a
+        // render. If it never ran, the inline style is still empty.
+        assert.equal(after.display, 'block',
+            'the toolbar click did not call bookmark() — the list was never re-rendered');
+        assert.ok(after.rows > 0, 'the re-rendered list is empty');
+        assert.deepEqual(jsErrors, [],
+            `the toolbar threw on click (${netErrors.length} network error(s) ignored)`);
+    } finally {
+        await page.close();
+        if (bookmarkId) {
+            const cleanup = await context.newPage();
+            await cleanup.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: 'load' });
+            await cleanup.evaluate((id) => chrome.bookmarks.remove(id), bookmarkId);
+            await cleanup.close();
+        }
+    }
+});
+
+test('the linear pages localise both placeholder and aria-label on the search box', { skip: SKIP }, async () => {
+    // page-init.js used to loop over the two data-lang-* attributes; it now
+    // spells each out. #rh-search carries BOTH attributes, so this pins the
+    // behaviour the loop had and proves neither query was dropped.
+    for (const file of ['history.html', 'bookmark.html']) {
+        const page = await context.newPage();
+        const { jsErrors, netErrors } = collectErrors(page);
+        await page.goto(`chrome-extension://${extensionId}/${file}`, { waitUntil: 'load' });
+        await settle(page);
+        const attrs = await page.evaluate(() => {
+            const el = document.getElementById('rh-search');
+            return {
+                placeholder: el.getAttribute('placeholder'),
+                label: el.getAttribute('aria-label'),
+                selectAll: document.getElementById('master-check-all').getAttribute('aria-label'),
+            };
+        });
+        await page.close();
+        assert.deepEqual(jsErrors, [],
+            `${file} threw while localising attributes (${netErrors.length} network error(s) ignored)`);
+        assert.ok(attrs.placeholder && attrs.placeholder.length > 0,
+            `${file}: the search placeholder was not translated`);
+        assert.ok(attrs.label && attrs.label.length > 0,
+            `${file}: the search aria-label was not translated`);
+        assert.ok(attrs.selectAll && attrs.selectAll.length > 0,
+            `${file}: the select-all aria-label was not translated`);
+    }
+});

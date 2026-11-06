@@ -6,10 +6,11 @@ import { $, $$, getStyle } from './dom-helper.js';
 import { returnLang, dateFormat, monthOptionsHtml } from './modules/helpers.js';
 import { calendar, showCalendar } from './modules/calendar.js';
 import {
-    history as historyView, getActiveHistory, selectHistoryItem, deleteHistoryItem
+    history as historyView, selectHistoryItem, deleteHistoryItem, getActiveHistory
 } from './modules/history-core.js';
 import { modifierState } from './modules/ui-state.js';
 import { initPage } from './modules/page-init.js';
+import { initSortBar } from './modules/sort-bar.js';
 
 initPage();
 
@@ -30,88 +31,9 @@ document.addEventListener('DOMContentLoaded', function(){
     $('delete-button').value = returnLang('deleteItems');
     $('delete-range-button').value = returnLang('deleteItems');
     
-    // Toggle history
-    
-    if(localStorage['rh-group'] == 'no'){
-      $('rh-bar-group').style.backgroundPosition = 'right center';
-    }
-    if(localStorage['rh-orderby'] == 'title'){
-      $('rh-bar-orderby').style.backgroundPosition = 'right center';
-      $('rh-bar-orderby').title = returnLang('orderByTime');       
-    } else {
-        $('rh-bar-orderby').title = returnLang('orderByTitle'); 
-        }
-    $('rh-bar-order').title = returnLang('order'); 
-    if(localStorage['rh-order'] == 'asc'){
-      $('rh-bar-order').style.backgroundPosition = 'right center';
-    }
-    $('rh-bar-group').title = returnLang('group');  
-    $('rh-bar-group').addEventListener('click', function(){
-      var rhgv = localStorage['rh-group'];
-      if(rhgv == 'yes'){
-        $('rh-bar-group').style.backgroundPosition = 'right center';
-        localStorage['rh-group'] = 'no';
-      }else if(rhgv == 'no'){
-        $('rh-bar-group').style.backgroundPosition = 'left center';
-        localStorage['rh-group'] = 'yes';
-      }
-      var gahv = getActiveHistory();
-      if(gahv == 'history'){
-        historyView('yes', '');
-      }else if(gahv == 'search'){
-        var gahviv = $('rh-search').value;
-        if(gahviv.length > 0){
-          historyView('search', gahviv);
-        }else{
-          historyView('yes', '');
-        }
-      }
-    });
-    $('rh-bar-orderby').addEventListener('click', function(){
-      var rhgv = localStorage['rh-orderby'];
-      if(rhgv == 'date'){
-        $('rh-bar-orderby').style.backgroundPosition = 'right center';
-        $('rh-bar-orderby').title = returnLang('orderByTime');
-        localStorage['rh-orderby'] = 'title';
-      }else if(rhgv == 'title'){
-        $('rh-bar-orderby').style.backgroundPosition = 'left center';
-        $('rh-bar-orderby').title = returnLang('orderByTitle');    
-        localStorage['rh-orderby'] = 'date';
-      }
-      var gahv = getActiveHistory();
-      if(gahv == 'history'){
-        historyView('yes', '');
-      }else if(gahv == 'search'){
-        var gahviv = $('rh-search').value;
-        if(gahviv.length > 0){
-          historyView('search', gahviv);
-        }else{
-          historyView('yes', '');
-        }
-      }
-    });
-    $('rh-bar-order').addEventListener('click', function(){
-      var rhgv = localStorage['rh-order'];
-      if(rhgv == 'desc'){
-        $('rh-bar-order').style.backgroundPosition = 'right center';
-        localStorage['rh-order'] = 'asc';
-      }else if(rhgv == 'asc'){
-        $('rh-bar-order').style.backgroundPosition = 'left center';
-        localStorage['rh-order'] = 'desc';
-      }
-      var gahv = getActiveHistory();
-      if(gahv == 'history'){
-        historyView('yes', '');
-      }else if(gahv == 'search'){
-        var gahviv = $('rh-search').value;
-        if(gahviv.length > 0){
-          historyView('search', gahviv);
-        }else{
-          historyView('yes', '');
-        }
-      }
-    });
-    
+    // Sort/group toolbar: shared by history.js and bookmark.js.
+    initSortBar(historyView, getActiveHistory);
+
     // Scroll events
     
     window.addEventListener('scroll', function(){

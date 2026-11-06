@@ -10,9 +10,10 @@ import {
     uniqueId, tooltipText
 } from './modules/helpers.js';
 import { filtUrl } from './modules/config.js';
-import { getActiveHistory, toggleGroup, getMoreItems, alertLoadingHistory, clearRowColor, groupTitleOf } from './modules/history-core.js';
+import { toggleGroup, getMoreItems, alertLoadingHistory, clearRowColor, groupTitleOf } from './modules/history-core.js';
 import { modifierState, ITEM_SELECTED_COLOR, RENDER_BUDGET_MS } from './modules/ui-state.js';
 import { initPage } from './modules/page-init.js';
+import { initSortBar } from './modules/sort-bar.js';
 
 initPage();
 
@@ -236,87 +237,8 @@ document.addEventListener('DOMContentLoaded', function () {
         $('edit-bookmark-button').value = returnLang('editBookmark');
     }
 
-    // Toggle history
-
-    if (localStorage['rh-group'] == 'no') {
-        $('rh-bar-group').style.backgroundPosition = 'right center';
-    }
-    if (localStorage['rh-orderby'] == 'title') {
-        $('rh-bar-orderby').style.backgroundPosition = 'right center';
-        $('rh-bar-orderby').title = returnLang('orderByTime'); 
-    } else {       
-         $('rh-bar-orderby').title = returnLang('orderByTitle');   
-    }
-    $('rh-bar-order').title = returnLang('order'); 
-    if (localStorage['rh-order'] == 'asc') {
-        $('rh-bar-order').style.backgroundPosition = 'right center';
-    }    
-    $('rh-bar-group').title = returnLang('group');   
-    $('rh-bar-group').addEventListener('click', function () {
-        var rhgv = localStorage['rh-group'];
-        if (rhgv == 'yes') {
-            $('rh-bar-group').style.backgroundPosition = 'right center';
-            localStorage['rh-group'] = 'no';
-        } else if (rhgv == 'no') {
-            $('rh-bar-group').style.backgroundPosition = 'left center';
-            localStorage['rh-group'] = 'yes';
-        }
-        var gahv = getActiveHistory();
-        if (gahv == 'history') {
-            bookmark('yes', '');
-        } else if (gahv == 'search') {
-            var gahviv = $('rh-search').value;
-            if (gahviv.length > 0) {
-                bookmark('search', gahviv);
-            } else {
-                bookmark('yes', '');
-            }
-        }
-    });
-    $('rh-bar-orderby').addEventListener('click', function () {
-        var rhgv = localStorage['rh-orderby'];
-        if (rhgv == 'date') {
-            $('rh-bar-orderby').style.backgroundPosition = 'right center';
-            $('rh-bar-orderby').title = returnLang('orderByTime');  
-            localStorage['rh-orderby'] = 'title';
-        } else if (rhgv == 'title') {
-            $('rh-bar-orderby').style.backgroundPosition = 'left center';
-            $('rh-bar-orderby').title = returnLang('orderByTitle');       
-            localStorage['rh-orderby'] = 'date';
-        }
-        var gahv = getActiveHistory();
-        if (gahv == 'history') {
-            bookmark('yes', '');
-        } else if (gahv == 'search') {
-            var gahviv = $('rh-search').value;
-            if (gahviv.length > 0) {
-                bookmark('search', gahviv);
-            } else {
-                bookmark('yes', '');
-            }
-        }
-    });
-    $('rh-bar-order').addEventListener('click', function () {
-        var rhgv = localStorage['rh-order'];
-        if (rhgv == 'desc') {
-            $('rh-bar-order').style.backgroundPosition = 'right center';
-            localStorage['rh-order'] = 'asc';
-        } else if (rhgv == 'asc') {
-            $('rh-bar-order').style.backgroundPosition = 'left center';
-            localStorage['rh-order'] = 'desc';
-        }
-        var gahv = getActiveHistory();
-        if (gahv == 'history') {
-            bookmark('yes', '');
-        } else if (gahv == 'search') {
-            var gahviv = $('rh-search').value;
-            if (gahviv.length > 0) {
-                bookmark('search', gahviv);
-            } else {
-                bookmark('yes', '');
-            }
-        }
-    });
+    // Sort/group toolbar: shared by history.js and bookmark.js.
+    initSortBar(bookmark, getActiveBookmark);
 
 
     // Shift listener

@@ -3,7 +3,7 @@
 
 <head>
 <meta content="text/html; charset=utf-8" http-equiv="Content-Type">
-<title>Liner History | Tree Style History</title>
+<title>Linear History | Tree Style History</title>
 <link rel="stylesheet" href="css/history.css">
 <script src="scripts/storage-adapter.js"></script>
 <script src="scripts/db-manager.js"></script>
@@ -31,7 +31,7 @@
           <td id="search">
         <form id="rh-search-form" action="#">
           <span id="rh-clear-search">&times;</span>
-          <input id="rh-search" type="text" value="">
+          <input id="rh-search" type="text" value="" data-lang-placeholder="searchPlaceholder" data-lang-aria-label="searchLabel">
           <select class="select" id="rh-what">
             <option value="current" class="lang" data-lang-string="currentHistory"></option>
             <option value="all" class="lang" data-lang-string="allHistory"></option>
@@ -44,10 +44,10 @@
           <td colspan="2">
             <a href="#" class="lang" data-lang-string="showCalendar" id='showCalendar'></a>
         <div id="rh-bar">
-          <label id="rh-bar-uione"><input id="master-check-all" type="checkbox" name="checkall" value="false"></label>
-          <a id="rh-bar-group" href="#"></a>
-          <a id="rh-bar-orderby" href="#"></a>
-          <a id="rh-bar-order" href="#"></a>
+          <label id="rh-bar-uione"><input id="master-check-all" type="checkbox" name="checkall" value="false" data-lang-aria-label="selectAll"></label>
+          <a id="rh-bar-group" href="#" role="button" data-state="yes"></a>
+          <a id="rh-bar-orderby" href="#" role="button" data-state="date"></a>
+          <a id="rh-bar-order" href="#" role="button" data-state="desc"></a>
           &nbsp;
         </div>
         <div id="rh-views">

@@ -1,5 +1,8 @@
-* {
-    outline: none;
+/* A keyboard focus ring, without the mouse-click flash that `outline: none`
+   used to suppress along with it. Shared by all four pages using this file. */
+:focus-visible {
+    outline: 2px solid rgb(17, 85, 204);
+    outline-offset: 1px;
 }
 
 body {
@@ -60,28 +63,6 @@ input[type="text"]:focus {
     -webkit-box-shadow: inset 0px 1px 3px rgba(0, 0, 0, 0.2);
     background-image: linear-gradient(#f4f4f4, #efefef 40%, #dcdcdc);
     color: #444;
-}
-
-.tip-holder {
-    -webkit-border-radius: 5px;
-    -webkit-box-shadow: 0 0 4px #ddd;
-    background-color: #fff;
-    border: 1px solid #bfbfbf;
-    font-size: 11px;
-    display: block;
-    padding: 7px 9px;
-    z-index: 3;
-}
-
-.tip-holder .tip-title {
-    padding-bottom: 2px;
-    display: block;
-    color: #333;
-}
-
-.tip-holder .tip-text {
-    color: #4d6a9f;
-    display: block;
 }
 
 .button {
@@ -171,16 +152,6 @@ input[type="text"]:focus {
 #alert-holder #alert-holder-loading {
     position: absolute;
     margin: -15px 0 0 -15px;
-    left: 50%;
-    top: 50%;
-}
-
-#alert-holder #pacman-iframe {
-    position: absolute;
-    margin: -160px 0 0 -277px;
-    display: none;
-    width: 554px;
-    height: 186px;
     left: 50%;
     top: 50%;
 }
@@ -384,6 +355,12 @@ label.group-title-toggle-count {
     right: 4px;
 }
 
+#rh-bar-group[role="button"]:focus-visible,
+#rh-bar-orderby[role="button"]:focus-visible,
+#rh-bar-order[role="button"]:focus-visible {
+    outline-offset: -2px;
+}
+
 #bookmark-actions {
     display: flex;
     gap: 6px;
@@ -399,17 +376,34 @@ label.group-title-toggle-count {
 
 @media (-webkit-min-device-pixel-ratio: 1.5), (min-resolution: 144dpi) {
     #rh-bar-group {
-        background: url('../images/group-toggle-@2x.png') no-repeat left center;
+        background-image: url('../images/group-toggle-@2x.png');
         background-size: 200%;
     }
     #rh-bar-orderby {
-        background: url('../images/orderby-toggle-@2x.png') no-repeat left center;
+        background-image: url('../images/orderby-toggle-@2x.png');
         background-size: 200%;
     }
     #rh-bar-order {
-        background: url('../images/order-toggle-@2x.png') no-repeat left center;
+        background-image: url('../images/order-toggle-@2x.png');
         background-size: 200%;
     }
+}
+
+/* The two icons live in one sprite (left/right half). The old page scripts
+   flipped `style.backgroundPosition` from six places; the state now lives on
+   the element and the visual rule lives here. It sits AFTER the retina rules
+   on purpose: those used to redeclare the whole `background` shorthand and
+   silently reset the position back to `left center` on high-DPI screens. */
+#rh-bar a[data-state="yes"],
+#rh-bar a[data-state="date"],
+#rh-bar a[data-state="desc"] {
+    background-position: left center;
+}
+
+#rh-bar a[data-state="no"],
+#rh-bar a[data-state="title"],
+#rh-bar a[data-state="asc"] {
+    background-position: right center;
 }
 
 #rh-clear-search {

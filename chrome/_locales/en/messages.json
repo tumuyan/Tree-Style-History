@@ -411,7 +411,7 @@
         "message": "Shortcuts"
     },
     "shortcutsTip": {
-        "message": "Set shortcuts for popup, tree style history, liner history and recent closed page"
+        "message": "Set shortcuts for popup, tree style history, linear history and recent closed page"
     },
     "name": {
         "message": "Tree Style History"
@@ -420,7 +420,7 @@
         "message": "Tree History"
     },
     "linerHistory": {
-        "message": "Liner History"
+        "message": "Linear History"
     },
     "saveUpload": {
         "message": "Save & Upload (Beta)"
@@ -483,13 +483,13 @@
         "message": "Click me to open the tab group "
     },
     "linerBookMark": {
-        "message": "Liner Bookmark"
+        "message": "Linear Bookmark"
     },
     "OpenBookMark": {
-        "message": "Open Liner Bookmark"
+        "message": "Open Linear Bookmark"
     },
     "BookMarkPath": {
-        "message": "Show the path in liner bookmark view"
+        "message": "Show the path in linear bookmark view"
     },
     "showPopup": {
         "message": "Show popup page"
@@ -556,5 +556,15 @@
     },
     "noClosedFound": {
         "message": "No recently closed pages found"
+    },
+    "searchPlaceholder": {
+        "message": "Search"
+    },
+    "searchLabel": {
+        "message": "Search"
+    },
+    "selectAll": {
+        "message": "Select all"
     }
+
 }

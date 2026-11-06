@@ -25,6 +25,14 @@ function fillLangStrings() {
     Array.from($$('.lang')).forEach(function (el) {
         el.innerHTML = returnLang(el.getAttribute('data-lang-string'));
     });
+    // Placeholders and a11y labels are text too, so they go through the same
+    // catalogue as `.lang` instead of being hard-coded English in the HTML.
+    Array.from($$('[data-lang-placeholder]')).forEach(function (el) {
+        el.setAttribute('placeholder', returnLang(el.getAttribute('data-lang-placeholder')));
+    });
+    Array.from($$('[data-lang-aria-label]')).forEach(function (el) {
+        el.setAttribute('aria-label', returnLang(el.getAttribute('data-lang-aria-label')));
+    });
 }
 
 /**

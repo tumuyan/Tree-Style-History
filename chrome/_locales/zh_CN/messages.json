@@ -556,5 +556,15 @@
     },
     "noClosedFound": {
         "message": "没有找到关闭页面的记录"
+    },
+    "searchPlaceholder": {
+        "message": "搜索"
+    },
+    "searchLabel": {
+        "message": "搜索"
+    },
+    "selectAll": {
+        "message": "全选"
     }
+
 }

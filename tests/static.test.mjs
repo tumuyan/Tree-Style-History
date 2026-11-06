@@ -726,6 +726,7 @@ const MODULES = [
     'scripts/modules/tree.js',
     'scripts/modules/ui-state.js',
     'scripts/modules/page-init.js',
+    'scripts/modules/sort-bar.js',
 ];
 
 // The pages: a script reached by navigating to a real HTML file. Everything
@@ -3209,5 +3210,136 @@ test('the alarm periods are declared before the boot callback that reads them', 
         assert.ok(decl > 0, `${name} must be declared`);
         assert.ok(decl < boot,
             `${name} must be declared before initializeStorageState() reads it`);
+    }
+});
+
+
+// ---------------------------------------------------------------------------
+// The linear pages' sort/group toolbar (issue #40, step 1)
+//
+// history.js and bookmark.js used to carry the same three click handlers and
+// six `style.backgroundPosition` flips verbatim. They now call one shared
+// module; these guards stop the duplication from creeping back in one file at
+// a time, and pin the i18n contract for the new a11y attributes.
+// ---------------------------------------------------------------------------
+
+test('both linear pages delegate their toolbar to sort-bar.js', () => {
+    for (const file of ['scripts/history.js', 'scripts/bookmark.js']) {
+        const src = fs.readFileSync(path.join(CHROME_DIR, file), 'utf8');
+        assert.match(src, /initSortBar\s*\(/,
+            `${file} stopped using the shared sort toolbar`);
+        assert.match(src, /import\s*\{[^}]*initSortBar[^}]*\}\s*from\s*'\.\/modules\/sort-bar\.js'/,
+            `${file} must import initSortBar from the shared module`);
+        // The state now lives on data-state; a JS-written icon flip on any of
+        // the three toolbar buttons is a copy of the old duplication coming
+        // back. (history.js legitimately still flips the *calendar* range
+        // toggle's sprite, so the guard is scoped to the toolbar ids.)
+        for (const id of ['rh-bar-group', 'rh-bar-orderby', 'rh-bar-order']) {
+            assert.doesNotMatch(src, new RegExp(`\$\('${id}'\)\.style\.backgroundPosition`),
+                `${file} flips ${id}'s icon in JS again`);
+        }
+        for (const id of ['rh-bar-group', 'rh-bar-orderby', 'rh-bar-order']) {
+            assert.doesNotMatch(src, new RegExp(`\\$\\('${id}'\\)\\.addEventListener`),
+                `${file} binds ${id} itself again`);
+        }
+        // The toolbar is shared, but the view detector is not: history.js and
+        // bookmark.js read the initial view differently (inline style vs
+        // computed style). Each page must hand its own detector to initSortBar.
+        // A one-argument call means the shared module picked one for both again,
+        // which is the regression the review found on bookmark.html.
+        const call = src.match(/initSortBar\s*\(([^)]*)\)/);
+        assert.ok(call, `${file} has no initSortBar call`);
+        assert.ok(call[1].split(',').length >= 2 && call[1].split(',')[1].trim(),
+            `${file} must pass its own getActive() as the second argument`);
+    }
+});
+
+test('sort-bar.js never imports a page-specific view detector', () => {
+    // The shared toolbar must stay page-agnostic. Importing getActiveHistory
+    // (or any history-core view detector) silently applies the history page's
+    // rules to bookmark.html, where the initial CSS state has no inline
+    // `style.display` at all and the buttons stop re-rendering the list.
+    const src = fs.readFileSync(path.join(CHROME_DIR, 'scripts/modules/sort-bar.js'), 'utf8');
+    const code = stripJsComments(src);
+    assert.doesNotMatch(code, /from\s*'\.\/history-core\.js'/,
+        'sort-bar.js must not depend on history-core.js for view detection');
+    assert.doesNotMatch(code, /\bgetActiveHistory\b/,
+        'sort-bar.js must not call getActiveHistory itself');
+    assert.match(code, /function\s+refreshActive\s*\(\s*refresh\s*,\s*getActive\s*\)/,
+        'refreshActive must take the view detector as a parameter');
+    assert.match(code, /export\s+function\s+initSortBar\s*\(\s*refresh\s*,\s*getActive\s*\)/,
+        'initSortBar must accept (refresh, getActive)');
+    assert.match(code, /\bgetActive\s*\(\)/,
+        'refreshActive must call the injected detector');
+});
+
+test('each linear page passes its own view detector', () => {
+    const expected = {
+        'scripts/history.js': 'getActiveHistory',
+        'scripts/bookmark.js': 'getActiveBookmark',
+    };
+    for (const [file, detector] of Object.entries(expected)) {
+        const src = fs.readFileSync(path.join(CHROME_DIR, file), 'utf8');
+        const call = src.match(/initSortBar\s*\(([^)]*)\)/);
+        assert.ok(call, `${file} has no initSortBar call`);
+        assert.match(call[1], new RegExp(`\\b${detector}\\b`),
+            `${file} must pass ${detector}() to the shared toolbar`);
+    }
+});
+
+test('every data-lang-* attribute names an i18n key in both locales', () => {
+    // page-init.js translates placeholder / aria-label through these
+    // attributes. A key that resolves nowhere renders the key name (or an
+    // empty label) in the shipped UI, so it belongs in both catalogues.
+    // page-init.js spells out the two attributes it localises; a third
+    // `data-lang-*` name in the HTML would otherwise be silently skipped.
+    const pageInit = stripJsComments(
+        fs.readFileSync(path.join(CHROME_DIR, 'scripts/modules/page-init.js'), 'utf8'));
+    const knownAttrs = ['data-lang-placeholder', 'data-lang-aria-label'];
+    const keys = new Set();
+    for (const file of htmlFiles()) {
+        for (const tag of collectTags(fs.readFileSync(path.join(CHROME_DIR, file), 'utf8'))) {
+            for (const [name, value] of Object.entries(tag.attrs)) {
+                if (name.startsWith('data-lang-') && name !== 'data-lang-string') {
+                    assert.ok(knownAttrs.includes(name),
+                        `${file} uses ${name} but page-init.js has no branch for it`);
+                    assert.ok(pageInit.includes(`'${name}'`),
+                        `page-init.js does not translate ${name}`);
+                    keys.add(value);
+                }
+            }
+        }
+    }
+    assert.ok(keys.size > 0, 'expected at least one data-lang-* attribute');
+    for (const key of keys) {
+        assert.ok(EN[key], `en missing data-lang-* key: ${key}`);
+        assert.ok(ZH[key], `zh_CN missing data-lang-* key: ${key}`);
+    }
+});
+
+test('the shipped locale text says Linear, not Liner', () => {
+    // The i18n KEY is `linerHistory` / `linerBookMark` and is referenced from
+    // dozens of HTML and JS sites, so the key stays. Only the visible English
+    // message was misspelled; the two <title>s were fixed with it.
+    const offenders = [];
+    for (const [locale, messages] of [['en', EN], ['zh_CN', ZH]]) {
+        for (const [key, entry] of Object.entries(messages)) {
+            if (/\bliner\b/i.test(entry.message || '')) offenders.push(`${locale}/${key}`);
+        }
+    }
+    assert.deepEqual(offenders, [], 'a visible message still says Liner');
+    for (const file of ['history.html', 'bookmark.html']) {
+        const html = fs.readFileSync(path.join(CHROME_DIR, file), 'utf8');
+        assert.doesNotMatch(html, /Liner/, `${file} has a Liner <title> again`);
+    }
+});
+
+test('history.css keeps a keyboard focus ring and the toolbar state rule', () => {
+    const css = fs.readFileSync(path.join(CHROME_DIR, 'css/history.css'), 'utf8');
+    assert.match(css, /:focus-visible\s*\{/, 'the global outline: none is back');
+    assert.doesNotMatch(css, /\*\s*\{\s*outline:\s*none/, 'focus is again suppressed everywhere');
+    for (const state of ['no', 'title', 'asc']) {
+        assert.match(css, new RegExp(`\\[data-state="${state}"\\]`),
+            `the ${state} toolbar state has no CSS rule`);
     }
 });

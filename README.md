@@ -76,6 +76,12 @@ chrome/scripts/background-utils.js 由 chrome/scripts/modules/shared/ 自动生�
 
 ## Changlog
 3.3.2 (未发布)  
+重构: 线性历史与线性书签两页的「分组/排序」工具栏收敛到 `sort-bar.js` 一份实现（原先两页各有一套逐行相同的点击处理与 6 处 `backgroundPosition` 硬切）；按钮状态改由 `data-state` 属性交给 CSS，JS 不再直接写内联样式。重复初始化也不会叠加监听器  
+可访问性: 三个图标按钮补 `role="button"` 与走 i18n 的 `aria-label`/`title`，搜索框与全选补经过双 locale 翻译的 `placeholder`/`aria-label`；`* { outline: none }` 换成只在键盘聚焦时出现的 `:focus-visible` 焦点环  
+清理: 删除 `history.css` 里零引用的 `.tip-*` 与 `#pacman-iframe` 死样式；修正英文界面里 `Liner` → `Linear` 的拼写（i18n key 保持不变）  
+新增校验: 静态守卫盯住「两页都委托给 sort-bar」「`data-lang-*` key 双 locale 齐全」「焦点环与状态规则仍在」；单测覆盖状态机与冷启动，e2e 在真实 Chromium 里断言 `data-state` 真的驱动了图标（均做过变异验证）  
+评审修订 (PR #42): 排序工具栏不再替两页决定「当前显示哪个视图」——`initSortBar(refresh, getActive)` 由各页传入自己的判定（`history.js` 传 `getActiveHistory`、`bookmark.js` 传 `getActiveBookmark`），`refreshActive()` 在视图未初始化时回退到全量视图。修掉 `bookmark.html` 打开后立刻点分组/排序只改按钮与存储、列表却不重绘的回归；新增不预设 `style.display` 的单测、静态守卫与真实 Chromium e2e 用例（均变异验证）  
+评审修订 (PR #42): `page-init.js` 去掉为假想需求预留的 `data-lang-*` 属性循环，改成两次直白的查询；静态守卫盯住枚举的属性名与 HTML 一致，e2e 在真实 Chromium 里断言搜索框的 `placeholder` 与 `aria-label` 仍都完成本地化（均变异验证）  
 Bug 修复: 冷启动时（新装、清过数据、或 Service Worker 还没把默认配置写进存储）打开选项页，按钮会全部点不动、数字框显示 `NaN`——页面假设 worker 已经把默认值写好，抢先时就整表读到空值：先是 `loadOptions()` 抛异常中断了 `DOMContentLoaded` 里后续所有事件绑定，修好抛异常之后表单仍然是空的；现在选项页自己先 `defaultConfig(false)` 再建表单，不再依赖启动顺序（实测冷启动约 1/7 命中，刷新一次即恢复）  
 Bug 修复: `history.html?` 后面跟一个不完整的网址（如 `?http://[bad`）会让页面在解析时抛异常，而这个异常逃出了 `DOMContentLoaded` 回调——排在其后的监听器（「按范围删除」的开关）根本没绑上；现在解析失败只是不搜索  
 Bug 修复: 删除历史时 `chrome.history.deleteUrl()` 没有回调，删除失败用户毫无感知（行已经从列表里消失了）；改为读 `runtime.lastError` 并在控制台报出具体网址  

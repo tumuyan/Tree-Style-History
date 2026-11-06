@@ -3,7 +3,7 @@
 
 <head>
 <meta content="text/html; charset=utf-8" http-equiv="Content-Type">
-<title>Liner Bookmark | Tree Style History</title>
+<title>Linear Bookmark | Tree Style History</title>
 <link rel="stylesheet" href="css/history.css">
 <script src="scripts/storage-adapter.js"></script>
 <script src="scripts/db-manager.js"></script>
@@ -34,7 +34,7 @@
                 <input id="delete-bookmark-button" class="button" type="button" value="" style="display:none;">
                 <input id="edit-bookmark-button" class="button" type="button" value="" style="display:none;">
               </div>
-              <input id="rh-search" type="text" value="">
+              <input id="rh-search" type="text" value="" data-lang-placeholder="searchPlaceholder" data-lang-aria-label="searchLabel">
             </div>
           </td>
       </tr>
@@ -42,11 +42,11 @@
           <td colspan="2">
         <div id="rh-bar">
           <label id="rh-bar-uione">
-              <input id="master-check-all" type="checkbox" name="checkall" value="false">
+              <input id="master-check-all" type="checkbox" name="checkall" value="false" data-lang-aria-label="selectAll">
           </label>
-          <a id="rh-bar-group" href="#"></a>
-          <a id="rh-bar-orderby" href="#"></a>
-          <a id="rh-bar-order" href="#"></a>
+          <a id="rh-bar-group" href="#" role="button" data-state="yes"></a>
+          <a id="rh-bar-orderby" href="#" role="button" data-state="date"></a>
+          <a id="rh-bar-order" href="#" role="button" data-state="desc"></a>
           &nbsp;
         </div>
         <div id="rh-views">
