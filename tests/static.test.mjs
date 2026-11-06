@@ -189,14 +189,24 @@ test('the unreachable RTL branch stays removed', () => {
 // ---------------------------------------------------------------------------
 
 test('shipped diagnostic logs are behind the DEBUG switch', () => {
-    // Every page and the worker used to print a startup trace unconditionally.
-    // Warnings and errors must stay live — they report real problems. Only the
-    // informational `log`/`info` calls are routed through debugLog().
+    // The worker and the per-page bootstrap used to print a startup trace
+    // unconditionally. Warnings and errors must stay live — they report real
+    // problems. Only the informational `log`/`info` calls are routed through
+    // debugLog().
+    //
+    // page-init.js is in the list for the version banner, which came over from
+    // func.js printing it on every page load. The three timing lines in
+    // popup.js / popup-core.js are deliberately NOT covered: they exist to
+    // measure the popup's cold-start budget, and a DevTools filter is exactly
+    // what would hide that measurement — see the note at the console.info()
+    // call in popup-core.js. options.js' "Database deleted" reports a user
+    // action, not startup diagnostics.
     const adapter = fs.readFileSync(path.join(CHROME_DIR, 'scripts/storage-adapter.js'), 'utf8');
     assert.match(adapter, /globalObj\.DEBUG\s*=\s*false/, 'the shipped default must be quiet');
     assert.match(adapter, /globalObj\.debugLog\s*=/, 'there must be one shared debug helper');
 
-    for (const rel of ['scripts/storage-adapter.js', 'scripts/db-manager.js', 'scripts/background-sw.js']) {
+    for (const rel of ['scripts/storage-adapter.js', 'scripts/db-manager.js', 'scripts/background-sw.js',
+                       'scripts/modules/page-init.js']) {
         const src = fs.readFileSync(path.join(CHROME_DIR, rel), 'utf8');
         assert.doesNotMatch(src, /console\.(log|info)\s*\(/,
             `${rel} prints an unconditional diagnostic log; use debugLog()`);
