@@ -2354,6 +2354,154 @@ test('clicking a tree row opens its URL, and the switch folds and unfolds the br
     }
 });
 
+test('the tree is keyboard-navigable and announces its branch state', { skip: SKIP }, async () => {
+    // The tree pages are the core feature; a mouse-only <li> is not reachable
+    // by keyboard or a screen reader. Drive REAL key events through Chromium
+    // (not synthetic dispatch): this is the layer that can see focus(), the
+    // roving tabindex and the WAI-ARIA attributes together.
+    const tag = `tree-keys-${Date.now()}`;
+    const seed = await context.newPage();
+    const s = await seedTreeVisits(seed, tag);
+
+    const page = await context.newPage();
+    const { jsErrors, netErrors } = collectErrors(page);
+    let open;
+    try {
+        await page.goto(`chrome-extension://${extensionId}/history2.html`, { waitUntil: 'load' });
+        await settle(page);
+        open = await recordWindowOpen(page);
+
+        const parentRow = page.locator('#treeDemo li[data-tid]')
+            .filter({ has: page.locator(`:scope > a[title="${s.parent}"]`) });
+        assert.equal(await parentRow.count(), 1, 'the seeded parent did not render');
+
+        // The container is a named tree, and every row is a treeitem with a
+        // level. The branch carries aria-expanded; its decorative glyphs do not
+        // get announced as separate controls.
+        const shape = await page.evaluate(() => {
+            const tree = document.getElementById('treeDemo');
+            const rows = [...document.querySelectorAll('#treeDemo li[data-tid]')];
+            return {
+                role: tree.getAttribute('role'),
+                label: tree.getAttribute('aria-label'),
+                rowRoles: rows.map((r) => r.getAttribute('role')),
+                levels: rows.map((r) => r.getAttribute('aria-level')),
+                expanded: rows.map((r) => r.getAttribute('aria-expanded')),
+                tabbable: rows.filter((r) => r.tabIndex === 0).length,
+                hiddenGlyphs: [...document.querySelectorAll('#treeDemo span.switch[aria-hidden="true"]')].length,
+            };
+        });
+        assert.equal(shape.role, 'tree', 'the container has no tree role');
+        assert.ok(shape.label && shape.label.length > 0, 'the tree has no accessible name');
+        assert.ok(shape.rowRoles.every((r) => r === 'treeitem'), 'a row is not a treeitem');
+        assert.deepEqual(shape.levels[0], '1', 'the root level is wrong');
+        assert.equal(shape.tabbable, 1, 'a roving tabindex means exactly one tab stop');
+        assert.equal(shape.hiddenGlyphs, shape.rowRoles.length,
+            'the switch glyphs are still announced to screen readers');
+
+        // Focus the SEEDED parent row, not "the first row": the persistent
+        // context is shared with the other cases and may hold older visits,
+        // so the first row is not necessarily ours.
+        await parentRow.focus();
+        const focused = await page.evaluate(() => {
+            const el = document.activeElement;
+            return {
+                role: el.getAttribute('role'),
+                tabindex: el.tabIndex,
+                outline: getComputedStyle(el).outlineWidth,
+            };
+        });
+        assert.equal(focused.role, 'treeitem', 'focus did not land on a tree row');
+        assert.equal(focused.tabindex, 0, 'the focused row is not the tab stop');
+        assert.notEqual(focused.outline, '0px', 'the focused row has no visible focus ring');
+
+        // ArrowDown moves the roving tab stop to the child; Enter activates it
+        // through the same onClick the mouse uses. Read the title off the
+        // <a> inside the focused <li> — the li itself carries no title.
+        await page.keyboard.press('ArrowDown');
+        const afterDown = await page.evaluate(() => {
+            const rows = [...document.querySelectorAll('#treeDemo li[data-tid]')];
+            const el = document.activeElement;
+            return {
+                active: el.querySelector(':scope > a')?.getAttribute('title') ?? null,
+                tabbable: rows.filter((r) => r.tabIndex === 0).length,
+            };
+        });
+        assert.equal(afterDown.active, s.child, 'ArrowDown did not land on the child row');
+        assert.equal(afterDown.tabbable, 1, 'ArrowDown left more than one tab stop');
+        await page.keyboard.press('Enter');
+        assert.deepEqual(await open.urls(), [s.child],
+            'Enter did not open the focused row URL');
+
+        // ArrowLeft/Right fold and unfold the branch, with aria-expanded in
+        // step. Focus goes back to the parent first (ArrowUp from the child).
+        await page.keyboard.press('ArrowUp');
+        await page.keyboard.press('ArrowLeft');
+        assert.equal(await parentRow.getAttribute('aria-expanded'), 'false',
+            'ArrowLeft did not fold the branch');
+        assert.equal(await parentRow.locator(':scope > ul').evaluate((ul) => ul.style.display), 'none');
+        await page.keyboard.press('ArrowRight');
+        assert.equal(await parentRow.getAttribute('aria-expanded'), 'true',
+            'ArrowRight did not unfold the branch');
+        assert.equal(await parentRow.locator(':scope > ul').evaluate((ul) => ul.style.display), 'block');
+
+        // Home/End stay inside the tree and keep a single tab stop.
+        await page.keyboard.press('End');
+        await page.keyboard.press('Home');
+        assert.equal(await page.evaluate(() =>
+            [...document.querySelectorAll('#treeDemo li[data-tid]')].filter((r) => r.tabIndex === 0).length), 1);
+
+        // Tab must leave the tree (PR #52 review). The keydown handler is
+        // delegated on the container and hears Tab first; if it prevents the
+        // default, focus is trapped on a treeitem and a keyboard user cannot
+        // reach the toolbar or the browser chrome again. Drive a REAL Tab and
+        // read document.activeElement, the only layer that sees native focus
+        // movement. The focused row is the only tab stop, so Tab has exactly
+        // one place to go: out of #treeDemo.
+        await parentRow.focus();
+        assert.equal(await page.evaluate(() =>
+            document.activeElement.closest('#treeDemo') !== null), true,
+            'the row is focused before Tab');
+        await page.keyboard.press('Tab');
+        const leftTree = await page.evaluate(() => {
+            const el = document.activeElement;
+            return {
+                insideTree: el ? el.closest('#treeDemo') !== null : false,
+                tag: el ? el.tagName : null,
+            };
+        });
+        assert.equal(leftTree.insideTree, false,
+            `Tab was swallowed: focus is still inside #treeDemo (${leftTree.tag})`);
+
+        // Shift+Tab is the reverse path and must not be claimed either.
+        await parentRow.focus();
+        await page.keyboard.press('Shift+Tab');
+        assert.equal(await page.evaluate(() =>
+            document.activeElement.closest('#treeDemo') !== null), false,
+            'Shift+Tab was swallowed: focus is still inside #treeDemo');
+
+        // A browser chord whose bare key the tree DOES own must not be
+        // re-interpreted as "move to the next row". Control+ArrowDown is used
+        // rather than Alt+ArrowLeft: the latter is Chromium's Back shortcut and
+        // would navigate the page away mid-test. Control+ArrowDown has no
+        // navigation meaning here, so the only thing that could move the focus
+        // is our handler claiming a key that belongs to the browser.
+        await parentRow.focus();
+        await page.keyboard.press('Control+ArrowDown');
+        assert.equal(await page.evaluate(() => {
+            const el = document.activeElement;
+            return el.querySelector(':scope > a')?.getAttribute('title') ?? null;
+        }), s.parent, 'Control+ArrowDown moved the roving tab stop instead of staying put');
+
+        assert.deepEqual(jsErrors, [], `the keyboard interaction threw (${netErrors.length} network error(s) ignored)`);
+    } finally {
+        if (open) await open.restore();
+        await page.close();
+        await s.cleanup();
+        await seed.close();
+    }
+});
+
 test('the tree filter keeps the ancestor chain and highlights only the match', { skip: SKIP }, async () => {
     // bindTreeSearch() debounces 500ms, then treeHtml() filters by keyword and
     // keeps every ancestor of a hit. Neither the debounce nor the ancestor

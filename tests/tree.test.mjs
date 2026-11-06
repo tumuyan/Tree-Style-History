@@ -31,9 +31,14 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
  * from it, which is also what ties a rendered row back to its node.
  */
 function treeFixture(nodes) {
-    const container = dom.el('treeDemo');
+    // A FRESH element every time. createTree() registers listeners on the
+    // container, and the stand-in's document is shared by the whole file:
+    // reusing dom.el('treeDemo') would pile up one keydown handler per test,
+    // all of them writing the roving tabindex of the same DOM. The id stays
+    // 'treeDemo' because the rendered element ids (and thus the existing
+    // assertions) are derived from it.
+    const container = dom.makeEl('ul');
     container.id = 'treeDemo';
-    container.innerHTML = '';
 
     const clicked = [];
     const tree = createTree(container, { onClick: (_event, _treeId, node) => clicked.push(node) });
@@ -59,6 +64,31 @@ function row(tid, inSwitch) {
     span.className = 'button switch root_open';
     span.parentNode = li;
     return span;
+}
+
+/**
+ * The rows as the renderer draws them (the DOM stand-in lifts <li data-tid>
+ * out of innerHTML now), so the keyboard tests can aim at a real row and
+ * read its tabindex / aria-expanded back.
+ */
+function drawnRows(container) {
+    return container.querySelectorAll('li[data-tid]');
+}
+
+/**
+ * Dispatch a keydown on the container with `target` = one of its rows.
+ * Returns the drawn rows (as before). Optional `modifiers` and a `prevented`
+ * array let a test assert that a key the tree does NOT own keeps its browser
+ * default (Tab, chords, etc.); every preventDefault() call is pushed there.
+ */
+function pressKey(container, key, target, modifiers = {}, prevented = null) {
+    container.dispatch('keydown', {
+        key,
+        target,
+        preventDefault() { if (prevented) prevented.push(key); },
+        ...modifiers,
+    });
+    return drawnRows(container);
 }
 
 test('a flat id/pId list renders as nested list items', () => {
@@ -430,6 +460,294 @@ test('a filter tag is a toggle: clicking it again clears the box', async () => {
     await settle();
     assert.equal(input.value, '', 'clicking it again clears it');
     assert.equal(tree.getKeyword(), '');
+});
+
+// ---------------------------------------------------------------------------
+// WAI-ARIA tree semantics + keyboard navigation (issue #48, item 9)
+//
+// The tree pages are the core feature. They used to be mouse-only: rows were
+// <li>s with a click listener and no role, no tab stop, no expanded state.
+// These pin the markup contract and the arrow-key behaviour that a screen
+// reader / keyboard user depends on.
+// ---------------------------------------------------------------------------
+
+test('the markup is a labelled tree with treeitem rows, groups and expanded state', () => {
+    const html = treeHtml([
+        { id: 1, pId: 0, name: 'root' },
+        { id: 2, pId: 1, name: 'child' },
+    ], { treeId: 't' });
+
+    assert.match(html, /<li id="t_1"[^>]*role="treeitem"/, 'the row is a treeitem');
+    assert.match(html, /<li id="t_1"[^>]*aria-expanded="true"/, 'an open branch says so');
+    assert.match(html, /aria-level="1"/, 'the root is level 1');
+    assert.match(html, /<li id="t_2"[^>]*aria-level="2"/, 'the child is level 2');
+    assert.match(html, /<ul id="t_1_ul"[^>]*role="group"/, 'children live in a group');
+    // A leaf has no aria-expanded: announcing "collapsed" on a node that can
+    // never expand is misleading.
+    assert.doesNotMatch(html, /<li id="t_2"[^>]*aria-expanded/);
+    // The switch and icon are decoration; announcing them as controls would
+    // double every row for a screen reader.
+    assert.match(html, /id="t_1_switch"[^>]*aria-hidden="true"/);
+    assert.match(html, /id="t_1_ico"[^>]*aria-hidden="true"/);
+});
+
+test('a closed branch renders aria-expanded="false"', () => {
+    const html = treeHtml([
+        { id: 1, pId: 0, name: 'a', open: false },
+        { id: 2, pId: 1, name: 'b' },
+    ], { treeId: 't' });
+    assert.match(html, /<li id="t_1"[^>]*aria-expanded="false"/);
+});
+
+test('createTree labels the container and keeps exactly one tabbable row', () => {
+    const { container, tree } = treeFixture();
+    tree.setNodes(NODES);
+
+    assert.equal(container.getAttribute('role'), 'tree');
+    assert.ok(!container.getAttribute('aria-label'),
+        'no label was passed, so none is invented');
+    const rows = drawnRows(container);
+    assert.equal(rows.filter((r) => r.tabIndex === 0).length, 1,
+        'a roving tabindex means one tab stop, not one per row');
+    assert.equal(rows[0].tabIndex, 0, 'the first row is the initial tab stop');
+});
+
+test('createTree accepts an accessible name from the page', () => {
+    const container = dom.el('labelledTree');
+    container.id = 'labelledTree';
+    const tree = createTree(container, { onClick() {}, label: 'Tree style history' });
+    tree.setNodes(NODES);
+    assert.equal(container.getAttribute('aria-label'), 'Tree style history');
+});
+
+test('ArrowDown / ArrowUp / Home / End move the roving tab stop', () => {
+    const { container, tree } = treeFixture();
+    tree.setNodes(NODES);
+    let rows = drawnRows(container);
+
+    rows = pressKey(container, 'ArrowDown', rows[0]);
+    assert.deepEqual(rows.map((r) => r.tabIndex), [-1, 0, -1], 'Down goes to the child');
+    rows = pressKey(container, 'ArrowDown', rows[1]);
+    assert.deepEqual(rows.map((r) => r.tabIndex), [-1, -1, 0], 'Down goes to the grandchild');
+    rows = pressKey(container, 'ArrowDown', rows[2]);
+    assert.deepEqual(rows.map((r) => r.tabIndex), [-1, -1, 0], 'Down stops at the last row');
+    rows = pressKey(container, 'ArrowUp', rows[2]);
+    assert.deepEqual(rows.map((r) => r.tabIndex), [-1, 0, -1]);
+    rows = pressKey(container, 'Home', rows[1]);
+    assert.deepEqual(rows.map((r) => r.tabIndex), [0, -1, -1]);
+    rows = pressKey(container, 'End', rows[0]);
+    assert.deepEqual(rows.map((r) => r.tabIndex), [-1, -1, 0]);
+    assert.equal(rows[2].focused, true, 'the destination row is actually focused');
+});
+
+test('Enter and Space activate the row through the same onClick the mouse uses', () => {
+    const { container, clicked, tree } = treeFixture();
+    tree.setNodes(NODES);
+    const rows = drawnRows(container);
+
+    pressKey(container, 'Enter', rows[1]);
+    pressKey(container, ' ', rows[2]);
+    assert.deepEqual(clicked.map((n) => n.name), ['Child', 'Grandchild']);
+});
+
+test('ArrowRight opens a folded branch, then steps into it; ArrowLeft folds and steps out', () => {
+    const nodes = [
+        { id: 1, pId: 0, name: 'root', open: false },
+        { id: 2, pId: 1, name: 'child' },
+    ];
+    const { container, tree } = treeFixture();
+    tree.setNodes(nodes);
+    let rows = drawnRows(container);
+    assert.equal(rows[0].getAttribute('aria-expanded'), 'false', 'the branch starts folded');
+
+    // Right on a folded branch: expand, keep the focus where it is.
+    rows = pressKey(container, 'ArrowRight', rows[0]);
+    assert.equal(rows[0].getAttribute('aria-expanded'), 'true', 'the aria state follows the CSS state');
+    assert.deepEqual(rows.map((r) => r.tabIndex), [0, -1], 'expanding does not move the focus');
+
+    // Right again, now open: step into the first child.
+    rows = pressKey(container, 'ArrowRight', rows[0]);
+    assert.deepEqual(rows.map((r) => r.tabIndex), [-1, 0]);
+
+    // Left on a leaf: up to its parent.
+    rows = pressKey(container, 'ArrowLeft', rows[1]);
+    assert.deepEqual(rows.map((r) => r.tabIndex), [0, -1]);
+
+    // Left on an open branch: fold it.
+    rows = pressKey(container, 'ArrowLeft', rows[0]);
+    assert.equal(rows[0].getAttribute('aria-expanded'), 'false');
+    assert.deepEqual(rows.map((r) => r.tabIndex), [0, -1]);
+});
+
+test('a folded branch is skipped by Down until it is opened again', () => {
+    const { container, tree } = treeFixture();
+    tree.setNodes([
+        { id: 1, pId: 0, name: 'A', open: false },
+        { id: 2, pId: 1, name: 'A1' },
+        { id: 3, pId: 0, name: 'B' },
+    ]);
+    let rows = drawnRows(container);
+
+    // Only A and B are reachable; ArrowDown must land on B, not on the hidden A1.
+    rows = pressKey(container, 'ArrowDown', rows[0]);
+    assert.equal(rows[2].tabIndex, 0, 'the hidden child was skipped');
+    assert.equal(rows[1].tabIndex, -1);
+
+    // Open A with Right, then Down from A reaches A1.
+    rows = pressKey(container, 'ArrowUp', rows[2]);
+    rows = pressKey(container, 'ArrowRight', rows[0]);
+    rows = pressKey(container, 'ArrowDown', rows[0]);
+    assert.equal(rows[1].tabIndex, 0, 'the child is reachable once the branch is open');
+});
+
+test('* expands every branch at the focused level', () => {
+    const { container, tree } = treeFixture();
+    tree.setNodes([
+        { id: 1, pId: 0, name: 'A', open: false },
+        { id: 2, pId: 1, name: 'A1' },
+        { id: 3, pId: 0, name: 'B', open: false },
+        { id: 4, pId: 3, name: 'B1' },
+    ]);
+    let rows = drawnRows(container);
+    rows = pressKey(container, '*', rows[2]);
+    rows = drawnRows(container);
+    assert.deepEqual(rows.map((r) => r.getAttribute('aria-expanded')),
+        ['true', null, 'true', null], 'both sibling branches opened');
+});
+
+test('clicking the switch keeps aria-expanded in step with the glyph', () => {
+    const { container } = treeFixture([
+        { id: 1, pId: 0, name: 'a' }, { id: 2, pId: 1, name: 'b' },
+    ]);
+    let rows = drawnRows(container);
+    assert.equal(rows[0].getAttribute('aria-expanded'), 'true');
+
+    // The switch is a child of the row in the real DOM; the shim resolves
+    // closest('li[data-tid]') through parentNode, so aim the click at the row
+    // itself with a switch-shaped target, exactly as the click handler sees it.
+    const sw = dom.makeEl('span');
+    sw.className = 'button switch root_open';
+    sw.parentNode = rows[0];
+    container.dispatch('click', { target: sw });
+    rows = drawnRows(container);
+    assert.equal(rows[0].getAttribute('aria-expanded'), 'false',
+        'folding by mouse updates the same aria state the keyboard does');
+});
+
+test('focusin keeps the roving tab stop on the row that actually has focus', () => {
+    // Tab from outside, a scripted focus(), or an assistive technology can
+    // land on any row. If the tab stop stayed on the row createTree() seeded,
+    // the visible focus and the tab order would drift apart.
+    const { container, tree } = treeFixture();
+    tree.setNodes(NODES);
+    const rows = drawnRows(container);
+    assert.equal(rows[0].tabIndex, 0, 'the first row starts as the tab stop');
+
+    container.dispatch('focusin', { target: rows[2] });
+    assert.deepEqual(drawnRows(container).map((r) => r.tabIndex), [-1, -1, 0],
+        'focusing a row makes it the only tab stop');
+});
+
+test('filtering keeps one tab stop, and drops it back to the first row when the focused row is filtered out', () => {
+    const { container, tree } = treeFixture(NODES);
+    pressKey(container, 'ArrowDown', drawnRows(container)[0]);
+    pressKey(container, 'ArrowDown', drawnRows(container)[1]);
+    assert.equal(drawnRows(container)[2].tabIndex, 0, 'focus was on the grandchild');
+
+    // The grandchild is the match, so its row survives: keeping the focus on
+    // it is what a keyboard user expects from a filter box.
+    tree.filter('Grand');
+    let rows = drawnRows(container);
+    assert.equal(rows.length, 3, 'the ancestor chain is still rendered');
+    assert.equal(rows.filter((r) => r.tabIndex === 0).length, 1, 'still exactly one tab stop');
+    assert.equal(rows[2].tabIndex, 0, 'the focused row stayed put');
+
+    // Now filter to a branch that does not contain the focused row. There is
+    // nowhere to keep it, so the tab stop starts over at the first row.
+    tree.filter('');
+    pressKey(container, 'ArrowDown', drawnRows(container)[0]);
+    tree.filter('nomatchatall');
+    rows = drawnRows(container);
+    assert.equal(rows.length, 0, 'nothing survived this filter');
+    tree.filter('Root');
+    rows = drawnRows(container);
+    assert.equal(rows.filter((r) => r.tabIndex === 0).length, 1);
+    assert.equal(rows[0].tabIndex, 0, 'the tab stop starts at the first surviving row');
+});
+
+// ---------------------------------------------------------------------------
+// Only the tree's own keys may be swallowed (PR #52 review)
+//
+// A keydown handler that calls preventDefault() for every key reaching a row
+// traps the focus: Tab no longer leaves the tree, Ctrl+F no longer opens Find,
+// Alt+Left no longer goes Back. The browser owns those, not the tree.
+// ---------------------------------------------------------------------------
+
+test('keys the tree does not handle keep their browser default', () => {
+    const { container } = treeFixture(NODES);
+    const prevented = [];
+    const rows = drawnRows(container);
+    const before = rows.map((r) => r.tabIndex);
+
+    for (const key of ['Tab', 'PageDown', 'PageUp', 'f', 'A', 'Escape', 'Backspace']) {
+        pressKey(container, key, rows[1], {}, prevented);
+    }
+    assert.deepEqual(prevented, [], 'an unhandled key had its default prevented');
+    assert.deepEqual(drawnRows(container).map((r) => r.tabIndex), before,
+        'an unhandled key moved the roving tab stop');
+});
+
+test('Shift+Tab keeps its default (reverse tab out of the tree)', () => {
+    const { container } = treeFixture(NODES);
+    const prevented = [];
+    const rows = drawnRows(container);
+    pressKey(container, 'Tab', rows[0], { shiftKey: true }, prevented);
+    assert.deepEqual(prevented, [], 'Shift+Tab was swallowed');
+});
+
+test('browser/system chords are not claimed even when the bare key is ours', () => {
+    const { container, clicked } = treeFixture(NODES);
+    const prevented = [];
+    const rows = drawnRows(container);
+    const before = rows.map((r) => r.tabIndex);
+
+    // Alt+Left is Back, Ctrl+ArrowDown / Meta+Home are browser shortcuts, and
+    // Ctrl+Enter must not open the row. None of them belong to the tree.
+    pressKey(container, 'ArrowLeft', rows[0], { altKey: true }, prevented);
+    pressKey(container, 'ArrowDown', rows[0], { ctrlKey: true }, prevented);
+    pressKey(container, 'Home', rows[1], { metaKey: true }, prevented);
+    pressKey(container, 'Enter', rows[1], { ctrlKey: true }, prevented);
+    pressKey(container, 'ArrowUp', rows[2], { shiftKey: true }, prevented);
+
+    assert.deepEqual(prevented, [], 'a browser/system chord had its default prevented');
+    assert.deepEqual(drawnRows(container).map((r) => r.tabIndex), before,
+        'a chord moved the roving tab stop');
+    assert.deepEqual(clicked, [], 'a chord activated a row');
+});
+
+test('a hidden focused row still lets Tab leave the tree', () => {
+    // The pos < 0 recovery branch used to preventDefault() unconditionally:
+    // once scripted focus landed on a row a folded ancestor had hidden, even
+    // Tab was swallowed. It may re-seat the focus, but must never own the key.
+    const { container } = treeFixture([
+        { id: 1, pId: 0, name: 'A', open: false },
+        { id: 2, pId: 1, name: 'A1' },
+    ]);
+    const hidden = drawnRows(container)[1]; // still in the DOM, under display:none
+    assert.ok(hidden, 'the folded child row was not rendered');
+    const prevented = [];
+    pressKey(container, 'Tab', hidden, {}, prevented);
+    assert.deepEqual(prevented, [], 'Tab was swallowed while recovering from a hidden focus');
+});
+
+test('handled keys still prevent the browser default so the page does not scroll', () => {
+    const { container } = treeFixture(NODES);
+    const prevented = [];
+    const rows = drawnRows(container);
+    for (const key of ['ArrowDown', 'ArrowUp', 'Home', 'End', 'ArrowRight', 'ArrowLeft', 'Enter', ' ', '*']) {
+        pressKey(container, key, rows[0], {}, prevented);
+    }
+    assert.equal(prevented.length, 9, 'a handled key stopped preventing its default');
 });
 
 // ---------------------------------------------------------------------------

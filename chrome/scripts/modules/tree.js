@@ -47,6 +47,76 @@ function cssUrl(icon) {
 const HIGHLIGHT = 'color: whitesmoke;background-color: darkred;';
 
 /**
+ * The only plain keys the tree claims. Everything else (Tab / Shift+Tab,
+ * PageDown, Ctrl+F ...) must keep its native behaviour — swallowing a key the
+ * tree does not handle traps a keyboard user here, the opposite of making the
+ * tree keyboard-reachable. Browser/system chords (Alt+Left = Back,
+ * Ctrl+ArrowDown, Meta+...) are excluded separately, in onKeydown().
+ */
+const HANDLED_KEYS = new Set([
+    'ArrowDown', 'ArrowUp', 'Home', 'End',
+    'ArrowRight', 'ArrowLeft', 'Enter', ' ', '*',
+]);
+
+/** Keyword match, over the raw name and URL. User input, so no regex here. */
+function matcher(keyword, urlKey) {
+    const needle = keyword.toLowerCase();
+    return function (node) {
+        const name = node.name == null ? '' : String(node.name);
+        const url = node[urlKey] == null ? '' : String(node[urlKey]);
+        return name.toLowerCase().indexOf(needle) !== -1
+            || url.toLowerCase().indexOf(needle) !== -1;
+    };
+}
+
+/**
+ * Matches plus their ancestors: a match buried in a branch is no use if the
+ * branch above it is hidden. `null` means "no filter, everything is visible".
+ */
+function visibleSet(nodes, idx, keyword, urlKey) {
+    if (!keyword) return null;
+    const visible = new Set();
+    const match = matcher(keyword, urlKey);
+    for (const n of nodes) {
+        if (!match(n)) continue;
+        visible.add(n);
+        let parent = idx.byId.get(String(n.pId));
+        // Guard against a pId cycle, which would otherwise loop forever.
+        for (let guard = 0; parent && guard < nodes.length; guard++) {
+            visible.add(parent);
+            parent = idx.byId.get(String(parent.pId));
+        }
+    }
+    return visible;
+}
+
+/** Children that survive the filter — the exact set treeHtml() renders. */
+function visibleChildren(node, idx, visible) {
+    return (idx.children.get(node) || [])
+        .filter(function (k) { return !visible || visible.has(k); });
+}
+
+/**
+ * Every row a keyboard user can reach, in the order treeHtml() draws them.
+ *
+ * A folded branch's rows are still in the DOM (their <ul> is display:none), so
+ * "visible" here means rendered AND not under a collapsed ancestor. Keeping
+ * this a pure walk of the same index/visible set is what stops the arrow keys
+ * from drifting away from the markup after a filter or a fold.
+ */
+function visibleRows(idx, visible) {
+    const out = [];
+    const walk = function (node) {
+        if (visible && !visible.has(node)) return;
+        out.push(node);
+        if (node.open === false) return;
+        for (const kid of visibleChildren(node, idx, visible)) walk(kid);
+    };
+    for (const root of idx.roots) walk(root);
+    return out;
+}
+
+/**
  * True if following `pId` from this node leads back to somewhere already seen.
  *
  * A cycle would otherwise leave every member of it with a resolvable parent and
@@ -114,32 +184,6 @@ function treeHtml(nodes, opts) {
         return ids.get(node);
     };
 
-    const matches = function (node) {
-        const needle = keyword.toLowerCase();
-        const name = node.name == null ? '' : String(node.name);
-        const url = node[urlKey] == null ? '' : String(node[urlKey]);
-        return name.toLowerCase().indexOf(needle) !== -1
-            || url.toLowerCase().indexOf(needle) !== -1;
-    };
-
-    /** Matches plus their ancestors: a match buried in a branch is no use if
-     *  the branch above it is hidden. */
-    const visibleSet = function (idx) {
-        if (!keyword) return null;
-        const visible = new Set();
-        for (const n of nodes) {
-            if (!matches(n)) continue;
-            visible.add(n);
-            let parent = idx.byId.get(String(n.pId));
-            // Guard against a pId cycle, which would otherwise loop forever.
-            for (let guard = 0; parent && guard < nodes.length; guard++) {
-                visible.add(parent);
-                parent = idx.byId.get(String(parent.pId));
-            }
-        }
-        return visible;
-    };
-
     /**
      * Escape the name and wrap every hit in a highlight span.
      *
@@ -178,8 +222,7 @@ function treeHtml(nodes, opts) {
         if (visible && !visible.has(node)) return '';
 
         const tid = tId(node);
-        const kids = idx.children.get(node) || [];
-        const shown = kids.filter(function (k) { return !visible || visible.has(k); });
+        const shown = visibleChildren(node, idx, visible);
         const hasChildren = shown.length > 0;
         const open = node.open !== false;
         const prefix = `${treeId}_${tid}`;
@@ -197,10 +240,17 @@ function treeHtml(nodes, opts) {
         const icoStyle = node.icon
             ? ` style="background:url('${cssUrl(node.icon)}') 0 0 no-repeat;background-size:cover;"` : '';
 
-        let html = `<li id="${prefix}" class="level${level}" data-tid="${tid}">`
-            + `<span id="${prefix}_switch" class="button switch ${switchClass(level, isLast, hasChildren, open)}"></span>`
+        // WAI-ARIA tree: the <li> is the focusable treeitem, the child <ul> is
+        // its group. aria-expanded lives on the row (not the glyph), so a
+        // screen reader hears the branch state without the decorative switch
+        // and icon spans being announced as separate controls.
+        const expanded = hasChildren ? ` aria-expanded="${open ? 'true' : 'false'}"` : '';
+
+        let html = `<li id="${prefix}" class="level${level}" data-tid="${tid}"`
+            + ` role="treeitem" aria-level="${level + 1}"${expanded} tabindex="-1">`
+            + `<span id="${prefix}_switch" class="button switch ${switchClass(level, isLast, hasChildren, open)}" aria-hidden="true"></span>`
             + `<a id="${prefix}_a" class="level${level}" title="${escapeHtmlAttr(node[urlKey])}">`
-            + `<span id="${prefix}_ico" class="button ico ${icoClass(hasChildren, open)}"${icoStyle}></span>`
+            + `<span id="${prefix}_ico" class="button ico ${icoClass(hasChildren, open)}"${icoStyle} aria-hidden="true"></span>`
             + `<span id="${prefix}_span">${nameHtml(node)}</span>`
             + '</a>';
 
@@ -208,14 +258,14 @@ function treeHtml(nodes, opts) {
             const inner = shown.map(function (kid, i) {
                 return nodeHtml(kid, level + 1, i === shown.length - 1, idx, visible);
             }).join('');
-            html += `<ul id="${prefix}_ul" class="level${level} line"`
+            html += `<ul id="${prefix}_ul" class="level${level} line" role="group"`
                 + ` style="display:${open ? 'block' : 'none'}">${inner}</ul>`;
         }
         return html + '</li>';
     };
 
     const idx = indexNodes(nodes);
-    const visible = visibleSet(idx);
+    const visible = visibleSet(nodes, idx, keyword, urlKey);
     return idx.roots.map(function (root, i) {
         return nodeHtml(root, 0, i === idx.roots.length - 1, idx, visible);
     }).join('');
@@ -226,12 +276,25 @@ function treeHtml(nodes, opts) {
  * @param {object} [opts]
  * @param {Function} [opts.onClick] (event, treeId, node)
  * @param {string}   [opts.urlKey]  node field holding the URL (default `t`)
+ * @param {string}   [opts.label]   accessible name for the tree (i18n'd)
+ *
+ * The container becomes a WAI-ARIA tree with a roving tabindex: exactly one
+ * row is tabbable, arrow keys move the focus, Enter/Space activates the row
+ * (the same onClick the mouse uses), and Left/Right fold and unfold a branch.
+ * All of it is delegated on the container, because filter() re-renders the
+ * rows wholesale and per-row listeners would be lost on every keystroke.
  */
 function createTree(container, opts) {
     const options = opts || {};
     const onClick = options.onClick || function () {};
     const urlKey = options.urlKey || 't';
     const treeId = container.id || 'tree';
+    container.setAttribute('role', 'tree');
+    if (options.label) container.setAttribute('aria-label', options.label);
+
+    // Exactly one tabbable row. `null` = nothing focused yet; render() then
+    // makes the first row the tab stop.
+    let focusTid = null;
 
     let nodes = [];
     let keyword = '';
@@ -251,16 +314,24 @@ function createTree(container, opts) {
     function render() {
         index = indexNodes(nodes);
         container.innerHTML = treeHtml(nodes, { treeId, keyword, urlKey, ids });
+        const rows = visibleRows(index, visibleSet(nodes, index, keyword, urlKey));
+        if (focusTid !== null && !rows.some(function (n) { return ids.get(n) === focusTid; })) {
+            focusTid = null; // the focused row was filtered out
+        }
+        if (focusTid === null && rows.length) focusTid = ids.get(rows[0]);
+        for (const row of container.querySelectorAll('li[data-tid]')) {
+            row.tabIndex = Number(row.dataset.tid) === focusTid ? 0 : -1;
+        }
     }
 
     // Delegated: rows are re-rendered wholesale on every filter, so a listener
     // per row would have to be re-bound each time.
     container.addEventListener('click', function (event) {
-        const row = event.target.closest ? event.target.closest('li[data-tid]') : null;
-        if (!row) return;
-        const node = byTid(Number(row.dataset.tid));
+        const node = nodeOfEvent(event);
         if (!node) return;
 
+        // A mouse click should leave the roving tab stop on that row too.
+        focusNode(node);
         if (event.target.closest && event.target.closest('.switch')) {
             toggle(node);
             return;
@@ -268,13 +339,14 @@ function createTree(container, opts) {
         onClick(event, treeId, node);
     });
 
-    /** Collapse in place: re-rendering would lose the scroll position. */
-    function toggle(node) {
-        const open = node.open === false;
-        node.open = open;
+    /** Keep the row's ARIA state with its CSS state, in place. */
+    function syncRow(node) {
+        const open = node.open !== false;
         const prefix = `${treeId}_${ids.get(node)}`;
+        const row = document.getElementById(prefix);
         const list = document.getElementById(`${prefix}_ul`);
         const sw = document.getElementById(`${prefix}_switch`);
+        if (row && list) row.setAttribute('aria-expanded', open ? 'true' : 'false');
         if (list) list.style.display = open ? 'block' : 'none';
         if (sw) {
             // Only the open/close half changes; the root/center/bottom shape is
@@ -282,6 +354,136 @@ function createTree(container, opts) {
             sw.className = sw.className.replace(/_open|_close/, open ? '_open' : '_close');
         }
     }
+
+    /** Collapse in place: re-rendering would lose the scroll position. */
+    function toggle(node) {
+        node.open = node.open === false;
+        syncRow(node);
+    }
+
+    /** Move the roving tab stop to `node` and focus its row. */
+    function focusNode(node) {
+        const tid = ids.get(node);
+        if (tid === undefined) return;
+        for (const row of container.querySelectorAll('li[data-tid]')) {
+            row.tabIndex = Number(row.dataset.tid) === tid ? 0 : -1;
+        }
+        focusTid = tid;
+        const row = document.getElementById(`${treeId}_${tid}`);
+        if (row && row.focus) row.focus();
+    }
+
+    function nodeOfEvent(event) {
+        const row = event.target && event.target.closest
+            ? event.target.closest('li[data-tid]') : null;
+        return row ? byTid(Number(row.dataset.tid)) : undefined;
+    }
+
+    /** Activate exactly as a click would; the page decides what that means. */
+    function activate(event, node) {
+        if (node) onClick(event, treeId, node);
+    }
+
+    /**
+     * WAI-ARIA tree keyboard support: Up/Down move through the *visible*
+     * rows, Right opens a folded branch (or steps into an open one), Left
+     * folds a branch (or steps out to its parent), Home/End jump to the ends,
+     * Enter/Space activate. Star (*) expands every sibling at this level.
+     *
+     * Only HANDLED_KEYS with no browser/system modifier are ours. Tab,
+     * Shift+Tab, PageDown, Ctrl+F and chords like Alt+Left (Back) or
+     * Ctrl+ArrowDown keep their native behaviour; swallowing them would trap
+     * the focus inside the tree. `*` is typed with Shift on most layouts, so
+     * Shift is allowed for that one key.
+     */
+    function onKeydown(event) {
+        const node = nodeOfEvent(event);
+        if (!node) return;
+        if (!HANDLED_KEYS.has(event.key)
+            || event.altKey || event.ctrlKey || event.metaKey
+            || (event.shiftKey && event.key !== '*')) return;
+        const visible = visibleSet(nodes, index, keyword, urlKey);
+        const rows = visibleRows(index, visible);
+        const pos = rows.indexOf(node);
+        const here = visibleChildren(node, index, visible);
+        let next = null;
+        // A scripted focus can land on a row a folded ancestor just hid. Start
+        // over from the first visible row instead of doing arithmetic on -1.
+        if (pos < 0) {
+            if (event.preventDefault) event.preventDefault();
+            if (rows.length) focusNode(rows[0]);
+            return;
+        }
+
+        switch (event.key) {
+            case 'ArrowDown':
+                next = rows[Math.min(pos + 1, rows.length - 1)];
+                break;
+            case 'ArrowUp':
+                next = rows[Math.max(pos - 1, 0)];
+                break;
+            case 'Home':
+                next = rows[0];
+                break;
+            case 'End':
+                next = rows[rows.length - 1];
+                break;
+            case 'ArrowRight':
+                if (here.length && node.open === false) {
+                    node.open = true;
+                    syncRow(node);
+                } else if (here.length) {
+                    next = here[0];
+                }
+                break;
+            case 'ArrowLeft': {
+                if (here.length && node.open !== false) {
+                    node.open = false;
+                    syncRow(node);
+                } else {
+                    const parent = index.byId.get(String(node.pId));
+                    if (parent && rows.indexOf(parent) >= 0) next = parent;
+                }
+                break;
+            }
+            case 'Enter':
+            case ' ':
+                activate(event, node);
+                break;
+            case '*': {
+                const parent = index.byId.get(String(node.pId));
+                const siblings = parent ? visibleChildren(parent, index, visible) : index.roots;
+                for (const sib of siblings) {
+                    if (visibleChildren(sib, index, visible).length) {
+                        sib.open = true;
+                        syncRow(sib);
+                    }
+                }
+                break;
+            }
+            default:
+                return;
+        }
+        if (event.preventDefault) event.preventDefault();
+        if (next && next !== node) focusNode(next);
+    }
+
+    container.addEventListener('keydown', onKeydown);
+
+    // Roving tabindex has to follow the focus, not just our own key handler:
+    // Tab from outside, a scripted focus(), or an assistive technology can
+    // land on any row. Without this the visible focus and the tab stop drift
+    // apart, and the next Tab leaves the tree from the wrong place.
+    container.addEventListener('focusin', function (event) {
+        const node = nodeOfEvent(event);
+        if (!node) return;
+        const tid = ids.get(node);
+        if (tid === undefined || tid === focusTid) return;
+        focusTid = tid;
+        for (const row of container.querySelectorAll('li[data-tid]')) {
+            row.tabIndex = Number(row.dataset.tid) === tid ? 0 : -1;
+        }
+    });
 
     return {
         /** Replace everything. */

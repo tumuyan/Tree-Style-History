@@ -45,6 +45,28 @@ function extractIds(html) {
     return [...String(html).matchAll(/\bid\s*=\s*"([^"]+)"/g)].map((m) => m[1]);
 }
 
+/**
+ * Lift `li[data-tid]` rows out of assigned innerHTML as real child elements.
+ *
+ * createTree() re-renders wholesale on every filter and then walks
+ * `querySelectorAll('li[data-tid]')` to maintain its roving tabindex. The
+ * generic id registry above answers those ids with flat divs, which the
+ * `li[data-tid]` selector cannot match — so the tab stop would silently never
+ * be set in any unit test. Parse just those rows (and their id, classes,
+ * data-tid, tabindex and aria-expanded) into the child list; the full markup
+ * tree is still the browser's job, exercised by the e2e suite.
+ */
+function extractTreeRows(html) {
+    const rows = [];
+    for (const m of String(html).matchAll(/<li\b([^>]*)>/g)) {
+        const attrs = {};
+        for (const a of m[1].matchAll(/([\w-]+)\s*=\s*"([^"]*)"/g)) attrs[a[1]] = a[2];
+        if (attrs['data-tid'] === undefined) continue;
+        rows.push(attrs);
+    }
+    return rows;
+}
+
 function extractCellText(html) {
     return [...String(html).matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/g)]
         .map((m) => m[1].replace(/<[^>]*>/g, '').trim());
@@ -78,6 +100,8 @@ export function createDom(options = {}) {
             options: [{ value: '' }],
             offsetWidth: 10,
             clientWidth: 100,
+            tabIndex: -1,
+            focused: false,
             _html: '',
             _text: '',
         };
@@ -103,6 +127,30 @@ export function createDom(options = {}) {
                     cell.textContent = text;
                     return cell;
                 });
+                for (const attrs of extractTreeRows(el._html)) {
+                    const li = makeEl('li');
+                    li.id = attrs.id || '';
+                    li.dataset.tid = attrs['data-tid'];
+                    li.className = attrs.class || '';
+                    if (attrs.tabindex !== undefined) li.tabIndex = Number(attrs.tabindex);
+                    for (const [name, v] of Object.entries(attrs)) {
+                        if (name !== 'id' && name !== 'class' && name !== 'tabindex') {
+                            li.attrs[name] = v;
+                        }
+                    }
+                    // A real <li> is focusable once it has a tabindex. The
+                    // shim has no focus state, so record it: the keyboard
+                    // tests assert which row the roving tab stop landed on.
+                    li.focus = () => { li.focused = true; };
+                    li.parentNode = el;
+                    el.children.push(li);
+                    // getElementById() and querySelectorAll() must answer the
+                    // SAME object, as they do in a browser: createTree() sets
+                    // the tab stop through the latter and moves focus through
+                    // the former. extractIds() registered a flat div for this
+                    // id a moment ago; replace it with the real row.
+                    if (li.id) byId.set(li.id, li);
+                }
             },
         });
 

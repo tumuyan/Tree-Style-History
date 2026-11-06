@@ -743,6 +743,21 @@ ul.ztree {
     padding-top: 5px;
 }
 
+/* The tree is keyboard-navigable now, but zTreeStyle.css sets `outline:0` on
+   every <li> (it shipped as a click-only widget). Restore a visible ring on
+   the focusable rows and tint the row's link so the roving tab stop is easy to
+   find in a long, folded tree. Both are :focus-visible, so a mouse click does
+   not flash them. */
+#history-container .ztree li[role="treeitem"]:focus-visible {
+    outline: 2px solid rgb(17, 85, 204);
+    outline-offset: 1px;
+}
+
+#history-container .ztree li[role="treeitem"]:focus-visible > a {
+    background-color: #ffe6b0;
+    border-radius: 2px;
+}
+
 #history-container .ztree * {
     box-shadow: none;
 }

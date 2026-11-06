@@ -3582,6 +3582,80 @@ test('history.css keeps a keyboard focus ring and the toolbar state rule', () =>
 });
 
 // ---------------------------------------------------------------------------
+// The two tree pages are keyboard-reachable (issue #48, item 9)
+//
+// They are the core feature and used to be mouse-only: <li>s with a click
+// listener, no role, no tab stop, no expanded state. tree.js now emits the
+// WAI-ARIA tree vocabulary and createTree() owns the roving tabindex + arrow
+// keys. These guards pin the two halves that a behaviour test cannot see in
+// isolation: that BOTH pages hand the tree an accessible name, and that the
+// renderer, the state wrapper and the stylesheet still agree on the roles.
+// ---------------------------------------------------------------------------
+
+test('both tree pages give createTree a localised accessible name', () => {
+    for (const file of ['scripts/history2.js', 'scripts/closed.js']) {
+        const src = fs.readFileSync(path.join(CHROME_DIR, file), 'utf8');
+        // `[\s\S]*?` rather than `[^)]*`: the first argument is
+        // `$('treeDemo')`, whose own ')' would stop a negated-class match.
+        assert.match(src, /createTree\s*\([\s\S]*?label:\s*returnLang\(\s*'[\w]+'\s*\)/,
+            `${file} does not label its tree`);
+        const key = /label:\s*returnLang\(\s*'([\w]+)'\s*\)/.exec(src)[1];
+        assert.ok(EN[key] && ZH[key], `the tree label ${key} is missing from a locale`);
+    }
+});
+
+test('tree.js emits one ARIA tree and its CSS restores the row focus ring', () => {
+    const tree = stripJsComments(
+        fs.readFileSync(path.join(CHROME_DIR, 'scripts/modules/tree.js'), 'utf8'));
+    // The markup contract: rows are treeitems, children are groups, branch
+    // state is announced, and the glyphs are hidden from screen readers.
+    assert.match(tree, /role="treeitem"/, 'rows have no treeitem role');
+    assert.match(tree, /role="group"/, 'child lists have no group role');
+    assert.match(tree, /aria-expanded=/, 'branch state is not announced');
+    assert.match(tree, /aria-hidden="true"/, 'decorative glyphs are still announced');
+    assert.match(tree, /container\.setAttribute\('role', 'tree'\)/,
+        'createTree() no longer makes the container a tree');
+    // The keyboard half: one delegated keydown handler on the container (rows
+    // are re-rendered on every filter, so per-row listeners would be lost).
+    assert.match(tree, /container\.addEventListener\('keydown'/,
+        'the tree has no keyboard handler');
+    const css = fs.readFileSync(path.join(CHROME_DIR, 'css/history.css'), 'utf8');
+    // zTreeStyle.css sets `outline:0` on every <li>; without a more specific
+    // :focus-visible rule the roving tab stop is invisible.
+    // Require the opening brace: a bare prefix match would also accept a
+    // disabled/renamed selector (e.g. `:focus-visible-DISABLED`) and go green
+    // while the real ring is gone.
+    assert.match(css, /li\[role="treeitem"\]:focus-visible\s*\{/,
+        'the tree rows have no visible focus ring');
+});
+
+test('the tree keydown handler only claims its own keys (PR #52 review)', () => {
+    // A delegated keydown that preventDefault()s every key reaching a row traps
+    // the focus: Tab cannot leave the tree, Ctrl+F / Alt+Left / Ctrl+ArrowDown
+    // keep their old meaning. Pin the two halves of the fix: an explicit key
+    // whitelist, and an early return for unhandled keys + browser chords.
+    const tree = stripJsComments(
+        fs.readFileSync(path.join(CHROME_DIR, 'scripts/modules/tree.js'), 'utf8'));
+    assert.match(tree, /const\s+HANDLED_KEYS\s*=\s*new Set\(/,
+        'the tree has no explicit list of the keys it handles');
+    assert.match(tree, /HANDLED_KEYS\.has\(event\.key\)/,
+        'onKeydown no longer checks the key against the whitelist');
+    // All three browser/system modifiers must be excluded. A bare altKey check
+    // would still swallow Ctrl+F and Meta+ArrowDown.
+    assert.match(tree, /event\.altKey\s*\|\|\s*event\.ctrlKey\s*\|\|\s*event\.metaKey/,
+        'a modifier chord can still be claimed by the tree');
+    assert.match(tree, /event\.shiftKey\s*&&\s*event\.key\s*!==\s*'\*'/,
+        'Shift+key chords can still be claimed (except *, which needs Shift)');
+    // The whitelist guard must come BEFORE any preventDefault() in the handler,
+    // so an unhandled key never reaches it. Slice from the function head.
+    const handler = tree.slice(tree.indexOf('function onKeydown'));
+    const guardAt = handler.indexOf('HANDLED_KEYS.has(event.key)');
+    const preventAt = handler.indexOf('preventDefault()');
+    assert.ok(guardAt >= 0 && preventAt > guardAt,
+        'the key guard is missing or comes after a preventDefault()');
+});
+
+// ---------------------------------------------------------------------------
 // The linear pages' flex/grid layout + theme tokens (issue #40, step 2)
 //
 // history.css styles four pages, so the new rules hang off `.linear-view`

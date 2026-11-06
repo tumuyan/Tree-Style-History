@@ -94,6 +94,7 @@ chrome/scripts/background-utils.js 由 chrome/scripts/modules/shared/ 自动生�
 - 「加载中 / 无结果」收敛到 `list-status.js`、分组/排序工具栏收敛到 `sort-bar.js`（状态交给 `data-state` + CSS），工具栏图标改内联 SVG + CSS mask（删掉 11 张位图）。
 - 书签「编辑书签」由两次 `prompt()` 换成行内面板（标题/网址、Enter 保存 / Esc 取消），网址合法性交给 `chrome.bookmarks.update` 判定，支持 `mailto:` 等合法地址，失败在面板内提示。
 - 图标按钮补 `role="button"` 与双 locale `aria-label`/`title`，`outline: none` 换 `:focus-visible` 焦点环；写死的中文占位文案、删除标题、英文 `Liner` 拼写全部走 i18n / 修正。
+- 树状历史 / 最近关闭两个核心页补上键盘与读屏支持：树与行分别带 `role="tree"`/`treeitem` 及层级、展开状态，方向键切换行并折叠展开、Enter 打开页面、Home/End 跳首尾、`*` 展开同级；焦点行始终有可见焦点环，筛选框补双 locale 无障碍标签。
 
 **Bug 修复**（同类合并）
 - 冷启动与坏数据不再拖垮整页：选项页抢在 worker 写默认值前打开会按钮全死 / 显示 `NaN`；缓存解析失败、一行缺字段、快照顺序异常、`options.html?p=` 未知值会让整个弹窗或后续监听器全丢——现改为兜底或回退。

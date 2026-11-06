@@ -161,7 +161,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // line and the indentation. jQuery, zTree, its locally patched exhide
     // extension and fuzzysearch.js are gone from this page — see the header
     // comment in modules/tree.js for what replaced them and why.
-    var tree = createTree($('treeDemo'), { onClick: onClickNodeUrl });
+    var tree = createTree($('treeDemo'), { onClick: onClickNodeUrl, label: returnLang('closeHistory') });
     bindTreeSearch(tree, {
         input: '#rh-search',
         tags: '#search-tag a',
