@@ -24,7 +24,8 @@ function leftClick(url, event) {
             fallbackToUpdate: true,
             onSuccess: function () {
                 // Close popup if needed
-                if (!modifierState.ctrl && (localStorage['rh-click'] === 'newtab' || localStorage['rh-click'] === 'current')) {
+                const clickAction = storageAdapter.getItem('rh-click');
+                if (!modifierState.ctrl && (clickAction === 'newtab' || clickAction === 'current')) {
                     window.close();
                 }
             },
@@ -35,7 +36,7 @@ function leftClick(url, event) {
         return;
     }
 
-    var ca = localStorage['rh-click'];
+    var ca = storageAdapter.getItem('rh-click');
     if (modifierState.ctrl || (event && event.button == 1)) {
         chrome.tabs.create({
             url: url,
@@ -77,8 +78,8 @@ function formatItem(data) {
 
     var item = '';
     var sobj = {};
-    var rhsurl = localStorage['rhs-showurl'];
-    var rhsext = localStorage['rhs-showext'];
+    var rhsurl = storageAdapter.getItem('rhs-showurl');
+    var rhsext = storageAdapter.getItem('rhs-showext');
 
     var url = data.url;
     var type = data.type;
@@ -117,7 +118,7 @@ function formatItem(data) {
         surl = '';
     }
 
-    if (localStorage['rhs-showsep'] == 'yes') {
+    if (storageAdapter.getItem('rhs-showsep') == 'yes') {
         sobj['border-bottom'] = '1px solid #ccc';
     }
 
@@ -304,7 +305,7 @@ function alertUser(msg, action) {
 function recentHistory() {
 
     var ir = 0;
-    var rhin = Number(localStorage['rh-itemsno']);
+    var rhin = storageAdapter.getNumber('rh-itemsno');
     var rhino = rhin;
     rhin = rhin * 4;
 
@@ -373,7 +374,7 @@ function recentHistory() {
 // Recently Closed Tabs
 function recentlyClosedTabs() {
 
-    var itemsno = Number(localStorage['rct-itemsno']);
+    var itemsno = storageAdapter.getNumber('rct-itemsno');
 
     if (itemsno > 0) {
 
@@ -553,7 +554,7 @@ function showRecentTabsImpl(rhhistory, rt) {
     var tDataReady = (performance.now() - (window._htmlStartTime || performance.now())).toFixed(1);
     console.info('[Popup] Data ready (click to render): ' + tDataReady + 'ms');
 
-    var itemsno = Number(localStorage['rt-itemsno']);
+    var itemsno = storageAdapter.getNumber('rt-itemsno');
     var rcti = 0;
 
     if (itemsno > 0) {
@@ -595,7 +596,7 @@ function showRecentTabsImpl(rhhistory, rt) {
 // Most Visited
 function mostVisited() {
 
-    var mvc = localStorage['mv-cache'];
+    var mvc = storageAdapter.getItem('mv-cache');
 
     // `undefined` is a cold start: the worker has not written the cache yet.
     // It used to fall through to JSON.parse(undefined) and throw.
@@ -614,10 +615,10 @@ function mostVisited() {
             mvd = [];
         }
         if (!Array.isArray(mvd)) mvd = [];
-        var itemsno = Number(localStorage['mv-itemsno']);
+        var itemsno = storageAdapter.getNumber('mv-itemsno');
         // Undefined on a profile the worker has not seeded yet; the .indexOf()
         // below would throw the same way formatItem() did.
-        var mvrl = localStorage['mv-blocklist'] || '';
+        var mvrl = storageAdapter.getItem('mv-blocklist') || '';
         var r = 0;
 
         // Two bounds, not one. MOST_VISITED_MAX is what the worker fills the
@@ -651,7 +652,7 @@ function mostVisited() {
 // Recent Bookmarks
 function recentBookmarks() {
 
-    var rbin = Number(localStorage['rb-itemsno']);
+    var rbin = storageAdapter.getNumber('rb-itemsno');
 
     if (rbin > 0) {
 
@@ -694,7 +695,7 @@ function recentBookmarks() {
 // be in storage and nowhere on screen.
 function pinned() {
 
-    var pc = localStorage['rh-pinned'];
+    var pc = storageAdapter.getItem('rh-pinned');
 
     // Popup.js only creates #pi-inject when there is something to show, but
     // the block can also be re-rendered from code paths that run before that.

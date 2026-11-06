@@ -215,3 +215,24 @@ test('a second initSortBar() in one document does not stack handlers', () => {
     assert.equal(localStorage['rh-group'], 'no', 'two handlers toggled it twice');
     assert.equal(t.calls.length, 1, 'the refresh ran more than once');
 });
+
+test('the toolbar reads and writes through storageAdapter, not the proxy', () => {
+    const t = setup({ 'rh-group': 'yes', 'rh-orderby': 'date', 'rh-order': 'desc' });
+    const reads = [];
+    const writes = [];
+    const api = globalThis.storageAdapter;
+    const realGet = api.getItem;
+    const realSet = api.setItem;
+    api.getItem = (k) => { reads.push(k); return realGet(k); };
+    api.setItem = (k, v) => { writes.push([k, v]); return realSet(k, v); };
+    try {
+        t.click('rh-bar-group');
+    } finally {
+        api.getItem = realGet;
+        api.setItem = realSet;
+    }
+
+    assert.ok(reads.includes('rh-group'), 'paint() must read via storageAdapter.getItem()');
+    assert.deepEqual(writes, [['rh-group', 'no']], 'the toggle must write via storageAdapter.setItem()');
+    assert.equal(localStorage['rh-group'], 'no', 'the write lands in the shared store');
+});
