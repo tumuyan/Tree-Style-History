@@ -73,7 +73,7 @@ npm run check   # 本地门禁：lint + test + verify，约 3 秒
 - `npm test` 覆盖四类：静态检查（`tests/static.test.mjs`：manifest 合法性、MV3 约束、HTML 资源引用、i18n 覆盖）、模块行为（`tests/modules.test.mjs`、`tests/tree.test.mjs`、`tests/db-manager.test.mjs` 等）、模块图完整性（各模块公开导出仍存在）、生成物一致性（`tests/sw-sync.test.mjs`）。
 - `tests/tree.test.mjs` 可以**静态 `import`** `modules/tree.js`：它只依赖 `helpers.js` 里那几个纯转义函数，没有导入期副作用。`createTree` / `bindTreeSearch` 需要元素，所以那几条用例装 `tests/dom.mjs` 的替身（该替身的 `matches()` 支持 `li[data-tid]` 这类属性存在型选择器）。
 - `tests/shared.test.mjs` 单测 `modules/shared/` 这一层。它可以**静态 `import`**（不像 `modules.test.mjs` 必须 `await import`），因为这些模块没有导入期副作用；唯一例外是 `calendar-storage.js`（它在导入期无条件调 `onStorageReady()`），所以没有在这里测。
-- `npm run test:e2e` 是**唯一能验证"页面真的能打开"**的一层：用 Playwright 自带的 Chromium 侧载 `chrome/`，逐个打开 popup / history / history2 / closed / bookmark / options 六个页面，断言无未捕获异常、无扩展自身发出的 `console.error`。官方做法与踩坑记录都写在 `e2e/pages.spec.mjs` 文件头注释里，要点：
+- `npm run test:e2e` 是**唯一能验证"页面真的能打开"**的一层：用 Playwright 自带的 Chromium 侧载 `chrome/`，逐个打开 popup / history / history2 / closed / bookmark / options 六个页面，断言无未捕获异常、无扩展自身发出的 `console.error`；此外还覆盖真实交互（见下）。官方做法与踩坑记录都写在 `e2e/pages.spec.mjs` 文件头注释里，要点：
   - 扩展**只能在 persistent context 中加载**，且必须用 `channel: 'chromium'`——Chrome/Edge 已移除侧载用的命令行 flag，headless shell 也不支持扩展，所以 Playwright 自带的 Chromium 是唯一选择。
   - MV3 的扩展 id 从 service worker 的 URL 里取（没有 background page 可读了）。
   - **不能用 `networkidle` 判断渲染完成**：页面会持续向第三方 favicon 服务发请求，离线时全部失败，网络空闲点既晚又不稳定。改为 `goto(waitUntil:'load')` → 等 `storageAdapter.ready()` → 固定 settle 1.5s。
@@ -82,6 +82,10 @@ npm run check   # 本地门禁：lint + test + verify，约 3 秒
   - 只断言"没抛错"是不够的——这些页面渲染的都是空列表，渲染循环根本没跑。所以另有**喂真实数据**的用例：`bookmark.html` 建一个书签断言标题逐字渲染；两个树状页各断言 `#treeDemo` 里真的有 `li[data-tid]`、每行都带 `switch`/`ico` span、且 `window.jQuery` 已不存在（后者锁住"删掉 zTree 库"这件事，同样变异验证过：让渲染器返回空串即两条都红）。
     - 树状页那两条不需要喂数据：空库时它们渲染"没有找到记录"的占位节点，那也是渲染器必须画出来的两行。
   - 新增 e2e 用例时沿用同一模式：`collectErrors(page)` → `goto` → `settle(page)` → 断言 `jsErrors` 为空。**不要**用 `networkidle`。
+  - **核心交互已有真实用例**（issue #38 第 8 条，文件末尾 `Core interactions` 段）：往 IndexedDB 喂真实父子 `VisitItem` / `closed` 记录，断言①点击树行 `window.open` 的 URL 精确对应该行、switch 折叠/展开双向生效；②筛选保留命中项的祖先链、丢掉无关根、只高亮键入的关键字；③点击 `closed.html` 的分组一次打开组内全部页面；④在 **worker 里** `chrome.commands.onCommand.dispatch()` 派发，断言四条快捷键各打开对应页面。全部做过变异验证（改坏 `tree.js` 的 `toggle`/`byTid`/祖先链/高亮、`closed.js` 的分组批量打开、`background-sw.js` 的 `onCommand`，对应用例即变红）。
+    - 喂数据走 `dbManager.putVisitItem()` / `putClosedTab()`（树状页读 IndexedDB，不是 `chrome.history`），`referringVisitId` 造父子、`oid` 造分组；用完必须删（`deleteVisitItem()`，closed 用 readwrite 事务），否则共享 context 里后续用例的行数全乱。
+    - **不要写死「树上恰好 N 行」**：共享 persistent context 里前面的爬库用例已经写过 `VisitItem` / `closed`，按种子 URL 用 `:scope > a[title="…"]` 精确定位行（`:has(a)` 会连父行一起命中，`:scope >` 是必须的）。
+    - 离线时真实 popup 落到 `chrome-error://chromewebdata/`，断言不出目标网址——所以 stub `window.open` 记录参数；快捷键那条派发在 `context.serviceWorkers()[0].evaluate()` 里，页面侧看不到 worker 的监听器。
   - **要驱动 SW 自己的代码，用 `context.serviceWorkers()[0].evaluate()`，不是 `page.evaluate()`**：后者跑在页面侧，看不到爬库、`urls_wait_load`、`heatDays` 这些 worker 作用域里的东西（`worker()` 这个 helper 就是干这个的）。写这类用例时给 `evaluate` 的回调加 `/* eslint-disable no-undef */`——那份代码在 worker 里求值，对 ESLint 不可见。
   - **想让历史数据落在过去，不要指望 `chrome.history.deleteRange`**。`addUrl()` 只会写「现在」，而 `deleteRange` 在真实 Chromium 里的行为不是它字面读起来的样子：一个旧的窗口会被接受却什么都不改，而一个覆盖着还在 Chrome 内存缓冲里那批数据的窗口反而会把它**冲出来**（`e2e/pages.spec.mjs` 的 `seedBackfillableVisit()` 注释里记着实测结果）。要喂「某一天的访问」，直接 stub `chrome.history.getVisits` 再跑一次 `processVisits()`。
   - 顺手记一个坑：`localStorage.removeItem()` 清的是 `chrome.storage.local`；worker 里那份解析后的 `calendar_storage2` 由 shared 层的 `chrome.storage.onChanged` 监听清空，但那个广播是**异步**的。用例要重置热力图时两处都得清（`resetAndReadStoredHeatMap()`），不能等广播，它同时把 storage 读回来，好让用例先断言地图确实是空的。

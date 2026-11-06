@@ -149,6 +149,7 @@ Bug 修复: 弹窗一行坏数据会带走后面所有区块——缓存行缺 `
 清理: 启动诊断日志（SW 启动摘要、存储适配器初始化计时、db-manager 开库日志）收敛到 `storage-adapter.js` 的 `DEBUG` 开关，默认关闭；`console.warn` / `console.error` 不受影响  
 Bug 修复: 删除历史时 `document.title` 写死英文（`'Deleting...'` / `'History | Recent History'`），英文界面之外的用户也只看到英文，且恢复值与 HTML 标题不一致；现在走 i18n（`deleting` 已补 en/zh），恢复用模块加载时记下的页面原标题  
 重构: 跨 Service Worker 生命周期的爬库状态从三个独立 key（`crawl-cursor` / `crawl-heat` / `crawl-sweep`，各有自己的读写与 TTL）收敛成一个带版本号的 `crawl-state` 对象 `{v, cursor, heat, sweepAt}`——一趟爬库只读一次、只写一次，`session.set()` 原子提交，worker 在两次写之间被回收不再留下「游标没有计数 / sweep 谎称已爬完」的半截状态（近期三个爬库修复都落在这块）；版本不匹配整份丢弃，游标过期时连它的热力计数一起丢，收尾写显式清空计数但不碰 live `heatDays`；`heat` 改为必填字段、删除「忘传就隐式快照 live 累加器」的回退，空窗口 pass 不再写 state，避免把上一窗口的计数带进新窗口。配套重写静态守卫（一个 key、一次读、一次写、每次写显式传 heat、空 pass 不写，附经语法校验的变异探针）与行为用例（含空 pass 不回写上一窗口计数），e2e 手工驱动爬库前改为显式重置窗口  
+新增校验 (e2e 交互): 端到端套件此前只证明「页面不抛错 / 空列表能画」，树展开折叠、点击跳转、筛选、分组批量打开、快捷键这些核心交互仍靠人眼验收；现在补 4 条真实 Chromium 用例：往 IndexedDB 喂真实父子 VisitItem 后断言点击行精确打开对应 URL、switch 折叠/展开双向生效、过滤保留祖先链且只高亮命中项、点击 closed.html 的分组一次打开组内全部页面，并在 worker 里派发 `chrome.commands.onCommand` 断言四条快捷键各打开对应页面（全部经变异验证：改坏 tree.js / closed.js / background-sw.js 对应处即变红）；种子数据用后即删，不污染共享 context
 
 3.3.1 (2026/06/19)  
 修复设置丢失的bug 
