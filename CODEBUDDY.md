@@ -172,6 +172,13 @@ MV3 取消了后台页面，因此代码分成两套互不相通的运行时：
 - **未就绪时的写/删除会被初始快照回冲**。`chrome.storage.local.get(null)` 在脚本求值时发出，期间发生的写删除立刻落盘，**却不在那次读的应答里**（Chrome 应答的是调用时刻的快照）。适配器因此把未就绪期间的写删除记进 `_pendingWrites`，在初始化完成时重新应用。写入方有两路，都要记：本上下文的 `setItem()` / `removeItem()`，以及别处（SW 的 `defaultConfig()`）经 `chrome.storage.onChanged` 送达的变更——漏掉后者的话洞只补了一半。两个写入方法都用 `!this._initialized` 守卫，因为初始化后该 Map 再无读取方。
 - **与适配器成员同名的存储键会顶掉成员本身**。`localStorage['getItem'] = x` 走 Proxy 的 `set`，命中 `prop in target` 就把方法本身替换掉：值不会被持久化，刷新即无，而此后读这个名字只拿得到 `x`。`RESERVED_KEYS`（由 `Object.keys(adapter)` 推导）在写入时拒绝、报错，并让 `set` 返回 `false`（严格模式下赋值抛 `TypeError`）。
 
+**迁移方向（进行中，按模块小步走）**：上面这两个陷阱，加上「所有值强制字符串化 → 每个数字比较都得 `Number()` → 于是有了 `verify:storage-numbers` 与静态套件里同一规则的两份实现、两份的 parity 守卫、一整份探针清单」，都是这层 Proxy 假象的复利成本。目标不是一次性推倒它（业务代码量大、SW 与页面两个运行时、e2e 依赖真实 `localStorage` 行为），而是让业务逐步改走 `storageAdapter` 上明确的读写 API，Proxy 长期保留作尚未迁移模块的兜底：
+
+- `storageAdapter.getItem(key)` / `setItem(key, value)` / `removeItem(key)` —— 与 Proxy 的 trap 同一份 `_cache`、同一套字符串化与 `_pendingWrites` 语义，页面 ESM 与 SW 经典脚本都能直接调（全局单例，已在 eslint `crossFileGlobals` 里登记）。
+- `storageAdapter.getNumber(key)` —— 在存储边界做 `Number(getItem(key))`，业务侧不再需要 `Number(localStorage[k])`。冷启动/未设置键返回 `NaN`、空串返回 `0`，与原先调用点的 `Number(undefined)` / `Number('')` 完全一致；它照样走 `getItem()`，所以未就绪读仍会被记进 `_unreadyReads`。
+- 已迁移的示范模块：`modules/popup-core.js`（纯读）与 `modules/sort-bar.js`（含写）。新代码优先用这套 API；`verify:storage-numbers` 那套规则暂时仍盯 `localStorage[...]` 形状，只对未迁移模块有用，**不要为已迁移模块新增形状守卫**。
+- 测试桩 `tests/stubs.mjs` 的 `storageAdapter` 与 `localStorage` 共用一个 `store`，两侧读写互通；`tests/storage-adapter.test.mjs` 覆盖 `getNumber()` 的转换、冷启动与 unready 读。
+
 **`scripts/db-manager.js`** —— IndexedDB 单例 `dbManager`，库名 `testDB`（历史遗留命名），版本 6。三个 object store：
 - `VisitItem`（keyPath `visitId`）：一次访问 = 一条记录，含 `referringVisitId`（父节点）、`url`、`visitTime`、`title`、`transition`。**树状结构就建立在这个自引用关系上**。
 - `urls`（keyPath `id`）：URL 聚合记录，含 `loadfrom`/`loadto` 游标范围，用于增量抓取。

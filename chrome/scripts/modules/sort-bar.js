@@ -52,14 +52,14 @@ function setHint(id, key) {
 // after every toggle, so the buttons can never disagree with the list.
 function paint() {
     for (const id in KEYS) {
-        setState(id, localStorage[KEYS[id]]);
+        setState(id, storageAdapter.getItem(KEYS[id]));
     }
     // `orderByTitle` / `orderByTime` describe the *next* click, matching the
     // tooltip the old handlers set. `group` and `order` are static hints.
     setHint('rh-bar-group', 'group');
     // The old handlers only special-cased 'title'; every other value (and a
     // cold-start undefined) advertised the click that switches to titles.
-    setHint('rh-bar-orderby', localStorage['rh-orderby'] === 'title' ? 'orderByTime' : 'orderByTitle');
+    setHint('rh-bar-orderby', storageAdapter.getItem('rh-orderby') === 'title' ? 'orderByTime' : 'orderByTitle');
     setHint('rh-bar-order', 'order');
 }
 
@@ -107,11 +107,11 @@ export function initSortBar(refresh, getActive) {
         el.addEventListener('click', function () {
             var key = KEYS[id];
             var pair = TOGGLES[key];
-            var current = localStorage[key];
+            var current = storageAdapter.getItem(key);
             // Only a known first state flips back; anything else (including a
             // cold-start undefined) lands on the second one. The first click
             // therefore always produces a known, usable value.
-            localStorage[key] = current === pair[1] ? pair[0] : pair[1];
+            storageAdapter.setItem(key, current === pair[1] ? pair[0] : pair[1]);
             paint();
             refreshActive(refresh, getActive);
         });

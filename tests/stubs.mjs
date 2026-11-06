@@ -92,6 +92,17 @@ export function installStubs() {
         },
     });
 
+    // The real adapter exposes these as a typed read API on a global singleton;
+    // modules that have moved off the `localStorage` proxy call them directly.
+    // It shares `store` with localStorageProxy, so a test can seed through
+    // either side and read through the other.
+    const storageAdapterStub = {
+        getItem: (k) => (store.has(String(k)) ? store.get(String(k)) : undefined),
+        getNumber: (k) => Number(store.has(String(k)) ? store.get(String(k)) : undefined),
+        setItem: (k, v) => { store.set(String(k), String(v)); },
+        removeItem: (k) => { store.delete(String(k)); },
+    };
+
     const syncStore = new Map();
     // chrome.storage.session, Chrome 102+ — the manifest's declared floor. It
     // is what the popup reads the tab list from, so tests can seed it.
@@ -148,6 +159,7 @@ export function installStubs() {
     };
 
     globalThis.localStorage = localStorageProxy;
+    globalThis.storageAdapter = storageAdapterStub;
     globalThis.chrome = chromeStub;
     globalThis.document = documentStub;
     globalThis.CSS = { escape: cssEscape };
@@ -159,6 +171,7 @@ export function installStubs() {
         syncStore,
         sessionStore,
         localStorage: localStorageProxy,
+        storageAdapter: storageAdapterStub,
         chrome: chromeStub,
         reset() {
             store.clear();

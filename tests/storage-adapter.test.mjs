@@ -346,3 +346,48 @@ test('a long-lived adapter does not accumulate pending removals', () => {
 
     assert.equal(env.adapter._pendingWrites.size, 0, 'an entry recorded now could never be replayed');
 });
+
+test('getNumber() reads through getItem() and converts at the boundary', () => {
+    const env = loadAdapter({ 'rh-itemsno': '25', 'load-range': '120', 'rh-search': 'yes' });
+    env.flush();
+
+    assert.equal(env.adapter.getNumber('rh-itemsno'), 25);
+    assert.equal(env.adapter.getNumber('load-range'), 120);
+    // A non-numeric string becomes NaN rather than throwing — the same answer
+    // `Number(localStorage[k])` gave at the call sites this replaces.
+    assert.ok(Number.isNaN(env.adapter.getNumber('rh-search')));
+});
+
+test('getNumber() on a cold or unset key matches Number(localStorage[k])', () => {
+    const env = loadAdapter();
+    // An empty string in real localStorage parses to 0; an unset key to NaN.
+    env.localStorage['rh-itemsno'] = '';
+    env.flush();
+
+    assert.equal(env.adapter.getNumber('rh-itemsno'), 0, 'Number(\'\') is 0');
+    assert.ok(Number.isNaN(env.adapter.getNumber('never-configured')), 'Number(undefined) is NaN');
+});
+
+test('getNumber() reports an early read like any other getItem()', () => {
+    const env = loadAdapter({ 'rh-itemsno': '25' });
+
+    const early = env.adapter.getNumber('rh-itemsno');
+    assert.ok(Number.isNaN(early), 'the cache is empty before the read lands');
+    assert.ok(
+        Array.from(env.adapter._unreadyReads).includes('rh-itemsno'),
+        'an early getNumber() must be visible as an unready read',
+    );
+    env.flush();
+    assert.equal(env.adapter.getNumber('rh-itemsno'), 25);
+});
+
+test('getNumber() sees writes made through the proxy and through setItem()', () => {
+    const env = loadAdapter();
+    env.flush();
+
+    env.localStorage['rh-itemsno'] = '9';
+    assert.equal(env.adapter.getNumber('rh-itemsno'), 9, 'the API and the proxy share one cache');
+    env.adapter.setItem('rh-itemsno', 11);
+    assert.equal(env.localStorage['rh-itemsno'], '11', 'setItem() stringifies through the same path');
+    assert.equal(env.adapter.getNumber('rh-itemsno'), 11);
+});

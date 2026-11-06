@@ -3599,3 +3599,30 @@ test('one untick among many keeps every title that still has a ticked row', asyn
     selectBookmarkItem(first.input, 'single');
     assert.equal(shared.style.backgroundColor, '', 'the emptied group kept its title');
 });
+
+test('recentHistory reads its item count through storageAdapter.getNumber()', async (t) => {
+    // The point of the typed read API: a numeric config key is converted at the
+    // storage boundary, so a render loop holds a number from the outset. If this
+    // regresses to `Number(localStorage[k])`, getNumber is never called and the
+    // case goes red.
+    const popupCore = await importModule('modules/popup-core.js');
+    restoreStorage(t, ['rh-itemsno']);
+    localStorage['rh-itemsno'] = '2';
+
+    const holder = dom.el('rh-inject');
+    holder.innerHTML = '';
+    const calls = [];
+    const real = env.storageAdapter.getNumber;
+    env.storageAdapter.getNumber = (k) => { calls.push(k); return real(k); };
+    t.after(() => { env.storageAdapter.getNumber = real; });
+
+    const now = Date.now();
+    withChromeApi({ history: { search: (_q, cb) => cb([
+        { url: 'https://a.test/', title: 'A', visitCount: 1, lastVisitTime: now },
+        { url: 'https://b.test/', title: 'B', visitCount: 1, lastVisitTime: now },
+        { url: 'https://c.test/', title: 'C', visitCount: 1, lastVisitTime: now },
+    ]) } }, () => { popupCore.recentHistory(); });
+
+    assert.ok(calls.includes('rh-itemsno'), 'the count must come from storageAdapter.getNumber()');
+    assert.equal(holder.children.length, 2, 'the numeric read still governs the quota');
+});
