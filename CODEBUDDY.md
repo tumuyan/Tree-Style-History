@@ -13,7 +13,7 @@ Tree Style History —— 一个 Chrome/Edge 浏览器扩展（**Manifest V3**�
 
 ```bash
 npm install     # 首次：只装 eslint + globals，两个开发依赖
-npm run check   # 本地门禁：lint + test + verify，约 3 秒
+npm run check   # 本地门禁：lint + test + verify，约 15 秒
 ```
 
 ### 命令分层
@@ -22,7 +22,7 @@ npm run check   # 本地门禁：lint + test + verify，约 3 秒
 
 | 命令 | 用途 | 说明 |
 |---|---|---|
-| `npm run lint` | 通用 | ESLint，**0 error 才通过**（warning 是历史欠账，不阻塞） |
+| `npm run lint` | 通用 | ESLint，`--max-warnings 0`：**error 与 warning 都阻塞** |
 | `npm run lint:fix` | 本地 | 自动修复 |
 | `npm test` | 本地 | 全部测试，spec 报告输出到终端 |
 | `npm run test:static` | 本地 | 只跑静态检查（manifest / MV3 / i18n） |
@@ -123,7 +123,7 @@ npm run check   # 本地门禁：lint + test + verify，约 3 秒
 Service Worker 侧（`background-sw.js`、`background-utils.js`、`db-manager.js`、`manifest.json`）：必须在 `chrome://extensions` 点扩展卡片上的刷新图标；Service Worker 空闲 30 秒会被浏览器回收，全局变量（`openedTabs`、`recentTabs`、`openerJson` 等）会丢失，这是设计上必须容忍的。
 
 ### 查看日志
-- 启动诊断日志（SW 的 `[SW Startup] ...`、`[StorageAdapter] ...`、db-manager 的开库日志）默认**全部关闭**：`storage-adapter.js` 在全局装了一个 `debugLog()` 和一个 `DEBUG` 开关（`false`）。要查看时在对应上下文的 DevTools 里执行 `self.DEBUG = true`（页面用 `window.DEBUG = true`）并刷新即可；`console.warn` / `console.error` 不受开关影响，始终输出。`console.debug` 是 Chrome 的 verbose 级，本来也默认不显示。
+- 启动诊断日志（SW 的 `[SW Startup] ...`、`[StorageAdapter] ...`、db-manager 的开库日志）默认**全部关闭**：`storage-adapter.js` 在全局装了一个 `debugLog()` 和一个 `DEBUG` 开关（`false`）。要查看时在对应上下文的 DevTools 里执行 `self.DEBUG = true`（页面用 `window.DEBUG = true`）并刷新即可；`console.warn` / `console.error` 不受开关影响，始终输出。`console.debug` 是 Chrome 的 verbose 级，本来也默认不显示。每页的版本横幅（`page-init.js`，从 `func.js` 继承来的那条）也走这个开关。**刻意留在开关外的是 popup 的三行耗时**（`popup.js` 的 Storage ready / Total load、`popup-core.js` 的 Data ready）与 `options.js` 的「Database deleted」：前者是量弹窗冷启动预算用的，被 DevTools 过滤掉就失去了意义；后者报的是用户动作。`tests/static.test.mjs` 的守卫名单写明了这个边界。
 - Service Worker：`chrome://extensions` → 扩展卡片 → 「Service Worker」链接，打开 DevTools 控制台。
 - Popup：popup 区域右键 → 检查。popup 关闭后即销毁，需在此窗口保持打开。
 - 各页面（`history2.html` 等）：在标签页内按 F12。

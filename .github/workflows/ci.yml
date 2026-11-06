@@ -37,8 +37,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Fails on ESLint *errors* only. Warnings track the existing backlog;
-      # switch to `eslint . --max-warnings 0` once it is cleared.
+      # `npm run lint` runs `eslint . --max-warnings 0`: warnings fail the build
+      # too. The backlog this comment used to describe is cleared.
       - name: Lint
         run: npm run lint
 

@@ -75,5 +75,14 @@ export function initPage() {
         fillLangStrings();
         swallowHashClicks();
     });
-    console.log('Tree Style History v' + getVersion() + ' (' + getVersionType() + ')');
+    // The version banner came over from func.js, which printed it on every page
+    // unconditionally — startup diagnostics like the worker's, so it goes
+    // through the same switch. storage-adapter.js is a classic script and runs
+    // before any module, so the helper is in scope here; the fallback only
+    // keeps this module importable on its own, which is what the unit tests do.
+    var log = (typeof self !== 'undefined' && self.debugLog)
+        || (typeof window !== 'undefined' && window.debugLog);
+    if (typeof log === 'function') {
+        log('Tree Style History v' + getVersion() + ' (' + getVersionType() + ')');
+    }
 }
