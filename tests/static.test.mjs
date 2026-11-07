@@ -4185,6 +4185,113 @@ test('the linear pages reserve space so a re-render cannot shift the layout', ()
     }
 });
 
+/**
+ * Every two-state icon in the linear pages is a single inline SVG mask rendered
+ * at `mask-position: left|right center`. That makes `transition` on `a` load
+ * bearing: `all` animates the mask's position, so a click slides the graphic
+ * sideways for 200ms instead of flipping it. Issue #57 follow-up: the
+ * group/orderby/order buttons were reported as looking like a meaningless
+ * animation, and this was the animation.
+ *
+ * The guard is a pure function so the probes below can feed it regressed
+ * sources and prove it goes red; restating the regex in a probe would only
+ * prove the regex matches itself.
+ */
+function maskFadeGuard({ css, popup, options }) {
+    const problems = [];
+    const check = (ok, msg) => { if (!ok) problems.push(msg); };
+
+    // Transition declarations that would sweep in `mask-position`: `all`, an
+    // explicit `mask-*`, or a shorthand covering it.
+    // `(?![-\w])` keeps `background-color` (a legit fade) from reading as the
+    // `background` shorthand, which would animate a background-icon position.
+    const SWEEPS_MASK = /\b(?:all|mask(?:-position|-image)?|background)(?![-\w])/;
+
+    /** The declarations inside every `sel { ... }` whose selector mentions `sel`. */
+    const rulesOf = (text, selRe) => [...text.matchAll(/([^{}]+)\{([^}]*)\}/g)]
+        .filter((m) => selRe.test(m[1]))
+        .map((m) => m[2]);
+
+    const transitionValues = (body) => [...body.matchAll(/-webkit-transition\s*:\s*([^;]+);|(?<!-webkit-)\btransition\s*:\s*([^;]+);/g)]
+        .map((m) => (m[1] || m[2]).trim());
+
+    const aBodies = rulesOf(css, /(?:^|[\s,}])a\s*(?:,|$|\{)/);
+    check(aBodies.length > 0, 'history.css no longer styles plain `a`; update this guard');
+    const aTransitions = aBodies.flatMap(transitionValues);
+    check(aTransitions.length > 0, 'the `a` transition is gone; the icon fade guard is blind');
+    for (const value of aTransitions) {
+        check(!SWEEPS_MASK.test(value),
+            `a { transition: ${value} } animates the icon mask, so a click slides it instead of flipping it`);
+    }
+
+    // The fades this transition exists for must survive: narrowing it to
+    // `color` alone would drop the hover/border fades the dark theme relies on.
+    check(aTransitions.some((v) => /\bcolor\b/.test(v)),
+        'the `a` transition no longer fades colour at all');
+    check(aTransitions.some((v) => /\bbackground-color\b/.test(v)),
+        'the `a` transition lost its background fade');
+
+    // The other two sheets carry the same `a { transition: all }` and use
+    // `background-position` for their own two-state icons, so the same rule
+    // applies to them.
+    for (const [name, text] of [['popup.css', popup], ['options.css', options]]) {
+        const bodies = rulesOf(text, /(?:^|[\s,}])a\s*(?:,|$|\{)/);
+        if (bodies.length === 0) continue;
+        for (const value of bodies.flatMap(transitionValues)) {
+            check(!SWEEPS_MASK.test(value),
+                `${name}: a { transition: ${value} } animates a background icon position`);
+        }
+    }
+    return problems;
+}
+
+test('clicking a two-state icon flips it, it does not slide it', () => {
+    // issue #57 follow-up. The icons are SVG masks whose whole state is
+    // `mask-position`; `a { transition: all }` turned every flip into a 200ms
+    // slide. Measured in a real browser before the fix: 13 distinct
+    // mask-position values across 37 frames (0% -> 8.35% -> ... -> 100%).
+    const sources = {
+        css: fs.readFileSync(path.join(CHROME_DIR, 'css/history.css'), 'utf8'),
+        popup: fs.readFileSync(path.join(CHROME_DIR, 'css/popup.css'), 'utf8'),
+        options: fs.readFileSync(path.join(CHROME_DIR, 'css/options.css'), 'utf8'),
+    };
+    assert.deepEqual(maskFadeGuard(sources), []);
+
+    const { css, popup } = sources;
+    const probes = [
+        {
+            what: 'the `a` transition goes back to `all`',
+            sources: { css: css.replace(/transition:\s*(?:color[^;]+);/, 'transition: all 0.2s linear;') },
+        },
+        {
+            what: 'the `a` transition names the mask explicitly',
+            sources: { css: css.replace(/transition:\s*(?:color[^;]+);/,
+                'transition: color 0.2s linear, mask-position 0.2s linear;') },
+        },
+        {
+            what: 'the `a` transition loses its colour fade',
+            // Both the prefixed and the unprefixed declaration: leaving the
+            // `-webkit-` one in place kept the guard's "colour survives" check
+            // satisfied, so the first draft of this probe stayed green.
+            sources: {
+                css: css.replace(/-webkit-transition:\s*[^;]+;/g, '-webkit-transition: none;')
+                    .replace(/(?<!-webkit-)\btransition:\s*[^;]+;/g, 'transition: none;'),
+            },
+        },
+        {
+            what: 'the popup sheet goes back to `all`',
+            sources: { popup: popup.replace(/transition:\s*color[^;]+;/, 'transition: all 0.2s linear;') },
+        },
+    ];
+    for (const probe of probes) {
+        const mutated = { ...sources, ...probe.sources };
+        assert.notDeepEqual(mutated, sources,
+            `the ${probe.what} probe must change the source, or it proves nothing`);
+        assert.ok(maskFadeGuard(mutated).length > 0,
+            `the ${probe.what} probe must turn the real guard red`);
+    }
+});
+
 test('the linear icon state comment matches the vector-mask implementation', () => {
     // The old comment described a bitmap sprite and claimed the rules sat
     // after retina rules that reset `background` shorthand. Those bitmaps and

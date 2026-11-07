@@ -1364,9 +1364,10 @@ test('the linear pages drive their sort toolbar through data-state', { skip: SKI
     assert.ok(before.label && before.label.length > 0, 'the button has no accessible label');
 
     await page.click('#rh-bar-group');
-    // `a { transition: all 0.2s linear }` animates mask-position too: reading
-    // the computed value immediately catches it mid-transition (a percentage
-    // between 0% and 100%), not the state the CSS rule settles on.
+    // The wait is only a settle margin: `a` used to fade `all`, which animated
+    // mask-position as well, so this read used to catch a percentage between
+    // the two states. Now the flip is instant (see the case below, which is
+    // the one that actually forbids the animation).
     await new Promise((resolve) => setTimeout(resolve, 300));
 
     const after = await page.evaluate(() => {
@@ -1385,6 +1386,109 @@ test('the linear pages drive their sort toolbar through data-state', { skip: SKI
     assert.equal(after.stored, after.state, 'the painted state disagrees with the stored key');
     assert.notEqual(after.position, before.position,
         `CSS did not move the icon mask: before=${JSON.stringify(before)} after=${JSON.stringify(after)}`);
+});
+
+test('a toolbar click flips the icon in one frame instead of sliding it', { skip: SKIP }, async () => {
+    // issue #57 follow-up: "the group / order buttons' animation is meaningless,
+    // remove it". The animation was not authored — every icon here is one inline
+    // SVG mask showing either half of itself, and `a { transition: all 0.2s
+    // linear }` swept `mask-position` in. Clicking slid the graphic sideways for
+    // 200ms. Measured before the fix: 13 distinct mask-position values across 37
+    // frames. After it: exactly two (the states themselves).
+    //
+    // Sampled from a requestAnimationFrame loop inside the page before, during
+    // and after the click, because "the state after it settled" is identical
+    // either way — only an intermediate frame can tell an animation apart.
+    const page = await context.newPage();
+    const { jsErrors, netErrors } = collectErrors(page);
+    await page.goto(`chrome-extension://${extensionId}/history.html`, { waitUntil: 'load' });
+    await settle(page);
+
+    const results = await page.evaluate(async (ids) => {
+        const read = (el) => getComputedStyle(el).maskPosition || getComputedStyle(el).webkitMaskPosition;
+        // The three buttons WRITE rh-group / rh-orderby / rh-order into the
+        // shared profile, and the shared context is reused by every later case:
+        // leaving them flipped reorders the bookmark list under the bookmark
+        // editor cases, which pick a row by position. Restore them.
+        const keys = ['rh-group', 'rh-orderby', 'rh-order'];
+        const saved = Object.fromEntries(keys.map((k) => [k, localStorage[k]]));
+        const out = {};
+        for (const id of ids) {
+            const el = document.getElementById(id);
+            const seen = [];
+            let stop = false;
+            const tick = () => {
+                if (stop) return;
+                seen.push(read(el));
+                requestAnimationFrame(tick);
+            };
+            requestAnimationFrame(tick);
+            // Record a few "before" frames first: a click in the same task
+            // leaves nothing to compare against, and this probe would then see
+            // only the settled state and stay green through any regression.
+            await new Promise((resolve) => setTimeout(resolve, 120));
+            el.click();
+            await new Promise((resolve) => setTimeout(resolve, 600));
+            stop = true;
+            out[id] = {
+                distinct: [...new Set(seen)],
+                state: el.getAttribute('data-state'),
+                frames: seen.length,
+            };
+        }
+        for (const key of keys) {
+            // Assigning undefined would store the STRING "undefined"; the
+            // adapter has no such key, so drop it instead.
+            if (saved[key] === undefined) localStorage.removeItem(key);
+            else localStorage[key] = saved[key];
+        }
+        return out;
+    }, ['rh-bar-group', 'rh-bar-orderby', 'rh-bar-order']);
+    await page.close();
+
+    assert.deepEqual(jsErrors, [], `the toolbar threw (${netErrors.length} network error(s) ignored)`);
+    for (const [id, r] of Object.entries(results)) {
+        assert.ok(r.frames > 20, `${id}: only ${r.frames} frames sampled, the click was not observed`);
+        assert.equal(r.distinct.length, 2,
+            `${id}: the icon passed through ${r.distinct.length} positions ` +
+            `(${r.distinct.join(' -> ')}), so it is still animating`);
+    }
+});
+
+test('the group fold arrow and the calendar toggle do not animate either', { skip: SKIP }, async () => {
+    // The same `a { transition: all }` reached two more two-state masks that
+    // are not part of the toolbar: the group title's +/- arrow, and the
+    // calendar's expand/collapse button (history.html only). The arrow is
+    // exercised here; the calendar button shares the only rule that animated
+    // them, so one case covers both without inventing a second fixture.
+    await seedLinearHistory(context, extensionId, 12);
+    const { page, jsErrors, netErrors } = await openForLayout(context, extensionId, 'history.html');
+    const result = await page.evaluate(async () => {
+        const toggle = document.querySelector('.group-title-toggle');
+        if (!toggle) return { missing: true };
+        const read = () => getComputedStyle(toggle).maskPosition || getComputedStyle(toggle).webkitMaskPosition;
+        const seen = [];
+        let stop = false;
+        const tick = () => {
+            if (stop) return;
+            seen.push(read());
+            requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+        await new Promise((resolve) => setTimeout(resolve, 120));
+        toggle.click();
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        stop = true;
+        return { distinct: [...new Set(seen)], frames: seen.length, expanded: toggle.getAttribute('data-expanded') };
+    });
+    await page.close();
+
+    assert.deepEqual(jsErrors, [], `the group arrow threw (${netErrors.length} network error(s) ignored)`);
+    assert.ok(!result.missing, 'the page drew no group title, so the arrow was never exercised');
+    assert.ok(result.frames > 20, 'the click was not observed frame by frame');
+    assert.equal(result.distinct.length, 2,
+        `the fold arrow passed through ${result.distinct.length} positions ` +
+        `(${result.distinct.join(' -> ')}), so it is still animating`);
 });
 
 test('bookmark.html re-renders its list when the toolbar is clicked on the initial view', { skip: SKIP }, async () => {

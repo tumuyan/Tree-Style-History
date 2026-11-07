@@ -34,9 +34,17 @@ body {
     padding: 0;
 }
 
+/* Colour fades only — never `all`. Every two-state icon in this extension is
+   one inline SVG mask showing either half of itself, so its entire state is
+   `mask-position: left|right center`. `all` swept that in too: clicking the
+   group / orderby / order buttons slid the graphics sideways for 200ms instead
+   of flipping them, and the same happened to the group fold arrow and the
+   calendar toggle. Naming the properties keeps the hover and selected-state
+   fades below and makes every mask flip instant. Do not put `all` back;
+   tests/static.test.mjs guards it. */
 a {
-    -webkit-transition: all 0.2s linear;
-    transition: all 0.2s linear;
+    -webkit-transition: color 0.2s linear, background-color 0.2s linear, border-color 0.2s linear;
+    transition: color 0.2s linear, background-color 0.2s linear, border-color 0.2s linear;
     color: rgb(17, 85, 204);
     text-decoration: none;
 }

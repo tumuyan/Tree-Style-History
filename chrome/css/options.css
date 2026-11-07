@@ -11,9 +11,11 @@ body {
   padding: 0;
 }
 
+/* Colour fades only, never `all`; the reason is spelled out on the same rule
+   in history.css. */
 a {
-  -webkit-transition: all 0.2s linear;
-  transition: all 0.2s linear;
+  -webkit-transition: color 0.2s linear, background-color 0.2s linear;
+  transition: color 0.2s linear, background-color 0.2s linear;
   color: rgb(17, 85, 204);
 }
 

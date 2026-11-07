@@ -13,9 +13,12 @@ body {
   padding: 0;
 }
 
+/* Colour fades only, never `all`: the title and footer links are background
+   icons whose hover state is a `background-position` flip, and `all` turned
+   that flip into a slide. See the note on the same rule in history.css. */
 a {
-  -webkit-transition: all 0.2s linear;
-  transition: all 0.2s linear;
+  -webkit-transition: color 0.2s linear, background-color 0.2s linear;
+  transition: color 0.2s linear, background-color 0.2s linear;
 }
 
 a img {
