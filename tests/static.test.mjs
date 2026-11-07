@@ -4033,6 +4033,158 @@ test('the linear icons are vector masks, not bitmap sprites', () => {
     }
 });
 
+/**
+ * Pure source check for the two halves of the anti-jitter fix. It returns a
+ * problem list instead of asserting inline, so the mutation probes below can
+ * run the REAL guard against a regressed source and prove it goes red. A probe
+ * that restated these regexes would only prove "the same regex matches twice".
+ */
+function reservationGuard({ css, status, renderer }) {
+    const problems = [];
+    const check = (ok, msg) => { if (!ok) problems.push(msg); };
+
+    const htmlRules = [...css.matchAll(/(?:^|[\n}])\s*html\s*\{([^}]*)\}/g)].map((m) => m[1]);
+    check(htmlRules.length > 0, 'history.css no longer styles html');
+    check(htmlRules.some((body) => /scrollbar-gutter:\s*stable/.test(body)),
+        'html no longer reserves the scrollbar gutter, so a shorter list shifts the page sideways');
+    // `overflow-y: scroll` would also stop the shift, but an always-on
+    // scrollbar makes the scrolling box the scrollport and breaks the sticky
+    // calendar. Keep the gutter, not the forced bar.
+    check(!/^\s*(html|:root)\s*\{[^}]*overflow-y:\s*scroll/m.test(css),
+        'a forced scrollbar breaks the sticky calendar; use scrollbar-gutter: stable instead');
+
+    const lock = /function\s+lockHeight\s*\([^)]*\)\s*\{([\s\S]*?)\n\}/.exec(status);
+    check(!!lock, 'the height reservation is gone');
+    if (lock) {
+        check(/minHeight\s*=/.test(lock[1]), 'lockHeight no longer writes a min-height');
+        // Scoped to the function body: a `zoom` anywhere else satisfied the
+        // looser check while getBoundingClientRect().height was written raw.
+        check(/getComputedStyle\s*\([^)]*\)\s*\.zoom/.test(lock[1]),
+            'lockHeight ignores the page zoom, so a zoomed page reserves the wrong height');
+        check(/height\s*\/\s*zoom/.test(lock[1]), 'lockHeight writes the scaled height back unconverted');
+    }
+    check(/export\s+function\s+unlockHeight\s*\(/.test(status),
+        'unlockHeight is not exported, so the renderer cannot release the reservation');
+
+    // `\b` on both sides: `lockHeight(` is a substring of `unlockHeight(`, so
+    // an unbounded pattern was satisfied by the empty state's release.
+    const body = (name) => new RegExp(
+        'export\\s+function\\s+' + name + '\\s*\\([\\s\\S]*?\\n\\}').exec(status);
+    const loading = body('showLoading');
+    check(!!loading, 'showLoading changed shape');
+    if (loading) check(/(?<!un)\blockHeight\(/.test(loading[0]),
+        'showLoading no longer reserves the height');
+    const empty = body('showNoResults');
+    check(!!empty, 'showNoResults changed shape');
+    // The empty state must NOT release: it is precisely the frame that used to
+    // collapse. Only renderInChunks() releases, once real rows exist.
+    if (empty) check(!/\bunlockHeight\s*\(/.test(empty[0]),
+        'the empty state releases the reservation, so clearing a search collapses the page again');
+
+    check(/import\s*\{[^}]*unlockHeight[^}]*\}\s*from\s*['"]\.\/list-status\.js['"]/.test(renderer),
+        'the renderer does not import unlockHeight');
+    // Locate the finish branch and take everything up to its closing brace.
+    // A fixed indent (`\n\s{12}\}`) went stale the moment the file was
+    // reindented; `\n\s*\}` cares only about the brace, not the column.
+    const finishStart = /if\s*\(cursor\s*>=\s*items\.length\)\s*\{/.exec(renderer);
+    check(!!finishStart, 'the renderer finish branch is gone');
+    if (finishStart) {
+        const from = finishStart.index + finishStart[0].length;
+        const end = /\n\s*\}/.exec(renderer.slice(from));
+        const finishBody = end ? renderer.slice(from, from + end.index) : renderer.slice(from);
+        check(/unlockHeight\s*\(\s*into\s*\)/.test(finishBody),
+            'the finished render never releases the reserved height');
+    }
+    return problems;
+}
+
+/** Module syntax stripped so a mutated source can be syntax-checked by vm.Script. */
+function asScript(src) {
+    return '(function(){\n' + src.split('\n')
+        .filter((line) => !/^\s*import\s.*;\s*$/.test(line))
+        .map((line) => line.replace(/^(\s*)export\s+/, '$1'))
+        .join('\n') + '\n})';
+}
+
+test('the linear pages reserve space so a re-render cannot shift the layout', () => {
+    // issue #57: clicking group / orderby / order collapsed the list to one
+    // screenful for a frame. Two independent halves are needed — either one
+    // alone leaves a shift: (1) the loading state holds the height the list
+    // already had, so the document never collapses; (2) the scrollbar's width
+    // is reserved, so a list that legitimately shrinks does not widen the
+    // viewport either.
+    const sources = {
+        css: fs.readFileSync(path.join(CHROME_DIR, 'css/history.css'), 'utf8'),
+        status: stripJsComments(fs.readFileSync(
+            path.join(CHROME_DIR, 'scripts/modules/list-status.js'), 'utf8')),
+        renderer: stripJsComments(fs.readFileSync(
+            path.join(CHROME_DIR, 'scripts/modules/chunked-render.js'), 'utf8')),
+    };
+    assert.deepEqual(reservationGuard(sources), []);
+
+    // Real mutation probes: each is a plausible regression fed to the SAME
+    // guard above. A written-out constant assert (the old OLD_STATUS probe)
+    // was tautological — it never touched the guard and could never go red.
+    const { status, renderer, css } = sources;
+    const probes = [
+        {
+            what: 'the scrollbar gutter is removed',
+            sources: { css: css.replace('scrollbar-gutter: stable;', '') },
+        },
+        {
+            what: 'a forced scrollbar returns',
+            sources: { css: css.replace('scrollbar-gutter: stable;',
+                'scrollbar-gutter: stable; overflow-y: scroll;') },
+        },
+        {
+            what: 'showLoading stops reserving the height',
+            sources: { status: status.replace('    lockHeight(el);\n', '') },
+            js: 'status',
+        },
+        {
+            what: 'the empty state releases the reservation again',
+            sources: {
+                status: status.replace(
+                    'export function showNoResults(into) {\n    var el = $(into);\n    if (!el) return;\n',
+                    'export function showNoResults(into) {\n    var el = $(into);\n    if (!el) return;\n    unlockHeight(into);\n'),
+            },
+            js: 'status',
+        },
+        {
+            what: 'unlockHeight stops being exported',
+            sources: { status: status.replace('export function unlockHeight(',
+                'function unlockHeight(') },
+            js: 'status',
+        },
+        {
+            what: 'the finished render stops releasing the height',
+            sources: { renderer: renderer.replace('                unlockHeight(into);\n', '') },
+            js: 'renderer',
+        },
+        {
+            what: 'the release moves out of the finish branch',
+            sources: {
+                renderer: renderer
+                    .replace('                unlockHeight(into);\n', '')
+                    .replace('    var handle = setInterval(function () {',
+                        '    var handle = setInterval(function () {\n        unlockHeight(into);'),
+            },
+            js: 'renderer',
+        },
+    ];
+    for (const probe of probes) {
+        const mutated = { ...sources, ...probe.sources };
+        assert.notDeepEqual(mutated, sources,
+            `the ${probe.what} probe must change the source, or it proves nothing`);
+        if (probe.js) {
+            assert.doesNotThrow(() => new vm.Script(asScript(mutated[probe.js])),
+                `the ${probe.what} probe must be valid JavaScript`);
+        }
+        assert.ok(reservationGuard(mutated).length > 0,
+            `the ${probe.what} probe must turn the real guard red`);
+    }
+});
+
 test('the linear icon state comment matches the vector-mask implementation', () => {
     // The old comment described a bitmap sprite and claimed the rules sat
     // after retina rules that reset `background` shorthand. Those bitmaps and

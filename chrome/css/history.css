@@ -17,6 +17,15 @@
     outline-offset: 1px;
 }
 
+/* Reserve the vertical scrollbar's width whether or not one is showing.
+   Without this, a re-render that briefly empties the list (or a filter that
+   shrinks it below one screen) removes the scrollbar for a frame, the viewport
+   widens by its width, and every element on the page shifts sideways and
+   re-wraps. Chromium 94+, so no prefix. */
+html {
+    scrollbar-gutter: stable;
+}
+
 body {
     overflow-x: hidden;
     font-family: 'Helvetica Neue', Arial, Helvetica, sans-serif;

@@ -15,6 +15,7 @@
 import { $, $$ } from '../dom-helper.js';
 import { RENDER_BUDGET_MS } from './ui-state.js';
 import { alertLoadingHistory, toggleGroup } from './list-view.js';
+import { unlockHeight } from './list-status.js';
 
 /**
  * Render `items` in time-budgeted chunks, then do the shared end-of-list work.
@@ -56,6 +57,10 @@ export function renderInChunks(items, opts) {
             // this handle.
             if (cursor >= items.length) {
                 clearInterval(handle);
+                // The rows are real now, so the height showLoading() reserved
+                // for them is no longer needed — and keeping it would pin every
+                // later render to the tallest list this container ever held.
+                unlockHeight(into);
                 alertLoadingHistory(true);
                 var input = document.body.querySelector('#rh-bar-uione input');
                 if (input) input.checked = false;

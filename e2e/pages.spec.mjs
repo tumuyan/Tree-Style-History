@@ -2665,3 +2665,419 @@ test('a keyboard shortcut opens its page through the service worker listener', {
         }
     }
 });
+
+// ---------------------------------------------------------------------------
+// issue #57: clicking group / orderby / order must not move the page
+//
+// The toolbar click re-renders the whole list. Before the fix the container was
+// emptied before the first row was drawn, which collapsed the document to one
+// screenful for a frame: the vertical scrollbar disappeared, the viewport
+// widened by its width (15px in this profile), every element shifted sideways
+// and the page heading re-wrapped, and the scroll position was clamped back to
+// the top. Both halves are asserted here, in a real browser, because neither
+// is visible to the unit suite (which has no layout at all):
+//
+//   * no layout shift — clientWidth, the toolbar's box, the heading's box and
+//     the scroll position must be identical on every frame of a click;
+//   * the scroll position survives — with the list taller than the viewport the
+//     page stays where the user put it.
+//
+// Sampled from a requestAnimationFrame loop inside the page, so "a frame in the
+// middle" is observed rather than "the state after it settled".
+// ---------------------------------------------------------------------------
+
+/** Every distinct value a click produces for the geometry that must not move. */
+async function clickAndWatchGeometry(page, button) {
+    return page.evaluate(async (btn) => {
+        const box = (sel) => {
+            const el = document.querySelector(sel);
+            if (!el) return null;
+            const r = el.getBoundingClientRect();
+            return [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)];
+        };
+        const snap = () => ({
+            clientWidth: document.documentElement.clientWidth,
+            scrollTop: Math.round(document.scrollingElement.scrollTop),
+            bar: box('#rh-bar'),
+            heading: box('#main-table h1'),
+        });
+        const frames = [];
+        let stop = false;
+        const tick = () => {
+            if (stop) return;
+            frames.push(snap());
+            requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+        // Let the loop record the "before" frames; a click in the same task
+        // would leave nothing to compare against.
+        await new Promise((resolve) => setTimeout(resolve, 120));
+        document.querySelector(btn).click();
+        await new Promise((resolve) => setTimeout(resolve, 1300));
+        stop = true;
+        const distinct = (key) => [...new Set(frames.map((f) => JSON.stringify(f[key])))];
+        return {
+            frames: frames.length,
+            clientWidth: distinct('clientWidth'),
+            scrollTop: distinct('scrollTop'),
+            bar: distinct('bar'),
+            heading: distinct('heading'),
+        };
+    }, button);
+}
+
+test('a toolbar click does not shift the layout or reset the scroll position', { skip: SKIP }, async () => {
+    // More rows than fit on a screen, so the page has a scrollbar to lose and
+    // somewhere to have scrolled to.
+    await seedLinearHistory(context, extensionId, 60);
+    const { page, jsErrors, netErrors } = await openForLayout(context, extensionId, 'history.html');
+
+    // Scrolling is what makes the scrollbar present, which is what used to
+    // disappear. Assert the precondition rather than assuming it.
+    await page.evaluate(() => window.scrollTo(0, 700));
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const prepared = await page.evaluate(() => ({
+        scrollTop: Math.round(document.scrollingElement.scrollTop),
+        docHeight: document.documentElement.scrollHeight,
+        viewport: window.innerHeight,
+    }));
+    assert.ok(prepared.docHeight > prepared.viewport + 200,
+        'the list is not tall enough to scroll, so the shift had nothing to measure');
+    assert.ok(prepared.scrollTop > 100, 'the page did not scroll, so the reset had nothing to undo');
+
+    const results = {};
+    for (const button of ['#rh-bar-orderby', '#rh-bar-group', '#rh-bar-order']) {
+        // Back to the same starting point: grouping changes the list length
+        // legitimately, and this case is about the shift, not the length.
+        await page.evaluate(() => window.scrollTo(0, 700));
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        results[button] = await clickAndWatchGeometry(page, button);
+    }
+    await page.close();
+
+    assert.deepEqual(jsErrors, [], `the toolbar click threw (${netErrors.length} network error(s) ignored)`);
+    for (const [button, r] of Object.entries(results)) {
+        assert.ok(r.frames > 20, `${button}: only ${r.frames} frames sampled, the click was not observed`);
+        assert.equal(r.bar.length, 1,
+            `${button}: the toolbar moved during the click (${r.bar.join(' | ')})`);
+        assert.equal(r.clientWidth.length, 1,
+            `${button}: the viewport changed width during the click (${r.clientWidth.join(' | ')}), ` +
+            'so the vertical scrollbar was dropped and the page shifted sideways');
+        assert.equal(r.heading.length, 1,
+            `${button}: the page heading moved or re-wrapped during the click (${r.heading.join(' | ')})`);
+        assert.equal(r.scrollTop.length, 1,
+            `${button}: the page scrolled during the click (${r.scrollTop.join(' | ')})`);
+    }
+});
+
+test('the same holds on the linear bookmark page', { skip: SKIP }, async () => {
+    // bookmark.html renders from chrome.bookmarks, so it needs its own seed.
+    const seed = await context.newPage();
+    await seed.goto(`chrome-extension://${extensionId}/bookmark.html`, { waitUntil: 'load' });
+    await settle(seed);
+    await seed.evaluate(async () => {
+        const tree = await chrome.bookmarks.getTree();
+        const parentId = tree[0].children[0].id;
+        localStorage['rh-group'] = 'no';
+        for (let i = 0; i < 60; i++) {
+            await chrome.bookmarks.create({
+                parentId,
+                title: `Layout shift probe ${i}`,
+                url: `https://shift-probe-${i}.test/a/long/path/segment`,
+            });
+        }
+    });
+    await seed.close();
+
+    const { page, jsErrors, netErrors } = await openForLayout(context, extensionId, 'bookmark.html');
+    await page.evaluate(() => window.scrollTo(0, 700));
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const prepared = await page.evaluate(() => ({
+        docHeight: document.documentElement.scrollHeight,
+        scrollTop: Math.round(document.scrollingElement.scrollTop),
+    }));
+    assert.ok(prepared.docHeight > 900, 'the bookmark list is not tall enough to scroll');
+    assert.ok(prepared.scrollTop > 100, 'the bookmark page did not scroll');
+
+    const r = await clickAndWatchGeometry(page, '#rh-bar-orderby');
+    await page.close();
+
+    assert.deepEqual(jsErrors, [], `the bookmark toolbar threw (${netErrors.length} network error(s) ignored)`);
+    assert.ok(r.frames > 20, 'the click was not observed');
+    assert.equal(r.clientWidth.length, 1,
+        `the viewport changed width during the click (${r.clientWidth.join(' | ')})`);
+    assert.equal(r.heading.length, 1, `the heading moved during the click (${r.heading.join(' | ')})`);
+    assert.equal(r.scrollTop.length, 1, `the page scrolled during the click (${r.scrollTop.join(' | ')})`);
+});
+
+test('the loading state holds the height the list already had', { skip: SKIP }, async () => {
+    // The mechanism behind the case above, asserted directly: with the search
+    // held open the container is showing the loading state, and it must still
+    // occupy the height the previous render gave it. Without the reservation
+    // this is ~50px and the document collapses.
+    await seedLinearHistory(context, extensionId, 40);
+    const page = await context.newPage();
+    const { jsErrors, netErrors } = collectErrors(page);
+    // Hold armed only AFTER the first render: the initial load has to draw
+    // rows, or there is no height to protect. The flag is consulted per call,
+    // so arming it right before the click holds exactly the re-render.
+    await page.addInitScript(() => {
+        const real = chrome.history.search.bind(chrome.history);
+        window.__holdSearch = false;
+        window.__held = [];
+        chrome.history.search = (query, cb) => real(query, (items) => {
+            if (!window.__holdSearch) return cb(items);
+            window.__held.push(() => cb(items));
+        });
+    });
+    await page.goto(`chrome-extension://${extensionId}/history.html`, { waitUntil: 'load' });
+    await settle(page);
+    const before = await page.evaluate(() => ({
+        height: Math.round(document.getElementById('rh-views-insert').getBoundingClientRect().height),
+        rows: document.querySelectorAll('#rh-views-insert .item-holder').length,
+        docHeight: document.documentElement.scrollHeight,
+    }));
+
+    // Trigger a re-render and let the held callback leave it in the loading
+    // state: this is the frame that used to collapse.
+    await page.evaluate(() => {
+        window.__holdSearch = true;
+        document.getElementById('rh-bar-orderby').click();
+    });
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    const during = await page.evaluate(() => {
+        const el = document.getElementById('rh-views-insert');
+        return {
+            minHeight: el.style.minHeight,
+            height: Math.round(el.getBoundingClientRect().height),
+            loading: !!el.querySelector('.list-status-loading'),
+            docHeight: document.documentElement.scrollHeight,
+        };
+    });
+
+    // Release it and assert the reservation is given back, so a later short
+    // list is not padded out to the tallest one this container ever held.
+    await page.evaluate(() => {
+        window.__holdSearch = false;
+        window.__held.splice(0).forEach((release) => release());
+    });
+    await settle(page);
+    const after = await page.evaluate(() => ({
+        minHeight: document.getElementById('rh-views-insert').style.minHeight,
+        rows: document.querySelectorAll('#rh-views-insert .item-holder').length,
+    }));
+    await page.close();
+
+    assert.deepEqual(jsErrors, [], `the reservation threw (${netErrors.length} network error(s) ignored)`);
+    assert.ok(before.rows > 0, 'the page rendered no rows, so there was no height to protect');
+    assert.ok(during.loading, 'the render was not caught in its loading state');
+    assert.ok(parseFloat(during.minHeight) > before.height * 0.9,
+        `the loading state reserved ${during.minHeight} against a ${before.height}px list, so the page collapses`);
+    assert.equal(during.height, before.height,
+        'the container changed height while the loading state was showing');
+    assert.ok(during.docHeight >= before.docHeight - 5,
+        `the document shrank from ${before.docHeight} to ${during.docHeight} while loading`);
+    assert.equal(after.minHeight, '', 'the finished render kept the reserved height');
+    assert.ok(after.rows > 0, 'releasing the reservation also lost the rows');
+});
+
+test('filtering the list below one screen does not move the toolbar', { skip: SKIP }, async () => {
+    // The second, independent half of #57, and the one the shared context
+    // CANNOT test: Playwright passes `--hide-scrollbars` by default, so no
+    // scrollbar exists in any page opened from `context` and removing one can
+    // never shift anything. This case therefore owns a second persistent
+    // context launched WITHOUT that flag (the same pattern the dark-mode case
+    // uses for colorScheme). Verified the hard way: with the gutter removed the
+    // case stayed green under the shared context and goes red here.
+    //
+    // What it asserts: a list that gets genuinely shorter — a filter, a shorter
+    // day — loses its scrollbar, the viewport widens by its width, and every
+    // element shifts sideways and re-wraps. `scrollbar-gutter: stable` on `html`
+    // reserves that width whether or not a bar is showing.
+    //
+    // Probed on the toolbar/heading BOXES, not on `documentElement.clientWidth`:
+    // a reserved gutter is not a scrollbar, so clientWidth still changes when
+    // the scrollbar goes away, while the content box is correctly held still.
+    const shiftContext = await chromium.launchPersistentContext('', {
+        channel: 'chromium',
+        ignoreDefaultArgs: ['--hide-scrollbars'],
+        args: [
+            `--disable-extensions-except=${CHROME_DIR}`,
+            `--load-extension=${CHROME_DIR}`,
+        ],
+    });
+    await shiftContext.route(
+        (url) => url.protocol !== 'chrome-extension:' && isFaviconServiceUrl(url),
+        (route) => route.abort(),
+    );
+    try {
+        let [sw] = shiftContext.serviceWorkers();
+        if (!sw) sw = await shiftContext.waitForEvent('serviceworker');
+        const shiftId = sw.url().split('/')[2];
+
+        await seedLinearHistory(shiftContext, shiftId, 60);
+        const { page, jsErrors, netErrors } = await openForLayout(shiftContext, shiftId, 'history.html');
+        const prepared = await page.evaluate(() => ({
+            docHeight: document.documentElement.scrollHeight,
+            viewport: window.innerHeight,
+            // A real scrollbar is the precondition for the whole case: with a
+            // hidden one this measures nothing.
+            scrollbarWidth: window.innerWidth - document.documentElement.clientWidth,
+        }));
+        assert.ok(prepared.scrollbarWidth > 0,
+            'the profile has no visible scrollbar, so this case cannot measure the shift');
+        assert.ok(prepared.docHeight > prepared.viewport + 100, 'the seeded list does not fill the screen');
+
+        const shapes = await page.evaluate(async () => {
+            const box = (sel) => {
+                const el = document.querySelector(sel);
+                if (!el) return null;
+                const r = el.getBoundingClientRect();
+                return [Math.round(r.left), Math.round(r.width)];
+            };
+            const snap = () => ({ bar: box('#rh-bar'), heading: box('#main-table h1') });
+            const frames = [];
+            let stop = false;
+            const tick = () => { if (stop) return; frames.push(snap()); requestAnimationFrame(tick); };
+            requestAnimationFrame(tick);
+            // Sample the tall state first. The filter below is applied
+            // synchronously, so without this pause no frame records the
+            // "before" geometry and there is nothing to compare against — the
+            // first draft had no pause and stayed green with the gutter
+            // deleted, because every frame it saw was already post-filter.
+            await new Promise((resolve) => setTimeout(resolve, 250));
+            document.getElementById('rh-what').value = 'all';
+            document.getElementById('rh-what').dispatchEvent(new Event('change'));
+            const input = document.getElementById('rh-search');
+            // Every seeded host is `layout-probe-<n>.test`, so `-1.test` matches
+            // only -1 and -10..-19: a handful of rows, far under one screen.
+            input.value = '-1.test';
+            input.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
+            await new Promise((resolve) => setTimeout(resolve, 1500));
+            stop = true;
+            return {
+                frames: frames.length,
+                bar: [...new Set(frames.map((f) => JSON.stringify(f.bar)))],
+                heading: [...new Set(frames.map((f) => JSON.stringify(f.heading)))],
+                rows: document.querySelectorAll('#rh-views-search-insert .item-holder').length,
+                // The bottom of the list, not `documentElement.scrollHeight`:
+                // the latter is clamped to the viewport when the content is
+                // shorter, so it reports "exactly one screen" either way and
+                // cannot say whether a scrollbar is still needed.
+                contentBottom: Math.round(document.getElementById('rh-views').getBoundingClientRect().bottom),
+                viewport: window.innerHeight,
+            };
+        });
+        await page.close();
+
+        assert.deepEqual(jsErrors, [], `the filter threw (${netErrors.length} network error(s) ignored)`);
+        assert.ok(shapes.frames > 20, 'the filter was not observed frame by frame');
+        assert.ok(shapes.rows > 0, 'the filter matched nothing, so the list never shrank');
+        assert.ok(shapes.contentBottom < shapes.viewport,
+            `the filtered list still reaches ${shapes.contentBottom}px on a ${shapes.viewport}px viewport, ` +
+            'so a scrollbar is still there and the case proves nothing');
+        assert.equal(shapes.bar.length, 1,
+            `the toolbar shifted as the list shrank (${shapes.bar.join(' | ')}) — ` +
+            'the scrollbar gutter is not reserved');
+        assert.equal(shapes.heading.length, 1,
+            `the page heading moved or re-wrapped as the list shrank (${shapes.heading.join(' | ')})`);
+    } finally {
+        await shiftContext.close();
+    }
+});
+
+test('an empty result keeps the height the loading state reserved', { skip: SKIP }, async () => {
+    // Review follow-up: showNoResults() used to release the reservation, which
+    // put the collapse back on every path that ends in "no results" — clearing
+    // a search, or switching to a day with no visits. That is exactly the frame
+    // #57 is about.
+    //
+    // This case owns its own persistent context: it stubs chrome.history.search
+    // via addInitScript, and an init script registered on the SHARED context
+    // would keep wrapping the API for every later page even after the stub is
+    // disarmed. An isolated context keeps the seed and the stub local.
+    const holdContext = await chromium.launchPersistentContext('', {
+        channel: 'chromium',
+        args: [
+            `--disable-extensions-except=${CHROME_DIR}`,
+            `--load-extension=${CHROME_DIR}`,
+        ],
+    });
+    await holdContext.route(
+        (url) => url.protocol !== 'chrome-extension:' && isFaviconServiceUrl(url),
+        (route) => route.abort(),
+    );
+    try {
+        let [sw] = holdContext.serviceWorkers();
+        if (!sw) sw = await holdContext.waitForEvent('serviceworker');
+        const holdId = sw.url().split('/')[2];
+        await seedLinearHistory(holdContext, holdId, 40);
+
+        const page = await holdContext.newPage();
+        const { jsErrors, netErrors } = collectErrors(page);
+        // Disarmed at first: the initial render must draw real rows so there is
+        // a height to protect. Arming happens just before the re-render.
+        await page.addInitScript(() => {
+            const real = chrome.history.search.bind(chrome.history);
+            window.__holdSearch = false;
+            window.__held = [];
+            chrome.history.search = (query, cb) => real(query, (items) => {
+                if (!window.__holdSearch) return cb(items);
+                window.__held.push((replaceWith) => cb(replaceWith ?? items));
+            });
+        });
+        await page.goto(`chrome-extension://${holdId}/history.html`, { waitUntil: 'load' });
+        await settle(page);
+
+        const before = await page.evaluate(() => {
+            const el = document.getElementById('rh-views-insert');
+            return {
+                height: Math.round(el.getBoundingClientRect().height),
+                rows: document.querySelectorAll('#rh-views-insert .item-holder').length,
+                docHeight: document.documentElement.scrollHeight,
+            };
+        });
+        assert.ok(before.rows > 0, 'the page rendered no rows, so there was no height to protect');
+
+        // Re-render into the loading state, then hand back an empty result:
+        // showLoading() -> showNoResults() with no real rows in between is the
+        // case that used to drop min-height and collapse.
+        await page.evaluate(() => {
+            window.__holdSearch = true;
+            document.getElementById('rh-bar-orderby').click();
+        });
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        const loading = await page.evaluate(() => ({
+            shown: !!document.querySelector('#rh-views-insert .list-status-loading'),
+            height: Math.round(document.getElementById('rh-views-insert').getBoundingClientRect().height),
+        }));
+        await page.evaluate(() => {
+            window.__holdSearch = false;
+            window.__held.splice(0).forEach((release) => release([]));
+        });
+        await settle(page);
+        const after = await page.evaluate(() => {
+            const el = document.getElementById('rh-views-insert');
+            return {
+                minHeight: el.style.minHeight,
+                height: Math.round(el.getBoundingClientRect().height),
+                empty: !!el.querySelector('.no-results'),
+                docHeight: document.documentElement.scrollHeight,
+            };
+        });
+        await page.close();
+
+        assert.deepEqual(jsErrors, [], `the empty state threw (${netErrors.length} network error(s) ignored)`);
+        assert.ok(loading.shown, 'the render was not caught in its loading state');
+        assert.ok(after.empty, 'the empty state was not rendered');
+        assert.notEqual(after.minHeight, '',
+            'showNoResults() dropped the reserved height, so the empty frame collapses the page');
+        assert.equal(after.height, before.height,
+            `the container collapsed from ${before.height}px to ${after.height}px on an empty result`);
+        assert.equal(loading.height, before.height, 'the loading state already changed the height');
+        assert.ok(after.docHeight >= before.docHeight - 5,
+            `the document shrank from ${before.docHeight} to ${after.docHeight} on an empty result`);
+    } finally {
+        await holdContext.close();
+    }
+});

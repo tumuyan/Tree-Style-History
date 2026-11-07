@@ -160,3 +160,33 @@ test('a draw() that throws still clears the interval and runs the finish once', 
     assert.ok(dom.el('master-check-all').getAttribute('disabled') == null,
         'cleanup in finally must still enable the master checkbox');
 });
+
+// The other half of the anti-jitter pair (see list-status.test.mjs): the
+// reservation showLoading() makes has to be released once the rows exist,
+// otherwise the container stays pinned to the tallest list it ever held and a
+// later, shorter render leaves a blank strip under the last row.
+test('the finish releases the height the loading state reserved', async () => {
+    freshInput(false);
+    const el = dom.el('rh-views-insert');
+    el.style.minHeight = '6000px'; // as showLoading() left it before the first row
+
+    renderInChunks([1, 2, 3], opts({ draw: () => {} }));
+    await new Promise((resolve) => setTimeout(resolve, 60));
+
+    assert.equal(el.style.minHeight, '', 'the finished render kept the reserved height');
+});
+
+test('a cancelled render keeps the reservation', async () => {
+    // A render replaced by a newer one must not unlock: the newer render's own
+    // showLoading() already read the height, and dropping it here would let the
+    // empty container collapse for the frame before the next rows appear.
+    freshInput(false);
+    const el = dom.el('rh-views-insert');
+    el.style.minHeight = '6000px';
+
+    const handle = renderInChunks(new Array(100000).fill(0), opts({ draw: () => {} }));
+    clearInterval(handle);
+    await new Promise((resolve) => setTimeout(resolve, 40));
+
+    assert.equal(el.style.minHeight, '6000px', 'a cancelled render must not release the height');
+});
