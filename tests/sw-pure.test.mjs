@@ -11,6 +11,8 @@ import assert from 'node:assert/strict';
 import {
     evictOldest, dropExpired, expiredDayKeys,
     normalizeCrawlState, resumeIndexFrom, countHeatVisitInto,
+    matchFaviconService, faviconServiceHostname,
+    rankMostVisited, isNavigatingTransition,
 } from '../chrome/scripts/modules/shared/sw-pure.js';
 
 const VERSION = 1;
@@ -123,4 +125,75 @@ test('countHeatVisitInto counts a real visit and skips internal pages', () => {
     countHeatVisitInto(days, { visitTime: 333 },
         { title: 'Docs', url: 'file:///tmp/x' }, dayKey);
     assert.equal(days[333], undefined, 'an internal URL scheme must not colour a day');
+});
+
+// ---------------------------------------------------------------------------
+// Step 2 of the SW down-sink: favicon URL parsing, most-visited ranking and
+// the shared navigation-transition rule. These used to be reachable only
+// through a whole worker boot with stubbed chrome.*.
+// ---------------------------------------------------------------------------
+
+const FAVICON_PATTERNS = [
+    'icons.duckduckgo.com', 'www.google.com/s2/favicons', 'favicon.im/',
+    'ico.faviconkit.net/', 'faviconsnap.com/api/favicon',
+];
+
+test('matchFaviconService recognises each configured service and rejects others', () => {
+    for (const url of [
+        'https://icons.duckduckgo.com/ip3/example.test.ico',
+        'https://www.google.com/s2/favicons?sz=64&domain_url=x',
+        'https://favicon.im/example.test',
+        'https://ico.faviconkit.net/favicon/example.test?sz=64',
+        'https://faviconsnap.com/api/favicon?url=x',
+    ]) {
+        assert.equal(matchFaviconService(url, FAVICON_PATTERNS), true, url);
+    }
+    assert.equal(matchFaviconService('https://example.test/favicon.ico', FAVICON_PATTERNS), false);
+    assert.equal(matchFaviconService(undefined, FAVICON_PATTERNS), false,
+        'a missing URL is not a request, not an exception');
+});
+
+test('faviconServiceHostname extracts the target host from every service URL', () => {
+    assert.equal(faviconServiceHostname('https://icons.duckduckgo.com/ip3/example.test.ico'), 'example.test');
+    assert.equal(faviconServiceHostname('https://favicon.im/example.test?throw-error-on-404=true'), 'example.test');
+    assert.equal(faviconServiceHostname('https://ico.faviconkit.net/favicon/example.test?sz=64'), 'example.test');
+    assert.equal(faviconServiceHostname(
+        'https://faviconsnap.com/api/favicon?url=' + encodeURIComponent('https://example.test/') + '&size=64'),
+        'example.test');
+    assert.equal(faviconServiceHostname(
+        'https://www.google.com/s2/favicons?sz=64&domain_url=' + encodeURIComponent('https://example.test/')),
+        'example.test');
+    assert.equal(faviconServiceHostname('https://example.test/favicon.ico'), null);
+    assert.equal(faviconServiceHostname('not a url'), null, 'a malformed URL is a documented null, not a throw');
+});
+
+test('rankMostVisited applies the window, the internal filter and visitCount order', () => {
+    const now = Date.now();
+    const rows = [
+        { url: 'https://a.test/', title: 'A', lastVisitTime: now, visitCount: 3 },
+        { url: 'https://b.test/', title: 'B', lastVisitTime: now, visitCount: 10 },
+        { url: 'https://c.test/', title: 'C', lastVisitTime: now, visitCount: 7 },
+        { url: 'https://old.test/', title: 'Old', lastVisitTime: now - 100000, visitCount: 99 },
+        { url: 'chrome://extensions', title: 'Internal', lastVisitTime: now, visitCount: 99 },
+        { url: 'https://titled.test/', title: 'chrome://history/', lastVisitTime: now, visitCount: 99 },
+    ];
+    const ranked = rankMostVisited(rows, now - 1000, 5);
+    assert.deepEqual(ranked.map((r) => r.url),
+        ['https://b.test/', 'https://c.test/', 'https://a.test/'],
+        'descending visitCount, with the stale / internal / internal-titled rows gone');
+});
+
+test('rankMostVisited stops at max', () => {
+    const now = Date.now();
+    const rows = [3, 1, 2].map((n) => ({ url: 'https://' + n + '.test/', title: 'x', lastVisitTime: now, visitCount: n }));
+    assert.deepEqual(rankMostVisited(rows, now - 1000, 2).map((r) => r.visitCount), [3, 2]);
+});
+
+test('isNavigatingTransition covers exactly the four parentless transitions', () => {
+    for (const t of ['typed', 'auto_bookmark', 'keyword', 'keyword_generated']) {
+        assert.equal(isNavigatingTransition(t), true, t);
+    }
+    for (const t of ['link', 'reload', 'form_submit', 'generated', undefined]) {
+        assert.equal(isNavigatingTransition(t), false, String(t));
+    }
 });

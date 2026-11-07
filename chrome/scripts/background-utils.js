@@ -10,7 +10,7 @@
 // concatenation is what the Service Worker loads via importScripts.
 // ============================================================================
 
-/* exported defaultValues, defaultConfig, DAY, RECENT_HISTORY_DAYS, MOST_VISITED_MAX, TAB_LIST_KEY, TAB_LIST_VERSION, _DATE, advanceDateToToday, getVersion, getVersionType, returnLang, timeNow, isBookmarkletUrl, INTERNAL_URL, get_host, getFaviconUrl, getFaviconOnerror, calendar_storage2, dayKey, save_calendar_storage2, calendarLevel, evictOldest, dropExpired, expiredDayKeys, normalizeCrawlState, resumeIndexFrom, countHeatVisitInto */
+/* exported defaultValues, defaultConfig, DAY, RECENT_HISTORY_DAYS, MOST_VISITED_MAX, TAB_LIST_KEY, TAB_LIST_VERSION, _DATE, advanceDateToToday, getVersion, getVersionType, returnLang, timeNow, isBookmarkletUrl, INTERNAL_URL, get_host, getFaviconUrl, getFaviconOnerror, calendar_storage2, dayKey, save_calendar_storage2, calendarLevel, evictOldest, dropExpired, expiredDayKeys, normalizeCrawlState, resumeIndexFrom, countHeatVisitInto, matchFaviconService, faviconServiceHostname, rankMostVisited, isNavigatingTransition */
 
 // ---- begin modules/shared/config-defaults.js ----
 // Shared config defaults — single source of truth for background-utils.js.
@@ -484,6 +484,7 @@ function calendarLevel(n) {
 // read globals and session storage, so they stay in background-sw.js where the
 // source guards can see the one-read / one-write shape.
 
+
 /** Drop the oldest entries until `cache` is back under `max`. */
 function evictOldest(cache, max) {
     var keys = Object.keys(cache);
@@ -590,6 +591,105 @@ function countHeatVisitInto(days, v, urlItem, dayKey) {
     if ((/^(ftp|ftps|file|chrome|chrome-extension)\:\/\/(.*)/).test(url)) return;
     const key = dayKey(v.visitTime);
     days[key] = (days[key] || 0) + 1;
+}
+
+/**
+ * Whether `url` was produced by one of the configured favicon services.
+ *
+ * `patterns` is injected rather than imported: the list of hosts lives in
+ * background-sw.js, where the e2e suite reads it back out of the source to
+ * abort exactly those requests before they leave the browser. A copy here
+ * would let the two drift.
+ */
+function matchFaviconService(url, patterns) {
+    if (typeof url !== 'string') return false;
+    for (var i = 0; i < patterns.length; i++) {
+        if (url.indexOf(patterns[i]) !== -1) return true;
+    }
+    return false;
+}
+
+/**
+ * The hostname a favicon-service URL is asking about, or null.
+ *
+ * The inverse of getFaviconUrl(): each service encodes the target in a
+ * different part of the URL. Used for the cross-service shared cache key, so
+ * a hostname cached from one service can answer another's fallback request.
+ * Pure — the caller decides what to do with null (no shared cache entry).
+ */
+function faviconServiceHostname(url) {
+    try {
+        var u = new URL(url);
+        // DuckDuckGo: icons.duckduckgo.com/ip3/{hostname}.ico
+        if (u.hostname === 'icons.duckduckgo.com') {
+            var m = url.match(/\/ip3\/([^\/?]+)\.ico/);
+            if (m) return m[1];
+        }
+        // Favicon.im: favicon.im/{hostname}
+        if (u.hostname === 'favicon.im') {
+            m = url.match(/favicon\.im\/([^\/?]+)/);
+            if (m) return m[1];
+        }
+        // FaviconKit: ico.faviconkit.net/favicon/{hostname}
+        if (u.hostname === 'ico.faviconkit.net') {
+            m = url.match(/\/favicon\/([^\/?]+)/);
+            if (m) return m[1];
+        }
+        // FaviconSnap: faviconsnap.com/api/favicon?url=...
+        if (u.hostname === 'faviconsnap.com') {
+            var du = u.searchParams.get('url');
+            if (du) return new URL(decodeURIComponent(du)).hostname;
+        }
+        // Google: www.google.com/s2/favicons?domain_url=...
+        if (u.hostname === 'www.google.com') {
+            du = u.searchParams.get('domain_url');
+            if (du) return new URL(decodeURIComponent(du)).hostname;
+        }
+    } catch {
+        // null is the documented answer for "not one of ours"; every caller
+        // handles it. Logging here would fire for every malformed URL.
+    }
+    return null;
+}
+
+/**
+ * Rank chrome.history rows into the most-visited cache order.
+ *
+ * Three rules that are easy to get subtly wrong and used to be buried in a
+ * callback: drop rows outside the recent window, order by visitCount desc,
+ * and stop at `max`. Internal pages are filtered by the same shared regex the
+ * rest of the extension uses, so the cache cannot disagree with the popup's
+ * recent list about what counts as "browsing".
+ *
+ * The rows are returned unshaped: getFaviconUrl() is not pure, so the worker
+ * decorates each one with its favicon URL after the ranking. Filtering before
+ * sorting is equivalent to the old "sort, then take the first `max`
+ * acceptable rows": both yield the first `max` acceptable rows in
+ * visitCount order.
+ */
+function rankMostVisited(items, cutoff, max) {
+    const kept = [];
+    for (const h of items) {
+        if (!h || h.lastVisitTime < cutoff) continue;
+        if (INTERNAL_URL.test(h.url)) continue;
+        if ((/^(http|https|ftp|ftps|file|chrome|chrome-extension|chrome-devtools)\:\/\/(.*)/).test(h.title)) continue;
+        kept.push(h);
+    }
+    kept.sort(function (a, b) { return b.visitCount - a.visitCount; });
+    return kept.slice(0, max);
+}
+
+/**
+ * Transitions that start a navigation rather than follow a link, so the
+ * visit has no parent even when the browser supplied a referringVisitId.
+ *
+ * The same four-string test was written out twice in the worker
+ * (crawlUrlVisits / add_tab_history); one of them gaining a fifth value
+ * would have made the tree disagree with itself.
+ */
+function isNavigatingTransition(transition) {
+    return transition == 'typed' || transition == 'auto_bookmark' ||
+        transition == 'keyword' || transition == 'keyword_generated';
 }
 
 // ---- end modules/shared/sw-pure.js ----

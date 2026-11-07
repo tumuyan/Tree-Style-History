@@ -519,6 +519,41 @@ test('a crawl cursor resumes on its id, never on its stored position', () => {
         'the stored position must not be used as a resume index');
 });
 
+test('the SW delegates its favicon, ranking and transition logic to sw-pure', () => {
+    // Step 2 of the down-sink (PR #51 was step 1). These four used to be
+    // inline in background-sw.js and reachable only through a whole worker
+    // boot; they now live in modules/shared/sw-pure.js and are flattened into
+    // background-utils.js by the generator. Pin the delegation so an inline
+    // copy cannot quietly grow back and leave the shared tests testing a
+    // function nobody calls.
+    const sw = stripJsComments(fs.readFileSync(path.join(CHROME_DIR, 'scripts/background-sw.js'), 'utf8'));
+    const utils = stripJsComments(fs.readFileSync(path.join(CHROME_DIR, 'scripts/background-utils.js'), 'utf8'));
+
+    const delegates = [
+        ['isFaviconRequest', 'matchFaviconService'],
+        ['extractHostnameFromFaviconUrl', 'faviconServiceHostname'],
+    ];
+    for (const [wrapper, pure] of delegates) {
+        const at = sw.indexOf('function ' + wrapper + '(');
+        assert.ok(at > 0, `the worker still needs ${wrapper}()`);
+        const body = sw.slice(at, sw.indexOf('\n}', at));
+        assert.match(body, new RegExp('\\b' + pure + '\\s*\\('),
+            `${wrapper}() must delegate to the shared ${pure}()`);
+        assert.match(utils, new RegExp('function\\s+' + pure + '\\s*\\('),
+            `the generator must flatten ${pure}() into background-utils.js`);
+    }
+
+    const ranked = sw.indexOf('var ranked = rankMostVisited(');
+    assert.ok(ranked > 0, 'mostVisitedInit() must rank through the shared layer');
+    assert.match(utils, /function\s+rankMostVisited\s*\(/);
+
+    // One rule, two callers: crawlUrlVisits() and add_tab_history() used to
+    // each carry the four-transition list by hand.
+    const calls = sw.match(/isNavigatingTransition\s*\(/g) || [];
+    assert.equal(calls.length, 2, 'both parent-detection sites must share the one rule');
+    assert.match(utils, /function\s+isNavigatingTransition\s*\(/);
+});
+
 test('service worker imports its dependencies via importScripts', () => {
     const sw = fs.readFileSync(path.join(CHROME_DIR, 'scripts/background-sw.js'), 'utf8');
     // storage-adapter is mandatory: without it `localStorage` is undefined in a SW.

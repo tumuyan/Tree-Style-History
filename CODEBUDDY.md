@@ -241,7 +241,7 @@ MV3 取消了后台页面，因此代码分成两套互不相通的运行时：
 
 放入 `shared/` 的前提是**无依赖**：不能 import `dom-helper.js`、`config.js`，也不能碰 `document`。有这些依赖的函数留在各自的领域模块里，SW 用不到它们。
 
-`sw-pure.js` 是 3.3.2 之后从 `background-sw.js` 下沉的一小批**纯** SW 逻辑（负缓存淘汰/过期、爬库状态校验、续爬索引、热力累加、过期日期筛选）。它们不读 `localStorage`、不碰 `chrome.*`、不带跨生命周期状态；SW 里只留包装层与唯一的那次 `area.get()` / `area.set()`，形状守卫（一次读一次写等）因此仍能看见原来的结构。`tests/sw-pure.test.mjs` 直接静态 import 这一层做行为测试，不必再启一整个 worker。`chunked-render.js` 同理，是页面侧分片渲染的收口（见下）。
+`sw-pure.js` 是 3.3.2 之后从 `background-sw.js` 下沉的一批**纯** SW 逻辑：第一批是负缓存淘汰/过期、爬库状态校验、续爬索引、热力累加、过期日期筛选；第二批（分析评论第 6 条「再走一步」）是 favicon 服务匹配与主机名提取、most-visited 排名、以及 `isNavigatingTransition()` 这条被 `crawlUrlVisits()` / `add_tab_history()` 各写了一遍的四态判断。它们不读 `localStorage`、不碰 `chrome.*`、不带跨生命周期状态；`rankMostVisited()` 是唯一有 import 的（用 `url.js` 的 `INTERNAL_URL`，生成器会按拓扑顺序把 `url.js` 拼在前面），其余只依赖入参。SW 里只留包装层与唯一的那次 `area.get()` / `area.set()`，形状守卫（一次读一次写等）因此仍能看见原来的结构。`FAVICON_SERVICE_PATTERNS` 仍留在 worker 里——e2e 要从源码里把它读回去做请求拦截，抽走会让两边漂移。`tests/sw-pure.test.mjs` 直接静态 import 这一层做行为测试，不必再启一整个 worker；`tests/static.test.mjs` 另有一条守卫钉住 worker 确实委托到这些函数（把包装层改回内联即变红）。`chunked-render.js` 同理，是页面侧分片渲染的收口（见下）。
 
 ### 4. 页面与数据流
 

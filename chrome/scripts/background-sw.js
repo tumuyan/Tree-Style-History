@@ -306,50 +306,16 @@ const FAVICON_SERVICE_PATTERNS = [
 // Updated from storage when storage is ready
 var _shareFaviconCache = true;
 
+// The pattern list stays here: e2e/pages.spec.mjs reads it back out of this
+// source to abort exactly these requests before they leave the browser. The
+// matching and URL parsing are pure and live in modules/shared/sw-pure.js.
 function isFaviconRequest(url) {
-    if (typeof url !== 'string') return false;
-    for (var i = 0; i < FAVICON_SERVICE_PATTERNS.length; i++) {
-        if (url.indexOf(FAVICON_SERVICE_PATTERNS[i]) !== -1) return true;
-    }
-    return false;
+    return matchFaviconService(url, FAVICON_SERVICE_PATTERNS);
 }
 
-// Extract hostname from favicon service URL for shared cache key
+// Extract hostname from favicon service URL for shared cache key.
 function extractHostnameFromFaviconUrl(url) {
-    try {
-        var u = new URL(url);
-        // DuckDuckGo: icons.duckduckgo.com/ip3/{hostname}.ico
-        if (u.hostname === 'icons.duckduckgo.com') {
-            var m = url.match(/\/ip3\/([^\/?]+)\.ico/);
-            if (m) return m[1];
-        }
-        // Favicon.im: favicon.im/{hostname}
-        if (u.hostname === 'favicon.im') {
-            m = url.match(/favicon\.im\/([^\/?]+)/);
-            if (m) return m[1];
-        }
-        // FaviconKit: ico.faviconkit.net/favicon/{hostname}
-        if (u.hostname === 'ico.faviconkit.net') {
-            m = url.match(/\/favicon\/([^\/?]+)/);
-            if (m) return m[1];
-        }
-        // FaviconSnap: faviconsnap.com/api/favicon?url=...
-        if (u.hostname === 'faviconsnap.com') {
-            var du = u.searchParams.get('url');
-            if (du) return new URL(decodeURIComponent(du)).hostname;
-        }
-        // Google: www.google.com/s2/favicons?domain_url=...
-        if (u.hostname === 'www.google.com') {
-            du = u.searchParams.get('domain_url');
-            if (du) return new URL(decodeURIComponent(du)).hostname;
-        }
-    } catch {
-        // Not an error: `null` is the documented answer for "this URL is not
-        // one of ours", and it is what every caller already handles. Logging
-        // here would put a line in the console for every malformed favicon URL
-        // the browser fires at the interceptor.
-    }
-    return null;
+    return faviconServiceHostname(url);
 }
 
 // === Negative Cache for failed API+domain combinations ===
@@ -898,7 +864,6 @@ function updatedTab(tab) {
 var mostVisitedInit = function () {
     var mv = [];
     var infmv = MOST_VISITED_MAX;
-    var r = 0;
 
     // maxResults is the number of candidates to rank, not 0 (all of history).
     // This runs on every service-worker start, on the same task as
@@ -916,45 +881,31 @@ var mostVisitedInit = function () {
     chrome.history.search({ text: '', maxResults: 500 }, function (hi) {
         if (hi.length > 0) {
             var cutoff = (new Date()).getTime() - (RECENT_HISTORY_DAYS * DAY);
-            // `lastVisitTime` is always present on a chrome.history result —
-            // a missing one there is not a case worth a branch.
-            hi = hi.filter(function (h) { return h.lastVisitTime >= cutoff; });
-            hi.sort(function (a, b) { return b.visitCount - a.visitCount });
+            // The window / ranking / internal-page filter are one pure
+            // transformation now (modules/shared/sw-pure.js). Only the parts
+            // that are not pure stay here: getFaviconUrl() and the storage
+            // write that shapes the cache the popup renders.
+            var ranked = rankMostVisited(hi, cutoff, infmv);
+            for (let i = 0; i < ranked.length; i++) {
+                // Raw, not escaped. It used to be
+                // `title.replace(/"/g, '&#34;')` here, and mostVisited()
+                // hands it to formatItem(), which escapes again: a title
+                // of `say "hi"` was stored as `say &#34;hi&#34;` and
+                // came out as the literal text `say &amp;#34;hi&amp;#34;`.
+                var title = ranked[i].title;
+                var url = ranked[i].url;
+                var furl = getFaviconUrl(url);
 
-            for (let i = 0; i < hi.length; i++) {
-                if (r == infmv) { break; }
-
-                if (hi[i] !== undefined) {
-                    if ((/^(http|https|ftp|ftps|file|chrome|chrome-extension|chrome-devtools)\:\/\/(.*)/).test(hi[i].title) == false && 
-                        INTERNAL_URL.test(hi[i].url) == false) {
-
-                        // The time-of-day a page was last visited was computed
-                        // here and dropped on the floor — mostVisited() in
-                        // popup-core.js builds its items without it.
-                        //
-                        // Raw, not escaped. It used to be
-                        // `title.replace(/"/g, '&#34;')` here, and mostVisited()
-                        // hands it to formatItem(), which escapes again: a title
-                        // of `say "hi"` was stored as `say &#34;hi&#34;` and
-                        // came out as the literal text `say &amp;#34;hi&amp;#34;`.
-                        var title = hi[i].title;
-                        var url = hi[i].url;
-                        var furl = getFaviconUrl(hi[i].url);
-
-                        if (title == '') {
-                            title = url;
-                        }
-
-                        mv.push({ 
-                            url: url, 
-                            favicon: furl, 
-                            title: title, 
-                            visitCount: hi[i].visitCount 
-                        });
-
-                        r++;
-                    }
+                if (title == '') {
+                    title = url;
                 }
+
+                mv.push({
+                    url: url,
+                    favicon: furl,
+                    title: title,
+                    visitCount: ranked[i].visitCount
+                });
             }
 
             storageAdapter.setItem('mv-cache', JSON.stringify(mv));
@@ -1844,8 +1795,7 @@ async function crawlUrlVisits(url_item) {
         const transition = v.transition;
         let refer = v.referringVisitId;
 
-        if (transition == "typed" || transition == "auto_bookmark" ||
-            transition == "keyword" || transition == "keyword_generated") {
+        if (isNavigatingTransition(transition)) {
             console.debug("change refer " + v.referringVisitId + "->0 cause transition=" + transition);
             refer = 0;
         }
@@ -2010,8 +1960,7 @@ function add_tab_history(visitItems, i, loadfrom, url_item) {
 
         if (refer == undefined) {
             refer = 0;
-        } else if (transition == "typed" || transition == "auto_bookmark" || 
-                   transition == "keyword" || transition == "keyword_generated") {
+        } else if (isNavigatingTransition(transition)) {
             console.debug("change refer " + visitItems[i].referringVisitId + "->0 cause transition=" + transition);
             refer = 0;
         }
