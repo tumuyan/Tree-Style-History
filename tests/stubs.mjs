@@ -101,6 +101,11 @@ export function installStubs() {
         getNumber: (k) => Number(store.has(String(k)) ? store.get(String(k)) : undefined),
         setItem: (k, v) => { store.set(String(k), String(v)); },
         removeItem: (k) => { store.delete(String(k)); },
+        keys: () => Array.from(store.keys()),
+        // Node tests have no async load window: every call here is after the
+        // snapshot has landed. The unready case is covered against the real
+        // adapter in storage-adapter.test.mjs.
+        isReady: () => true,
     };
 
     const syncStore = new Map();

@@ -82,11 +82,11 @@ function initSortable(containerId, callbacks) {
 
 function loadOptions(full) {
 
-    $('rhitemsno').value = localStorage['rh-itemsno'];
-    $('rctitemsno').value = localStorage['rct-itemsno'];
-    $('rtitemsno').value = localStorage['rt-itemsno'];
-    $('mvitemsno').value = localStorage['mv-itemsno'];
-    $('rbitemsno').value = localStorage['rb-itemsno'];
+    $('rhitemsno').value = storageAdapter.getItem('rh-itemsno');
+    $('rctitemsno').value = storageAdapter.getItem('rct-itemsno');
+    $('rtitemsno').value = storageAdapter.getItem('rt-itemsno');
+    $('mvitemsno').value = storageAdapter.getItem('mv-itemsno');
+    $('rbitemsno').value = storageAdapter.getItem('rb-itemsno');
 
     var rhilo_default = defaultValues["rh-list-order"].split(',');
     // Falls back to the shipped order because this runs on a cold profile in
@@ -95,7 +95,7 @@ function loadOptions(full) {
     // handler died — no labels, no event handlers, so every button on the page
     // (including save and upload) stayed dead until a manual reload. Same
     // reason as dateFormat() in helpers.js.
-    var rhilo = (localStorage['rh-list-order'] || defaultValues['rh-list-order']).split(',');
+    var rhilo = (storageAdapter.getItem('rh-list-order') || defaultValues['rh-list-order']).split(',');
 
     for (var lo in rhilo_default) {
         if (rhilo.indexOf(rhilo_default[lo]) < 0)
@@ -145,21 +145,21 @@ function loadOptions(full) {
         }
     }
 
-    selectOptionByIdValue('showPopup', localStorage['show-popup']);
-    selectOptionByIdValue('rhhistorypage', localStorage['rh-historypage']);
-    selectOptionByIdValue('rhdate', localStorage['rh-date']);
-    selectOptionByIdValue('rhtime', localStorage['rh-timeformat']);
-    selectOptionByIdValue('rhsearch', localStorage['rh-search']);
-    selectOptionByIdValue('rmpath', localStorage['rm-path']);
-    selectOptionByIdValue('contextmenu', localStorage['use-contextmenu']);
-    selectOptionByIdValue('rhsshowurl', localStorage['rhs-showurl']);
-    selectOptionByIdValue('rhsshowsep', localStorage['rhs-showsep']);
-    selectOptionByIdValue('rhsshowext', localStorage['rhs-showext']);
+    selectOptionByIdValue('showPopup', storageAdapter.getItem('show-popup'));
+    selectOptionByIdValue('rhhistorypage', storageAdapter.getItem('rh-historypage'));
+    selectOptionByIdValue('rhdate', storageAdapter.getItem('rh-date'));
+    selectOptionByIdValue('rhtime', storageAdapter.getItem('rh-timeformat'));
+    selectOptionByIdValue('rhsearch', storageAdapter.getItem('rh-search'));
+    selectOptionByIdValue('rmpath', storageAdapter.getItem('rm-path'));
+    selectOptionByIdValue('contextmenu', storageAdapter.getItem('use-contextmenu'));
+    selectOptionByIdValue('rhsshowurl', storageAdapter.getItem('rhs-showurl'));
+    selectOptionByIdValue('rhsshowsep', storageAdapter.getItem('rhs-showsep'));
+    selectOptionByIdValue('rhsshowext', storageAdapter.getItem('rhs-showext'));
     
-    selectOptionByIdValue('lessItem', localStorage['less-item']);
+    selectOptionByIdValue('lessItem', storageAdapter.getItem('less-item'));
     if ($('faviconService')) {
         var favServiceSelect = $('faviconService');
-        var favValue = localStorage['favicon-service'];
+        var favValue = storageAdapter.getItem('favicon-service');
         for (var i = 0; i < favServiceSelect.options.length; i++) {
             if (favServiceSelect.options[i].value === favValue) {
                 favServiceSelect.options[i].selected = true;
@@ -167,8 +167,8 @@ function loadOptions(full) {
             }
         }
     }
-    selectOptionByIdValue('shareFaviconCache', localStorage['share-favicon-cache']);
-    selectOptionByIdValue('faviconServiceFallback', localStorage['favicon-service-fallback']);
+    selectOptionByIdValue('shareFaviconCache', storageAdapter.getItem('share-favicon-cache'));
+    selectOptionByIdValue('faviconServiceFallback', storageAdapter.getItem('favicon-service-fallback'));
 
     previewItem();
 
@@ -184,20 +184,20 @@ function loadOptions(full) {
         previewItem();
     });
 
-    $('rhwidth').value = parseInt(localStorage['rh-width'], 10);
+    $('rhwidth').value = parseInt(storageAdapter.getItem('rh-width'), 10);
 
-    $('loadrange').value = parseInt(localStorage['load-range'], 10);
-    $('loadrange2').value = parseInt(localStorage['load-range2'], 10);
-    $('loadrange3').value = parseInt(localStorage['load-range3'], 10);
-    $('loadrange4').value = parseInt(localStorage['load-range4'], 10);
+    $('loadrange').value = parseInt(storageAdapter.getItem('load-range'), 10);
+    $('loadrange2').value = parseInt(storageAdapter.getItem('load-range2'), 10);
+    $('loadrange3').value = parseInt(storageAdapter.getItem('load-range3'), 10);
+    $('loadrange4').value = parseInt(storageAdapter.getItem('load-range4'), 10);
 
     mostVisitedBlocklist();
 
     if (full)
         filteredDomainsList();
 
-    selectOptionByIdValue('rhclick', localStorage['rh-click']);
-    selectOptionByIdValue('rmclick', localStorage['rm-click']);
+    selectOptionByIdValue('rhclick', storageAdapter.getItem('rh-click'));
+    selectOptionByIdValue('rmclick', storageAdapter.getItem('rm-click'));
 
 }
 
@@ -281,7 +281,7 @@ function downloadOptions() {
             // had ever synced. `j` has every underscore back to a dash, so the
             // two sides line up whichever spelling the cloud arrived in.
             if (j in defaultValues) {
-                localStorage[j] = result[i];
+                storageAdapter.setItem(j, result[i]);
             } else {
                 retired.push(j);
                 cloud.push(i);
@@ -296,16 +296,16 @@ function downloadOptions() {
         // leaving it is the same as leaving it forever.
         //
         // The local side is "spelled like one of ours and absent from the
-        // defaults table", never "everything in localStorage": that store also
+        // defaults table", never "everything in storage": that store also
         // holds the SW's runtime state (calendar-storage2, calendar-storage,
         // oid, favicon-negative-cache, mv-cache), and deleting those zeroed the
         // heat map, threw away the crawl cursor and the negative favicon cache.
-        const local = Object.keys(localStorage).filter(function (key) {
+        const local = storageAdapter.keys().filter(function (key) {
             return CONFIG_KEY.test(key)
                 && !VERSION_FLAG_KEY.test(key)
                 && !(key in defaultValues);
         });
-        for (const j of retired.concat(local)) delete localStorage[j];
+        for (const j of retired.concat(local)) storageAdapter.removeItem(j);
 
         const done = function () { location.reload(); };
         if (cloud.length == 0) {
@@ -336,7 +336,7 @@ function loadSlider(id, min, max, current) {
     if (!input || !slider || !handle) return;
 
     input.style.textAlign = 'right';
-    input.value = parseInt(localStorage[current], 10);
+    input.value = parseInt(storageAdapter.getItem(current), 10);
 
     function getHandleWidth() {
         return handle.offsetWidth || 10;
@@ -496,7 +496,7 @@ function dropStaleSlices(keep) {
 }
 
 /**
- * Gather the option form, write it to localStorage and — when `sync` — upload
+ * Gather the option form, write it to the local store and — when `sync` — upload
  * it to chrome.storage.sync.
  *
  * Returns a promise that settles once the upload does, so a caller can
@@ -597,7 +597,7 @@ function saveOptions(sync) {
     so['popup-zoom'] = parseInt($('popupZoom').value, 10) || 100;
     so['page-zoom'] = parseInt($('pageZoom').value, 10) || 100;
     for (var i in so) {
-        localStorage[i] = so[i];
+        storageAdapter.setItem(i, so[i]);
     }
 
     let upload;
@@ -703,7 +703,7 @@ function previewItem() {
 // Most visited blocklist
 
 function mostVisitedBlocklist() {
-    var mvbl = localStorage['mv-blocklist'];
+    var mvbl = storageAdapter.getItem('mv-blocklist');
     // Unset reads `undefined` on a cold profile, in the same window loadOptions()
     // describes: the worker has not seeded `defaultConfig` yet. `.length` threw
     // there, and because this call sits in the middle of the DOMContentLoaded
@@ -742,7 +742,7 @@ function mostVisitedBlocklist() {
 // Filtered domains list
 
 function filteredDomainsList() {
-    var fbl = localStorage['rh-filtered'];
+    var fbl = storageAdapter.getItem('rh-filtered');
     // Same cold-start window as mostVisitedBlocklist() above: both keys are
     // seeded by the worker, and reading them before that lands is not an error
     // the caller can recover from — it aborts the rest of page initialisation.
@@ -901,7 +901,7 @@ function domainsToSet(list) {
 }
 
 function updateFilter() {
-    var stored = localStorage['rh-filtered'];
+    var stored = storageAdapter.getItem('rh-filtered');
     // undefined means storage has not been read yet, which is NOT the same as
     // "the user filters nothing". Bail out and let the next filtUrl() retry,
     // rather than caching an empty list that happens to look final.

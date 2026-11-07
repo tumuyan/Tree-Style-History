@@ -108,12 +108,44 @@ function defaultGetVisits(state, q, cb) {
  */
 function negLocalStorage(state) {
     const store = {};
-    return Object.defineProperty({}, 'favicon-negative-cache', {
-        enumerable: true,
-        configurable: true,
-        get() { return store['favicon-negative-cache']; },
-        set(v) { state.negWrites++; store['favicon-negative-cache'] = String(v); },
+    const setRaw = (key, value) => {
+        store[key] = String(value);
+        if (key === 'favicon-negative-cache') state.negWrites++;
+    };
+    const removeRaw = (key) => { delete store[key]; };
+    // Both surfaces share `store`: the worker has moved to the explicit
+    // storageAdapter API, while these tests (and background-utils.js, which is
+    // loaded for real through importScripts) still use bare localStorage[..].
+    // A write through either side must be visible to the other.
+    const localStorage = new Proxy({}, {
+        get(_t, prop) {
+            if (typeof prop === 'symbol') return undefined;
+            if (prop === 'getItem') return (k) => (k in store ? store[k] : undefined);
+            if (prop === 'setItem') return (k, v) => setRaw(k, v);
+            if (prop === 'removeItem') return (k) => removeRaw(k);
+            if (prop === 'length') return Object.keys(store).length;
+            return store[prop];
+        },
+        set(_t, prop, value) { setRaw(String(prop), value); return true; },
+        deleteProperty(_t, prop) { removeRaw(String(prop)); return true; },
+        has(_t, prop) { return prop in store; },
+        ownKeys() { return Object.keys(store); },
+        getOwnPropertyDescriptor(_t, prop) {
+            if (prop in store) return { enumerable: true, configurable: true, value: store[prop] };
+            return undefined;
+        },
     });
+    const storageAdapter = {
+        getItem: (k) => (k in store ? store[k] : undefined),
+        getNumber: (k) => Number(k in store ? store[k] : undefined),
+        setItem: setRaw,
+        removeItem: removeRaw,
+        keys: () => Object.keys(store),
+        // defaultConfig() is only reached from onStorageReady() (boot()), so
+        // this stub's storage is always ready by the time it runs.
+        isReady: () => true,
+    };
+    return { localStorage, storageAdapter };
 }
 
 /**
@@ -282,7 +314,7 @@ function loadWorker(opts = {}) {
             parse: (text, reviver) => { state.jsonParses++; return JSON.parse(text, reviver); },
             stringify: (value, a, b) => JSON.stringify(value, a, b),
         },
-        localStorage: negLocalStorage(state),
+        ...negLocalStorage(state),
         // Web-platform globals the real Service Worker has. Injected for the
         // favicon tests, which drive handleFaviconRequest()/fallback end to end
         // and need to see exactly which keys were written to the shared cache.

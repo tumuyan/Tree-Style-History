@@ -25,7 +25,7 @@ document.addEventListener('DOMContentLoaded', function () {
         // Updated/Installed
         //
         // The banner is shown now, but the flag is written at the end of this
-        // callback: `localStorage[...] = ...` goes through
+        // callback: `storageAdapter.setItem(..)` goes through
         // chrome.storage.local.set(), and the service worker has a
         // chrome.storage.onChanged listener, so every write wakes it and starts
         // the startup crawl. It happens once per version, but it must not sit in
@@ -33,13 +33,13 @@ document.addEventListener('DOMContentLoaded', function () {
         // further down, which ends this callback before the deferred write.
 
         var versionKey = 'rh-version-' + getVersion();
-        var showInstallNotice = localStorage[versionKey] !== 'true';
+        var showInstallNotice = storageAdapter.getItem(versionKey) !== 'true';
 
     if (showInstallNotice) {
         alertUser(returnLang('successfullyInstalled') + '<span>v' + getVersion() + '</span>', 'open');
     }
 
-    // if (localStorage['show-popup'] != 'yes') {
+    // if (storageAdapter.getItem('show-popup') != 'yes') {
     //     window.open("history2.html");
     //     window.close();
     // }
@@ -54,10 +54,10 @@ document.addEventListener('DOMContentLoaded', function () {
         closed: 'closed.html',
         bookmark: 'bookmark.html',
         options: 'options.html',
-    }[localStorage['show-popup']];
+    }[storageAdapter.getItem('show-popup')];
 
     if (redirectPage) {
-        if (showInstallNotice) { localStorage[versionKey] = 'true'; }
+        if (showInstallNotice) { storageAdapter.setItem(versionKey, 'true'); }
         window.open(redirectPage);
         window.close();
     }
@@ -81,25 +81,25 @@ document.addEventListener('DOMContentLoaded', function () {
     // Parsed once and reused for the init pass below: the storage value is
     // absent until the very first save, and an empty string splits into ['']
     // which would still be walked as a (harmless) unknown block.
-    var rhporder = (localStorage['rh-list-order'] || '').split(',').filter(Boolean);
+    var rhporder = (storageAdapter.getItem('rh-list-order') || '').split(',').filter(Boolean);
 
     // Pinned first and unconditionally: there is no per-row pin button any
     // more (see formatItem()), so `rh-pinned` can only ever shrink — from a
     // profile that pinned something before the button was removed. Without a
     // block here those entries are in storage and nowhere on screen.
-    if (localStorage['rh-pinned'] !== 'false' && localStorage['rh-pinned'] !== undefined) {
+    if (storageAdapter.getItem('rh-pinned') !== 'false' && storageAdapter.getItem('rh-pinned') !== undefined) {
         var pinnedEl = createElement('div', { id: 'pi-inject', html: '<div id="pi-inject-title" class="popup-title"><span>' + returnLang('pinned') + '</span></div>' });
         $('popup-insert').appendChild(pinnedEl);
     }
 
     for (var o in rhporder) {
         if (rhporder[o] == 'rh-order') {
-            if (Number(localStorage['rh-itemsno']) > 0) {
+            if (storageAdapter.getNumber('rh-itemsno') > 0) {
                 var el = createElement('div', { id: 'rh-inject', html: '<div id="rh-inject-title" class="popup-title"><span>' + returnLang('recentHistory') + '    - <a href="#"  id="show-all-history" target="_blank">' + returnLang('more') + '🕑</a></span></div>' });
                 $('popup-insert').appendChild(el);
             }
         } else if (rhporder[o] == 'rct-order') {
-            if (Number(localStorage['rct-itemsno']) > 0 ) {
+            if (storageAdapter.getNumber('rct-itemsno') > 0 ) {
                 if (navigator.userAgent.toLowerCase().indexOf('edg') > 0) {
                     el = createElement('div', { id: 'rct-inject', html: '<div id="rct-inject-title" class="popup-title"><span>' + returnLang('recentlyClosedTabs') + '    - <a href="#"  id="show-all-closed" target="_blank">' + returnLang('more') + '...</a></span></div>' });
                     $('popup-insert').appendChild(el);
@@ -109,18 +109,18 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             }
         } else if (rhporder[o] == 'rb-order') {
-            if (Number(localStorage['rb-itemsno']) > 0) {
+            if (storageAdapter.getNumber('rb-itemsno') > 0) {
                 el = createElement('div', { id: 'rb-inject', html: '<div id="rb-inject-title" class="popup-title"><span>' + returnLang('recentBookmarks') + '    - <a href="#"  id="show-all-bookmark" target="_blank">' + returnLang('more') + '...</a></span></div>' });
                 $('popup-insert').appendChild(el);
             }
         } else if (rhporder[o] == 'mv-order') {
-            if (Number(localStorage['mv-itemsno']) > 0) {
+            if (storageAdapter.getNumber('mv-itemsno') > 0) {
                 el = createElement('div', { id: 'mv-inject', html: '<div id="mv-inject-title" class="popup-title"><span>' + returnLang('mostVisited') + '</span></div>' });
                 $('popup-insert').appendChild(el);
             }
         }  else if (rhporder[o] == 'rt-order') {
             // rt = recent tab
-            if (Number(localStorage['rt-itemsno']) > 0) {
+            if (storageAdapter.getNumber('rt-itemsno') > 0) {
                 // 只创建HTML元素，不立即调用showRecentTabs函数
                 el = createElement('div', { id: 'rt-inject', html: '<div id="rt-inject-title" class="popup-title"><span>' + returnLang('recentTabs') + '</span></div>' });
                 $('popup-insert').appendChild(el);
@@ -133,7 +133,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if ($('show-all-history') != undefined)
         $('show-all-history').addEventListener('click', function (e) {
             e.preventDefault();
-            if (localStorage['rm-click'] == 'this')
+            if (storageAdapter.getItem('rm-click') == 'this')
                 chromeURL('/history2.html');
             else
                 chromeURL('chrome://history/');
@@ -142,7 +142,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if ($('show-all-bookmark') != undefined)
         $('show-all-bookmark').addEventListener('click', function (e) {
             e.preventDefault();
-            if (localStorage['rm-click'] == 'this')
+            if (storageAdapter.getItem('rm-click') == 'this')
                 chromeURL('/bookmark.html');
             else
                 chromeURL('chrome://favorites/');
@@ -151,7 +151,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if ($('show-all-closed') != undefined)
         $('show-all-closed').addEventListener('click', function (e) {
             e.preventDefault();
-            if (localStorage['rm-click'] == 'this')
+            if (storageAdapter.getItem('rm-click') == 'this')
                 chromeURL('/closed.html');
             else
                 chromeURL('chrome://history/recentlyClosed');
@@ -190,7 +190,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     // -- Width
-    document.body.style.width = localStorage['rh-width'];
+    document.body.style.width = storageAdapter.getItem('rh-width');
 
     // -- Titles
     Array.from($$('.popup-title')).forEach(function (el, i) {
@@ -200,7 +200,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     // -- Search
-    if (localStorage['rh-search'] == 'yes') {
+    if (storageAdapter.getItem('rh-search') == 'yes') {
         $('popup-search-input').addEventListener('keyup', function () {
             var sv = this.value;
             if (sv.length + sv.replace(/[0-9a-zA-Z]+/g, '').length >= 2) {
@@ -234,7 +234,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // -- Deferred write, see "Updated/Installed" above
     if (showInstallNotice) {
-        localStorage[versionKey] = 'true';
+        storageAdapter.setItem(versionKey, 'true');
     }
 
     });

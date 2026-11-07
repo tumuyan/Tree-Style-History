@@ -321,7 +321,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
                 let node = Object.assign({}, tree[i]);
                 node.originalTitle = rawTitle;
-                if (localStorage['rm-path'] == 'yes') {
+                if (storageAdapter.getItem('rm-path') == 'yes') {
                     node.title = (path).replace(/[🗁]+/, '🗁') + ' - ' + displayTitle;
                 } else {
                     node.title = displayTitle;
@@ -402,9 +402,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
         alertLoadingHistory(false);
         var rha = [];
-        var grp = localStorage['rh-group'];
-        var oby = localStorage['rh-orderby'];
-        var ord = localStorage['rh-order'];
+        var grp = storageAdapter.getItem('rh-group');
+        var oby = storageAdapter.getItem('rh-orderby');
+        var ord = storageAdapter.getItem('rh-order');
 
         for (var i = 0; i < hi.length; i++) {
 

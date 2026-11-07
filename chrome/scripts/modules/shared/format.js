@@ -67,7 +67,7 @@ export function returnLang(str) {
 }
 
 export function timeNow(st) {
-    var tf = localStorage['rh-timeformat'];
+    var tf = storageAdapter.getItem('rh-timeformat');
     var currentTime = st === 0 ? new Date() : new Date(st);
     var hours = currentTime.getHours();
     var minutes = currentTime.getMinutes();

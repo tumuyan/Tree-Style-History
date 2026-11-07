@@ -55,7 +55,7 @@ function hydrateCalendarStorage(raw) {
 }
 
 onStorageReady(function() {
-    hydrateCalendarStorage(localStorage['calendar-storage2']);
+    hydrateCalendarStorage(storageAdapter.getItem('calendar-storage2'));
 });
 
 // storage-adapter mirrors other contexts' writes into the localStorage cache,
@@ -149,7 +149,7 @@ export function save_calendar_storage2(obj, n, overwrite) {
         // keep the cell coloured.
         if (calendar_storage2[key] == undefined) return false;
         delete calendar_storage2[key];
-        localStorage['calendar-storage2'] = JSON.stringify(calendar_storage2);
+        storageAdapter.setItem('calendar-storage2', JSON.stringify(calendar_storage2));
         return true;
     }
 
@@ -161,7 +161,7 @@ export function save_calendar_storage2(obj, n, overwrite) {
     }
 
     calendar_storage2[key] = n;
-    localStorage['calendar-storage2'] = JSON.stringify(calendar_storage2);
+    storageAdapter.setItem('calendar-storage2', JSON.stringify(calendar_storage2));
     return true;
 }
 

@@ -21,7 +21,7 @@ import { isBookmarkletUrl } from './shared/url.js';
  * uninitialised: no date dropdowns, no calendar, no list.
  */
 function dateFormat() {
-    return localStorage['rh-date'] || 'mm/dd/yyyy';
+    return storageAdapter.getItem('rh-date') || 'mm/dd/yyyy';
 }
 
 export { _DATE, DAY, timeNow, returnLang, getVersion, getVersionType } from './shared/format.js';
@@ -32,7 +32,7 @@ export { getFaviconUrl, getFaviconOnerror } from './shared/favicon.js';
 
 function TimeToStr(time, skip_date, skip_year, skip_clock) {
     advanceDateToToday();
-    var tf = localStorage['rh-timeformat'];
+    var tf = storageAdapter.getItem('rh-timeformat');
     var currentTime = new Date(time);
     var hours = currentTime.getHours();
     var minutes = currentTime.getMinutes();
@@ -59,7 +59,7 @@ function TimeToStr(time, skip_date, skip_year, skip_clock) {
             return hours + ':' + minutes + te;
         }
     }
-    var datestr = localStorage['rh-date'];
+    var datestr = storageAdapter.getItem('rh-date');
     if (!datestr || typeof datestr !== 'string') {
         datestr = 'mm/dd/yyyy';
     }

@@ -303,7 +303,7 @@ const FAVICON_SERVICE_PATTERNS = [
 ];
 
 // Share favicon cache between services (default: enabled)
-// Updated from localStorage when storage is ready
+// Updated from storage when storage is ready
 var _shareFaviconCache = true;
 
 function isFaviconRequest(url) {
@@ -422,7 +422,7 @@ var _negativeFlushTimer = null;
 function getNegativeCache() {
     if (_negativeCache) return _negativeCache;
     try {
-        _negativeCache = JSON.parse(localStorage['favicon-negative-cache'] || '{}');
+        _negativeCache = JSON.parse(storageAdapter.getItem('favicon-negative-cache') || '{}');
     } catch {
         _negativeCache = {};
     }
@@ -432,7 +432,7 @@ function getNegativeCache() {
 function setNegativeCache(cache) {
     _negativeCache = cache;
     try {
-        localStorage['favicon-negative-cache'] = JSON.stringify(cache);
+        storageAdapter.setItem('favicon-negative-cache', JSON.stringify(cache));
     } catch {
         // Best-effort write, same as cachePutSafe() below: the in-memory copy
         // is already updated, when the favicon is looked up again it comes
@@ -548,7 +548,7 @@ async function fetchFaviconFallback(request, cache) {
     var hostname = extractHostnameFromFaviconUrl(request.url);
     if (!hostname) return null;
 
-    var fallbackService = localStorage['favicon-service-fallback'] || '';
+    var fallbackService = storageAdapter.getItem('favicon-service-fallback') || '';
     if (!fallbackService) return null;
 
     var fallbackUrl = getFaviconUrl('https://' + hostname, { service: fallbackService });
@@ -682,17 +682,17 @@ function initializeStorageState() {
     _tSW_init = performance.now();
     
     // Read favicon cache sharing preference
-    _shareFaviconCache = localStorage['share-favicon-cache'] !== 'no';
+    _shareFaviconCache = storageAdapter.getItem('share-favicon-cache') !== 'no';
     
-    oid = localStorage['oid'];
+    oid = storageAdapter.getItem('oid');
     if (oid == undefined) {
         oid = 1;
     } else {
         oid++;
     }
-    localStorage['oid'] = oid;
+    storageAdapter.setItem('oid', oid);
 
-    calendar_str = localStorage['calendar-storage'];
+    calendar_str = storageAdapter.getItem('calendar-storage');
     calendar = {};
     calendar_r = {};
     if (calendar_str) {
@@ -957,9 +957,9 @@ var mostVisitedInit = function () {
                 }
             }
 
-            localStorage['mv-cache'] = JSON.stringify(mv);
+            storageAdapter.setItem('mv-cache', JSON.stringify(mv));
         } else {
-            localStorage['mv-cache'] = 'false';
+            storageAdapter.setItem('mv-cache', 'false');
         }
     });
 };
@@ -1055,7 +1055,7 @@ function initContextMenu() {
             visible: true,
         };
 
-        if (localStorage['use-contextmenu'] === 'yes') {
+        if (storageAdapter.getItem('use-contextmenu') === 'yes') {
             chrome.contextMenus.create(options, () => {
                 if (chrome.runtime && chrome.runtime.lastError) {
                     console.warn('Failed to create context menu:', chrome.runtime.lastError);
@@ -1087,15 +1087,16 @@ if (chrome && chrome.storage && chrome.storage.onChanged) {
 
 // Load date function — refactored from recursive callback to async/await
 async function loadDate(date, dateId) {
-    // Number() is not a bug fix here: `>` coerces its right operand anyway, so
-    // 11 > "10" was already true. It is written out because the value is a
-    // string and every arithmetic use below would otherwise rely on that
+    // getNumber() is not a bug fix here: `>` coerces its right operand anyway,
+    // so 11 > "10" was already true. It is written out because the stored value
+    // is a string and every arithmetic use below would otherwise rely on that
     // coercion being remembered — and because the badge subtracts, where
-    // "120" - 3 happens to work for the same reason.
-    const loadRange = Number(localStorage['load-range']);
+    // "120" - 3 happens to work for the same reason. The conversion now lives
+    // at the storage boundary instead of at each read site.
+    const loadRange = storageAdapter.getNumber('load-range');
     if (dateId > loadRange) {
         console.debug("loadDate done. dateId = " + dateId + ">" + loadRange);
-        localStorage['calendar-storage'] = JSON.stringify(calendar_r);
+        storageAdapter.setItem('calendar-storage', JSON.stringify(calendar_r));
         chrome.action.setBadgeText({ text: "Url" });
         loadHistory();
         return;
@@ -1447,7 +1448,7 @@ async function runCrawlPass() {
     try {
         urls = await dbManager.queryURLs({
             index: 'lastVisitTime',
-            range: IDBKeyRange.lowerBound((new Date()).getTime() - DAY * Number(localStorage["load-range"])),
+            range: IDBKeyRange.lowerBound((new Date()).getTime() - DAY * storageAdapter.getNumber("load-range")),
             direction: 'next'
         });
     } catch (error) {
@@ -1703,7 +1704,7 @@ function saveCrawledHeat(days) {
         calendar_storage2[key] = n;
         stored = true;
     }
-    if (stored) localStorage['calendar-storage2'] = JSON.stringify(calendar_storage2);
+    if (stored) storageAdapter.setItem('calendar-storage2', JSON.stringify(calendar_storage2));
 }
 
 /**
@@ -1733,7 +1734,7 @@ function saveCrawledHeat(days) {
  * about work done in this browser session, and it dies with the browser.
  */
 async function retentionCleanup() {
-    const days = Number(localStorage['load-range3']);
+    const days = storageAdapter.getNumber('load-range3');
     if (!Number.isFinite(days) || days <= 0) return;
 
     const area = sessionArea();
@@ -1758,7 +1759,7 @@ async function retentionCleanup() {
     // 23:59:59.999 and keeps one day too many — a coloured cell for a day
     // whose visits the sweep below has just removed. Both halves are
     // independent; the heat map is pruned by a synchronous helper so its
-    // localStorage write does not sit after an await (which
+    // storage write does not sit after an await (which
     // require-atomic-updates reads as a stale-state assignment).
     const heatFrom = new Date(cutoff);
     heatFrom.setHours(0, 0, 0, 0);
@@ -1796,7 +1797,7 @@ function pruneHeatMap(dayBoundary) {
         var key = stale[i];
         delete calendar_storage2[key];
     }
-    if (stale.length) localStorage['calendar-storage2'] = JSON.stringify(calendar_storage2);
+    if (stale.length) storageAdapter.setItem('calendar-storage2', JSON.stringify(calendar_storage2));
 }
 
 /**
@@ -1832,7 +1833,7 @@ async function crawlUrlVisits(url_item) {
     }
 
     h.sort((a, b) => b.visitTime - a.visitTime);
-    const loadfrom = (new Date()).getTime() - DAY * Number(localStorage["load-range"]);
+    const loadfrom = (new Date()).getTime() - DAY * storageAdapter.getNumber("load-range");
 
     for (const v of h) {
         if (v.visitTime < loadfrom) {
@@ -2050,7 +2051,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     switch (message.action) {
         case 'refreshContextMenu':
             // Re-read favicon cache config from storage
-            _shareFaviconCache = localStorage['share-favicon-cache'] !== 'no';
+            _shareFaviconCache = storageAdapter.getItem('share-favicon-cache') !== 'no';
             initContextMenu();
             sendResponse({ result: true });
             break;
@@ -2067,7 +2068,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
             // survives this would be written straight back by its timer.
             _negativePending = {};
             _negativeCache = null;
-            localStorage.removeItem('favicon-negative-cache');
+            storageAdapter.removeItem('favicon-negative-cache');
             return true; // Keep channel open for async response
 
         default:

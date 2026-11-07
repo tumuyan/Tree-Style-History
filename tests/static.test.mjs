@@ -1288,7 +1288,12 @@ test('a key saveOptions writes is also one the options page reads back', () => {
     const cfg = fs.readFileSync(path.join(CHROME_DIR, 'scripts/modules/config.js'), 'utf8');
     const written = new Set([...cfg.matchAll(/^\s*so\['([\w-]+)'\]\s*=/gm)].map((m) => m[1]));
 
-    const read = new Set([...cfg.matchAll(/localStorage\['([\w-]+)'\]/g)].map((m) => m[1]));
+    // Reads go through the explicit storageAdapter API now, not the
+    // localStorage proxy. Both spellings count as "the options page shows
+    // this key", so a migration cannot quietly make a written key look unread.
+    const read = new Set([
+        ...cfg.matchAll(/storageAdapter\.(?:getItem|getNumber)\(\s*'([\w-]+)'\s*\)/g),
+    ].map((m) => m[1]));
     // loadSlider() takes the key as its last argument, so those reads are named
     // in options.js rather than in config.js.
     const options = fs.readFileSync(path.join(CHROME_DIR, 'scripts/options.js'), 'utf8');
@@ -3415,7 +3420,8 @@ test('load-range3 is a real retention window, not only a query bound', () => {
     // it cannot rot back into a name on a slider.
     const sw = stripJsComments(fs.readFileSync(path.join(CHROME_DIR, 'scripts/background-sw.js'), 'utf8'));
     assert.match(sw, /function retentionCleanup\s*\(/, 'there must be a retention sweep');
-    assert.match(sw, /localStorage\['load-range3'\]/, 'it must read the retention setting');
+    assert.match(sw, /storageAdapter\.getNumber\(\s*'load-range3'\s*\)/,
+        'it must read the retention setting');
     assert.match(sw, /dbManager\.purgeExpired\s*\(/, 'it must prune the IndexedDB stores');
     assert.match(sw, /delete calendar_storage2\[key\]/, 'it must also drop expired heat-map days');
     // Piggybacked on the existing most-visited alarm: no third alarm, no extra

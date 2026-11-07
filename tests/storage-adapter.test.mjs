@@ -69,8 +69,12 @@ function loadAdapter(initial = {}) {
     // latter, so wire the proxy across or `evalStrict()` would be assigning to
     // `undefined` while looking like it exercises the `set` trap.
     vm.runInContext('globalThis.localStorage = window.localStorage;', ctx);
+    // defaultConfig() calls the bare global `storageAdapter`, so the explicit
+    // API has to be reachable there too (the adapter publishes it on `window`).
+    vm.runInContext('globalThis.storageAdapter = window.storageAdapter;', ctx);
 
     return {
+        ctx,
         win,
         adapter: win.storageAdapter,
         localStorage: win.localStorage,
@@ -390,4 +394,87 @@ test('getNumber() sees writes made through the proxy and through setItem()', () 
     env.adapter.setItem('rh-itemsno', 11);
     assert.equal(env.localStorage['rh-itemsno'], '11', 'setItem() stringifies through the same path');
     assert.equal(env.adapter.getNumber('rh-itemsno'), 11);
+});
+
+test('keys() enumerates the same cache the proxy exposes, and tracks writes', () => {
+    const env = loadAdapter({ 'rh-itemsno': '16', 'rh-width': '275px' });
+    env.flush();
+
+    // Array.from(): built inside the vm context, so its prototype is that
+    // realm's Array and deepEqual would reject it on structure alone.
+    assert.deepEqual(Array.from(env.adapter.keys()).sort(), ['rh-itemsno', 'rh-width'],
+        'keys() must not include adapter members or hidden state');
+    // config.js sweeps retired settings through keys(), so an enumeration that
+    // lagged behind a write (or a removal) would silently keep sweeping keys
+    // that are live — or miss ones that just appeared.
+    env.localStorage['rh-group'] = 'yes';
+    assert.ok(env.adapter.keys().includes('rh-group'),
+        'a write through the proxy must show up in keys()');
+    env.adapter.removeItem('rh-width');
+    assert.ok(!env.adapter.keys().includes('rh-width'),
+        'a removeItem() must disappear from keys()');
+    assert.deepEqual(Object.keys(env.localStorage).sort(), Array.from(env.adapter.keys()).sort(),
+        'the two surfaces must always enumerate the same store');
+});
+
+// ---------------------------------------------------------------------------
+// defaultConfig() and the unready window
+//
+// defaultConfig() is the first bulk reader on startup: it fills every key it
+// sees as "missing". Before the initial snapshot lands, getItem() answers
+// `undefined` for ALL keys, so without a readiness guard it would decide that
+// every saved setting is missing, write all 35 defaults, and — because writes
+// in that window are replayed over the snapshot at completion — persist them.
+// These cases drive the real shared module against the real adapter.
+// ---------------------------------------------------------------------------
+
+const DEFAULTS_SRC = fs.readFileSync(
+    new URL('../chrome/scripts/modules/shared/config-defaults.js', import.meta.url),
+    'utf8',
+).replace(/^export /gm, '');
+
+/** Load config-defaults.js into an already-booted adapter context. */
+function withDefaults(env) {
+    new vm.Script(DEFAULTS_SRC, { filename: 'config-defaults.js' }).runInContext(env.ctx);
+}
+
+test('defaultConfig(false) does not write anything before storage is ready', () => {
+    const env = loadAdapter({ 'load-range': '30' });
+    withDefaults(env);
+
+    // The whole point: no onStorageReady callback has fired, so the snapshot
+    // has not filled the cache yet.
+    assert.equal(env.adapter.isReady(), false);
+    env.evalStrict('defaultConfig(false);');
+
+    assert.equal(env.store['load-range'], '30', 'the saved value must not be clobbered');
+    assert.equal(env.adapter._pendingWrites.size, 0,
+        'no default may be queued for replay over the snapshot');
+    assert.ok(!env.store['rh-itemsno'], 'and no unrelated default may be written either');
+});
+
+test('defaultConfig(false) keeps a saved value once storage is ready', () => {
+    const env = loadAdapter({ 'load-range': '30', 'favicon-service': 'google' });
+    withDefaults(env);
+    env.flush();
+
+    assert.equal(env.adapter.isReady(), true);
+    env.evalStrict('defaultConfig(false);');
+
+    assert.equal(env.store['load-range'], '30', 'a saved numeric setting must survive');
+    assert.equal(env.store['favicon-service'], 'google', 'a saved string setting must survive');
+    // It still fills genuinely missing keys — only the saved ones are spared.
+    assert.equal(env.store['rh-itemsno'], '16', 'a truly unset key gets its default');
+});
+
+test('defaultConfig(true) still restores defaults in the unready window', () => {
+    // `clean` is the explicit "restore defaults" button. It is a deliberate
+    // overwrite, not a speculative fill, so the readiness guard must not block
+    // it — the options page already waits for onStorageReady(), but a caller
+    // that does not must still be able to force a reset.
+    const env = loadAdapter({ 'rh-itemsno': '42' });
+    withDefaults(env);
+    env.evalStrict('defaultConfig(true);');
+
+    assert.equal(env.store['rh-itemsno'], '16', 'clean=true overwrites regardless of readiness');
 });

@@ -130,7 +130,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     var pIDs = {};
 
-    var showLessItem = localStorage['less-item'];
+    var showLessItem = storageAdapter.getItem('less-item');
 
 
     // The tree itself: scripts/modules/tree.js renders the same class
@@ -249,7 +249,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (loadfrom > 0 && loadto > 0) {
             feach_History(loadfrom, loadto, 0);
         } else {
-            let time = (date).getTime() - DAY * Number(localStorage["load-range2"]);
+            let time = (date).getTime() - DAY * storageAdapter.getNumber("load-range2");
             feach_History(time, (date_e).getTime(), 0);
         }
 
@@ -313,7 +313,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
                 zNodes = zNodes.concat(yNodes);
 
-                if (zNodes.length < Number(localStorage['load-range4']) && loadfrom - DAY * t > date - Number(localStorage['load-range3']) * DAY) {
+                if (zNodes.length < storageAdapter.getNumber('load-range4') && loadfrom - DAY * t > date - storageAdapter.getNumber('load-range3') * DAY) {
                     feach_History(loadfrom, loadto, t + 1);
                 } else {
                     // No "remove every node first" pass: zNodes is the whole

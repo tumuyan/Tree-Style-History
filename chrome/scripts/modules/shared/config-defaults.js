@@ -44,9 +44,17 @@ export var defaultValues = {
 };
 
 export function defaultConfig(clean) {
+    // Before the initial snapshot lands, getItem() answers `undefined` for
+    // every key. Filling those "misses" would not just be redundant: the
+    // writes are replayed over the snapshot at completion (see _pendingWrites),
+    // so real, saved settings would be overwritten with defaults and persisted.
+    // Every production caller runs inside onStorageReady(); this guard keeps a
+    // caller that lands in the unready window from clobbering anything.
+    if (!clean && !storageAdapter.isReady()) return;
     for (var v in defaultValues) {
-        if (clean || !localStorage[v] || localStorage[v] == null || localStorage[v] == '') {
-            localStorage[v] = defaultValues[v];
+        var current = storageAdapter.getItem(v);
+        if (clean || !current || current == null || current == '') {
+            storageAdapter.setItem(v, defaultValues[v]);
         }
     }
 }

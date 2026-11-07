@@ -66,9 +66,9 @@ function finishEmptyDay(into) {
 function history(w, q) {
 
     var sw = $('rh-what').options[$('rh-what').selectedIndex].value;
-    var grp = localStorage['rh-group'];
-    var oby = localStorage['rh-orderby'];
-    var ord = localStorage['rh-order'];
+    var grp = storageAdapter.getItem('rh-group');
+    var oby = storageAdapter.getItem('rh-orderby');
+    var ord = storageAdapter.getItem('rh-order');
     var obj = {};
     var rha = [];
 
@@ -540,7 +540,7 @@ function getMoreItems(el) {
 // --- Select history item ---
 
 function selectHistoryItem(el, w) {
-    var grp = localStorage['rh-group'];
+    var grp = storageAdapter.getItem('rh-group');
     if (getActiveHistory() == 'history') {
         var into = '#rh-views-insert';
     } else if (getActiveHistory() == 'search') {
@@ -671,7 +671,7 @@ function selectHistoryItem(el, w) {
  */
 function deleteHistoryItem(w, redraw) {
     if (w == 'selected') {
-        var grp = localStorage['rh-group'];
+        var grp = storageAdapter.getItem('rh-group');
         if (getActiveHistory() == 'history') {
             var into = '#rh-views-insert';
         } else if (getActiveHistory() == 'search') {
@@ -709,7 +709,7 @@ function deleteHistoryItem(w, redraw) {
             });
         }
     } else if (w == 'range') {
-        var df = localStorage['rh-date'];
+        var df = storageAdapter.getItem('rh-date');
         var dfrom = $('delete-range-one');
         var dto = $('delete-range-two');
         // rh-date is undefined until the storage cache is filled, and the two

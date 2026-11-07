@@ -59,9 +59,17 @@ var defaultValues = {
 };
 
 function defaultConfig(clean) {
+    // Before the initial snapshot lands, getItem() answers `undefined` for
+    // every key. Filling those "misses" would not just be redundant: the
+    // writes are replayed over the snapshot at completion (see _pendingWrites),
+    // so real, saved settings would be overwritten with defaults and persisted.
+    // Every production caller runs inside onStorageReady(); this guard keeps a
+    // caller that lands in the unready window from clobbering anything.
+    if (!clean && !storageAdapter.isReady()) return;
     for (var v in defaultValues) {
-        if (clean || !localStorage[v] || localStorage[v] == null || localStorage[v] == '') {
-            localStorage[v] = defaultValues[v];
+        var current = storageAdapter.getItem(v);
+        if (clean || !current || current == null || current == '') {
+            storageAdapter.setItem(v, defaultValues[v]);
         }
     }
 }
@@ -138,7 +146,7 @@ function returnLang(str) {
 }
 
 function timeNow(st) {
-    var tf = localStorage['rh-timeformat'];
+    var tf = storageAdapter.getItem('rh-timeformat');
     var currentTime = st === 0 ? new Date() : new Date(st);
     var hours = currentTime.getHours();
     var minutes = currentTime.getMinutes();
@@ -241,7 +249,7 @@ function getFaviconUrl(url, options) {
     if (url.indexOf('file://') === 0) {
         return 'images/iconmonstr-file-3.svg';
     }
-    var service = options.service || localStorage['favicon-service'] || defaultValues['favicon-service'];
+    var service = options.service || storageAdapter.getItem('favicon-service') || defaultValues['favicon-service'];
     var trimmedUrl = url.trim();
     if (!trimmedUrl) return Object.prototype.hasOwnProperty.call(options, 'fallback') ? options.fallback : '';
     var hostValue = '#';
@@ -271,7 +279,7 @@ function getFaviconUrl(url, options) {
 
 // Generate onerror attribute for favicon img fallback to secondary service.
 function getFaviconOnerror(url) {
-    var fallbackService = localStorage['favicon-service-fallback'] || '';
+    var fallbackService = storageAdapter.getItem('favicon-service-fallback') || '';
     if (!fallbackService) return '';
     return getFaviconUrl(url, { service: fallbackService });
 }
@@ -335,7 +343,7 @@ function hydrateCalendarStorage(raw) {
 }
 
 onStorageReady(function() {
-    hydrateCalendarStorage(localStorage['calendar-storage2']);
+    hydrateCalendarStorage(storageAdapter.getItem('calendar-storage2'));
 });
 
 // storage-adapter mirrors other contexts' writes into the localStorage cache,
@@ -429,7 +437,7 @@ function save_calendar_storage2(obj, n, overwrite) {
         // keep the cell coloured.
         if (calendar_storage2[key] == undefined) return false;
         delete calendar_storage2[key];
-        localStorage['calendar-storage2'] = JSON.stringify(calendar_storage2);
+        storageAdapter.setItem('calendar-storage2', JSON.stringify(calendar_storage2));
         return true;
     }
 
@@ -441,7 +449,7 @@ function save_calendar_storage2(obj, n, overwrite) {
     }
 
     calendar_storage2[key] = n;
-    localStorage['calendar-storage2'] = JSON.stringify(calendar_storage2);
+    storageAdapter.setItem('calendar-storage2', JSON.stringify(calendar_storage2));
     return true;
 }
 

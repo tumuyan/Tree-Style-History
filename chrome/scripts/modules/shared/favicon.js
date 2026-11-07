@@ -29,7 +29,7 @@ export function getFaviconUrl(url, options) {
     if (url.indexOf('file://') === 0) {
         return 'images/iconmonstr-file-3.svg';
     }
-    var service = options.service || localStorage['favicon-service'] || defaultValues['favicon-service'];
+    var service = options.service || storageAdapter.getItem('favicon-service') || defaultValues['favicon-service'];
     var trimmedUrl = url.trim();
     if (!trimmedUrl) return Object.prototype.hasOwnProperty.call(options, 'fallback') ? options.fallback : '';
     var hostValue = '#';
@@ -59,7 +59,7 @@ export function getFaviconUrl(url, options) {
 
 // Generate onerror attribute for favicon img fallback to secondary service.
 export function getFaviconOnerror(url) {
-    var fallbackService = localStorage['favicon-service-fallback'] || '';
+    var fallbackService = storageAdapter.getItem('favicon-service-fallback') || '';
     if (!fallbackService) return '';
     return getFaviconUrl(url, { service: fallbackService });
 }

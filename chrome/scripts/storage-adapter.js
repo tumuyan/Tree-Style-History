@@ -187,6 +187,32 @@
             return keys[index] || null;
         },
 
+        /**
+         * All keys currently cached, as an array.
+         *
+         * The proxy exposes these through ownKeys/Object.keys(localStorage),
+         * but a module that has moved to the explicit API should not have to
+         * reach back through the illusion just to enumerate them. config.js
+         * sweeps retired settings this way; keeping it here means that code
+         * can be fully migrated without a second, implicit storage surface.
+         */
+        keys() {
+            return Object.keys(this._cache);
+        },
+
+        /**
+         * Whether the initial `chrome.storage.local.get(null)` snapshot has
+         * filled the cache. Before that point getItem() answers `undefined`
+         * for every key, so a reader cannot tell "not loaded yet" from
+         * "genuinely unset" — exactly the ambiguity described on getItem().
+         * Bulk readers that would write on a miss (defaultConfig()) must not
+         * run in that window: their misses are not real misses, and the writes
+         * would be replayed over the snapshot at completion.
+         */
+        isReady() {
+            return this._initialized;
+        },
+
         get length() {
             return Object.keys(this._cache).length;
         }

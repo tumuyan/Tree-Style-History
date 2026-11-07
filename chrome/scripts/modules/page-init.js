@@ -48,7 +48,7 @@ function applyZoom() {
     // The popup marks itself with an element no other page has.
     var zoomKey = $('popup') ? 'popup-zoom' : 'page-zoom';
     onStorageReady(function () {
-        var zoom = parseInt(localStorage[zoomKey], 10);
+        var zoom = parseInt(storageAdapter.getItem(zoomKey), 10);
         if (!isNaN(zoom) && zoom !== 100) {
             document.body.style.zoom = zoom + '%';
         }
