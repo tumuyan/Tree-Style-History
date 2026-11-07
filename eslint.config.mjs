@@ -53,6 +53,10 @@ const crossFileGlobals = {
     normalizeCrawlState: 'writable',
     resumeIndexFrom: 'writable',
     countHeatVisitInto: 'writable',
+    matchFaviconService: 'writable',
+    faviconServiceHostname: 'writable',
+    rankMostVisited: 'writable',
+    isNavigatingTransition: 'writable',
 
     // --- UMD guard in db-manager.js (dead branch in the browser) ---
     module: 'readonly',
