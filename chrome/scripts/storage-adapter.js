@@ -135,13 +135,9 @@
         /**
          * Read a stored value as a number, at the storage boundary.
          *
-         * Business code used to spell `Number(localStorage[key])` at every
-         * numeric comparison. That chore is why a lint rule and a second copy
-         * of it exist (see verify:storage-numbers): the conversion is easy to
-         * forget, and a forgotten one only shows up on a large value or a `+`.
-         * This is the first step away from the `localStorage` proxy illusion —
-         * callers read through `storageAdapter` and no longer need to know that
-         * everything behind it is a string.
+         * Callers read through `storageAdapter` and no longer need to know that
+         * everything behind it is a string — the conversion is done once here,
+         * rather than at every numeric comparison.
          *
          * Deliberately a mechanical `Number(getItem(key))`: an uncached key
          * (cold start) yields NaN and an empty string yields 0, exactly as the

@@ -1,4 +1,4 @@
-# Tree Style Histyle
+# Tree Style History
 
 ![GitHub tag (latest by date)](https://img.shields.io/github/v/tag/tumuyan/Tree-Style-History?label=github) 
 [![Microsoft Edge Addons](https://img.shields.io/badge/dynamic/json?label=%20Edge&query=%24.version&url=https%3A%2F%2Fmicrosoftedge.microsoft.com%2Faddons%2Fgetproductdetailsbycrxid%2Fgfmkhnaldbgcpoddmapciblllofekbpn)](https://microsoftedge.microsoft.com/addons/detail/gfmkhnaldbgcpoddmapciblllofekbpn) 
@@ -72,7 +72,9 @@ https://github.com/tumuyan/Tree-Style-History/issues/1
 ## Prompt
 这是一个Chrome浏览器扩展。两条约定：  
 chrome/scripts/background-utils.js 由 chrome/scripts/modules/shared/ 自动生成（npm run gen），不要手改。  
-第三方库（MooTools、jQuery、zTree、fuzzysearch.js）已全部移除，不要再引入。
+第三方库（MooTools、jQuery、zTree、fuzzysearch.js）已全部移除，不要再引入。  
+
+开发约定（命令、生成物、校验、locale 双写）见 [CONTRIBUTING.md](./CONTRIBUTING.md)，完整背景见 [CODEBUDDY.md](./CODEBUDDY.md)。
 
 ## Changlog
 3.3.2 (未发布)

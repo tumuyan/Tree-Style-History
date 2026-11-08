@@ -38,9 +38,8 @@ npm run check   # 本地门禁：lint + test + verify，约 15 秒
 | `npm run verify:json` | 通用 | 校验 manifest 与两个语言文件是合法 JSON |
 | `npm run verify:syntax` | 通用 | `node --check` 全部首方脚本（含 `modules/shared/`） |
 | `npm run verify:ci-parity` | 通用 | 两套 CI 的路径过滤是否等价 |
-| `npm run verify:storage-numbers` | 通用 | 存储值被当数字用时是否都包了 `Number()` |
 | `npm run verify:sw-sync` | 通用 | `background-utils.js` 是否与 `modules/shared/` 同步 |
-| `npm run verify` | 通用 | 上面五项之和 |
+| `npm run verify` | 通用 | 上面四项之和 |
 | `npm run check` | 本地 | lint + test + verify |
 | `npm run check:ci` | **CI** | lint + test:ci + verify |
 
@@ -175,11 +174,11 @@ MV3 取消了后台页面，因此代码分成两套互不相通的运行时：
 - **未就绪时的写/删除会被初始快照回冲**。`chrome.storage.local.get(null)` 在脚本求值时发出，期间发生的写删除立刻落盘，**却不在那次读的应答里**（Chrome 应答的是调用时刻的快照）。适配器因此把未就绪期间的写删除记进 `_pendingWrites`，在初始化完成时重新应用。写入方有两路，都要记：本上下文的 `setItem()` / `removeItem()`，以及别处（SW 的 `defaultConfig()`）经 `chrome.storage.onChanged` 送达的变更——漏掉后者的话洞只补了一半。两个写入方法都用 `!this._initialized` 守卫，因为初始化后该 Map 再无读取方。
 - **与适配器成员同名的存储键会顶掉成员本身**。`localStorage['getItem'] = x` 走 Proxy 的 `set`，命中 `prop in target` 就把方法本身替换掉：值不会被持久化，刷新即无，而此后读这个名字只拿得到 `x`。`RESERVED_KEYS`（由 `Object.keys(adapter)` 推导）在写入时拒绝、报错，并让 `set` 返回 `false`（严格模式下赋值抛 `TypeError`）。
 
-**迁移状态（业务侧已全面走明确 API，Proxy 保留兜底）**：上面这两个陷阱，加上「所有值强制字符串化 → 每个数字比较都得 `Number()` → 于是有了 `verify:storage-numbers` 与静态套件里同一规则的两份实现、两份的 parity 守卫、一整份探针清单」，都是这层 Proxy 假象的复利成本。迁移按模块小步走完了业务侧：页面/模块层与 Service Worker 的读写全部走 `storageAdapter`，`chrome/scripts/` 下已无 `localStorage[...]` 形状（仅剩 `storage-adapter.js` 自身与几处注释）。**Proxy 没有撤**：`storage-adapter.js` 仍替换全局 `localStorage`，作为 e2e 与任何遗留路径的兜底；撤它是后续独立一步，本轮刻意不动（两套运行时、e2e 依赖真实行为）。
+**迁移状态（业务侧已全面走明确 API，Proxy 保留兜底）**：上面这两个陷阱，加上「所有值强制字符串化 → 每个数字比较都得 `Number()`」这层 Proxy 假象的复利成本，随着业务侧全面走明确 API 已一并结清。迁移按模块小步走完了业务侧：页面/模块层与 Service Worker 的读写全部走 `storageAdapter`，`chrome/scripts/` 下已无 `localStorage[...]` 形状（仅剩 `storage-adapter.js` 自身与几处注释）。**Proxy 没有撤**：`storage-adapter.js` 仍替换全局 `localStorage`，作为 e2e 与任何遗留路径的兜底；撤它是后续独立一步，本轮刻意不动（两套运行时、e2e 依赖真实行为）。
 
 - `storageAdapter.getItem(key)` / `setItem(key, value)` / `removeItem(key)` / `keys()` / `isReady()` —— 与 Proxy 的 trap 同一份 `_cache`、同一套字符串化与 `_pendingWrites` 语义，页面 ESM 与 SW 经典脚本都能直接调（全局单例，已在 eslint `crossFileGlobals` 里登记）。`keys()` 供 `config.js` 枚举待清理的配置键，免得迁移后还得借 Proxy 的 `ownKeys`。`isReady()` 报告初始快照是否已填充缓存：未就绪时 `getItem()` 对每个键都答 `undefined`，与「真正未设置」无法区分，所以会按「缺失」批量写默认值的 `defaultConfig(false)` 用它做守卫（未就绪直接 no-op，否则那些写会经 `_pendingWrites` 在初始化完成时盖掉真实配置并落盘）。`clean=true` 是显式「恢复默认」，不受该守卫阻挡。
 - `storageAdapter.getNumber(key)` —— 在存储边界做 `Number(getItem(key))`，业务侧不再需要 `Number(localStorage[k])`。冷启动/未设置键返回 `NaN`、空串返回 `0`，与原先调用点的 `Number(undefined)` / `Number('')` 完全一致；它照样走 `getItem()`，所以未就绪读仍会被记进 `_unreadyReads`。`parseInt(..., 10)` 保留在 `rh-width` 这类带单位的值上（`getNumber` 对 `"275px"` 会给 `NaN`），别一刀切替换。
-- 新代码优先用这套 API。`verify:storage-numbers` 与其 parity/探针仍保留，但业务侧已无 `localStorage[...]` 形状，规则现在空转；**不要为已迁移模块新增形状守卫**，也不要因为「规则扫不到东西」就删掉它——那套 parity 是历史踩坑的结晶，删它是独立的收尾动作。
+- 新代码优先用这套 API。业务侧已无 `localStorage[...]` 形状，原先那道「数字读是否包 `Number()`」的形状守卫（脚本 + 静态套件第二份实现 + parity + 探针）已随之删除；盯行为的守卫（`getNumber()` 的转换、冷启动、unready 读）照旧保留。
 - 测试桩 `tests/stubs.mjs` 的 `storageAdapter` 与 `localStorage` 共用一个 `store`，两侧读写互通；`tests/background-sw.test.mjs` 的 vm 桩同样让两个表面共享 `store`（并保留 favicon 负缓存的写计数）。`tests/storage-adapter.test.mjs` 覆盖 `getNumber()` 的转换、冷启动与 unready 读。
 
 **`scripts/db-manager.js`** —— IndexedDB 单例 `dbManager`，库名 `testDB`（历史遗留命名），版本 6。三个 object store：
@@ -274,7 +273,7 @@ MV3 取消了后台页面，因此代码分成两套互不相通的运行时：
 
 ### 6. 约定与陷阱
 
-- `localStorage` 里所有值都是**字符串**，`storageAdapter` 强制 `String(value)`。比较数量时先 `Number(localStorage['rh-itemsno'])`，比较开关时用 `=== 'yes'` / `!== 'no'`（注意 `share-favicon-cache` 是反向的 `!== 'no'`）。**数字比较先 `Number()`，但别把它当 bug 修**：`localStorage` 里存的是字符串，而 `>` 与 `-` 会先把操作数转成数字，所以 `11 > "10"` 本来就是 true、`"120" - 3` 本来就是 117——漏写 `Number()` 在这里不会改变结果。真正会出错的是 `+`（拼串）与 `===`（严格相等不转换）。`Number()` 该写，它是把隐式转换显式化，不是修 bug。`verify:storage-numbers` 与 `tests/static.test.mjs` 里那条同名规则守卫是**同一规则的两份实现**，必须给出相同结论。两份曾各自踩过坑，都留在了代码注释里：①脚本那份的注释剥离器早期只跟踪引号，于是 `/^(http|https)\:\/\//` 里的 `//` 被当成行注释，其后整份文件（`background-sw.js` 少掉 296 行）从未被检查；②两份复制粘贴的「局部变量仍存着字符串」正则宽窄不一（`(?:^|[;{])` vs `(?:^|[;{]|\n)`），而最常见的写法恰是 `}` 换行后跟 `var ca = localStorage[...]`，于是同一段代码脚本报违规、套件仍绿。parity 守卫现在做的是**规则对规则**的比较：两份剥离结果必须逐字相同（只比「结论 + 行数」会放过篡改代码内容的剥离器），且各自用**自己**的规则跑自己的输出——拿一份的规则跑另一份的输出，正是②长期隐形的原因。探针清单在 `tests/static.test.mjs`，加探针前先确认它是能区分的形状，别加「两边都静默」的；③两条规则都用**整份文件**建「局部变量仍存着字符串」的符号表，于是同名变量只要**有一处**包了 `Number()`，它名下所有未包裹的赋值全部豁免——`popup-core.js` 里 `var itemsno` 出现三次（`rct-itemsno` / `rt-itemsno` / `mv-itemsno`），单独摘掉任意一处的 `Number()` 时 `verify:storage-numbers` 报「全部合规」。现在两份实现都按**顶层函数切片**求值（`functionSlices()`，只认列 0 的 `function`，函数外的语句自成一片），符号表挂在**每片自己**身上而不是并成一张，报错行号按「切片起点 + 片内偏移」换算。往分离的切片之间传名字是这类规则最容易长出来的洞，`slicesWithStringVars()` 的返回形状（片 + 该片的名字集合）就是为堵它而定的——别为了少一层循环把它拍平成 Set。
+- `localStorage` 里所有值都是**字符串**，`storageAdapter` 强制 `String(value)`。比较数量时用 `storageAdapter.getNumber('rh-itemsno')`（原先是 `Number(localStorage['rh-itemsno'])`），比较开关时用 `=== 'yes'` / `!== 'no'`（注意 `share-favicon-cache` 是反向的 `!== 'no'`）。**数字比较先 `Number()`，但别把它当 bug 修**：`localStorage` 里存的是字符串，而 `>` 与 `-` 会先把操作数转成数字，所以 `11 > "10"` 本来就是 true、`"120" - 3` 本来就是 117——漏写 `Number()` 在这里不会改变结果。真正会出错的是 `+`（拼串）与 `===`（严格相等不转换）。`Number()` 该写，它是把隐式转换显式化，不是修 bug。业务侧改走 `storageAdapter.getNumber()` 后，这道形状检查已无对象，脚本、静态套件里的第二份实现、parity 与探针清单一并删除；不要为已迁移模块重新引入同类形状守卫。
 - 配置键用连字符（如 `load-range`），同步到 `chrome.storage.sync` 时转下划线。新增开关类配置需同时加进 `modules/config.js` 的 `defaultValues`、`loadOptions`、`saveOptions` 与 `options.html` 的表单，以及 `_locales/*/messages.json`。没有任何代码读写的键必须连 `defaultValues` 一起删（`static.test.mjs` 有断言）：它每次启动仍被写入、每次保存仍被同步、每次恢复仍被写回，占着 100KB 配额里的一个位置——`rh-time` / `rh-share` / `rhs-showbg` 就这样躺了几年。守卫爬的是 `modules/shared/config-defaults.js` **和它的生成副本 `background-utils.js`**：生成副本逐行复制了整张表，只排源文件会让每个键都"有读取方"，守卫就此恒绿。
 - i18n 文案写在 `chrome/_locales/en/messages.json` 与 `chrome/_locales/zh_CN/messages.json`，两边都要补。`.lang` 元素由 `page-init.js` 自动填充，无需手写。
 - 目前只有 `en` / `zh_CN` 两个 locale，均为 `ltr`。整套 RTL 分支（三个 `*-rtl.js` 的 `document.write`、三个 `*-rtl.css`、页面里的 `@@bidi_dir` 判断）已删除——没有 locale 能到达它，将来真要支持阿拉伯语/希伯来语时改用 CSS `:dir(rtl)` 重建，别把 `document.write` 搬回来（`tests/static.test.mjs` 有守卫）。

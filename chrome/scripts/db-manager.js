@@ -1,6 +1,5 @@
 // IndexedDB Manager for Tree Style History
-// Provides unified database access for both background and UI pages
-// Compatible with both MV2 background pages and MV3 service workers
+// Provides unified database access for both the service worker and UI pages
 
 (function() {
     'use strict';
@@ -506,11 +505,6 @@
     // Export to global scope
     if (typeof window !== 'undefined') {
         window.dbManager = dbManager;
-    }
-
-    // Also export for module systems (future-proofing)
-    if (typeof module !== 'undefined' && module.exports) {
-        module.exports = dbManager;
     }
 
     // Export to service worker global scope
