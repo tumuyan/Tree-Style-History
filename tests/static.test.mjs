@@ -225,6 +225,63 @@ test('service worker does not use DOM or timer-based scheduling', () => {
     assert.ok(!/\bsetInterval\s*\(/.test(sw), 'service worker must use chrome.alarms, not setInterval');
 });
 
+test('every toolbar badge write goes through the throttled setBadge()', () => {
+    // MV2 showed background work by flashing text on the toolbar icon
+    // (browserAction.setBadgeText: Url / D<n> / count / Del). MV3 kept the
+    // crawl markers but two loadDate() calls bypassed setBadge()'s throttle
+    // and state tracking, and the purge lost its Del entirely. All writes now
+    // funnel through the one wrapper, and the purge still paints its marker.
+    const sw = stripJsComments(fs.readFileSync(path.join(CHROME_DIR, 'scripts/background-sw.js'), 'utf8'));
+    const writes = [...sw.matchAll(/chrome\.action\.setBadgeText\s*\(/g)];
+    assert.equal(writes.length, 1,
+        'only setBadge() may call chrome.action.setBadgeText; raw writes desync the throttle');
+    assert.match(sw, /function\s+setBadge\s*\(/, 'the throttled setBadge() wrapper must exist');
+    // setBadge() is a pure throttle: no owner dimension, no crawl-yield branch.
+    // Two alarms sharing one line are reconciled in retentionCleanup(), not by
+    // a mutable owner flag that a suppressed clear could wedge for good.
+    const badgeWrite = sw.indexOf('chrome.action.setBadgeText', sw.indexOf('function setBadge('));
+    const fn = sw.slice(sw.indexOf('function setBadge('), sw.indexOf('\n}', badgeWrite) + 2);
+    assert.ok(!/_badgeOwner|owner|_crawlPass/.test(fn),
+        'setBadge() must stay a pure throttle; concurrency rules belong to the sweep');
+    const cleanup = sw.slice(sw.indexOf('async function retentionCleanup('),
+        sw.indexOf('function pruneHeatMap('));
+    assert.match(cleanup, /if \(_crawlPass === null\) setBadge\(\s*['"]Del['"]\s*,\s*true\s*\)/,
+        'Del must yield to a crawl pass that is already running');
+    assert.match(cleanup, /finally\s*\{[\s\S]*?if \(_badgeText === ['"]Del['"]\) setBadge\(\s*['"]{2}\s*,\s*true\s*\)/,
+        'and the sweep clears the line on every exit only while it still reads Del');
+    // The heat-map prune is synchronous and stays outside the try: folding it
+    // in would route its failure through the database-sweep catch (and its log
+    // line) and make the two halves indistinguishable.
+    const sweepTry = cleanup.indexOf('try {\n        await dbManager.purgeExpired(cutoff)');
+    assert.ok(cleanup.indexOf('pruneHeatMap(heatFrom.getTime())') < sweepTry,
+        'the synchronous heat-map prune must stay outside the database sweep');
+});
+
+test('the sweep owns its Del badge without a shared owner flag', () => {
+    // Del must not bury an in-flight crawl count, and the sweep's finally must
+    // not clear a number a pass painted after Del went up. Both rules are two
+    // guards in retentionCleanup(); setBadge() itself knows nothing about them.
+    const sw = stripJsComments(fs.readFileSync(path.join(CHROME_DIR, 'scripts/background-sw.js'), 'utf8'));
+    const cleanup = sw.slice(sw.indexOf('async function retentionCleanup('),
+        sw.indexOf('function pruneHeatMap('));
+
+    const guard = (src) => [
+        ...(/if \(_crawlPass === null\) setBadge\(\s*['"]Del['"]\s*,\s*true\s*\)/.test(src) ? [] : ['yield rule missing']),
+        ...(/if \(_badgeText === ['"]Del['"]\) setBadge\(\s*['"]{2}\s*,\s*true\s*\)/.test(src) ? [] : ['conditional clear missing']),
+    ];
+    assert.deepEqual(guard(cleanup), [], 'the live sweep must satisfy both guards');
+    const probes = [
+        { what: 'Del no longer yields to a live pass',
+          block: cleanup.replace("if (_crawlPass === null) setBadge('Del', true);", "setBadge('Del', true);") },
+        { what: 'the clear drops the Del check',
+          block: cleanup.replace("if (_badgeText === 'Del') setBadge('', true);", "setBadge('', true);") },
+        { what: 'a shared owner flag comes back',
+          block: cleanup.replace("if (_crawlPass === null) setBadge('Del', true);", "if (_badgeOwner === null) setBadge('Del', true);") },
+    ];
+    for (const probe of probes) assert.ok(guard(probe.block).length > 0,
+        `${probe.what} must turn the guard red`);
+});
+
 test('the dead generic message dispatch stays deleted', () => {
     // `self[message.function](...)` once exposed every service-worker global —
     // internal helpers included — to anyone who could reach the port. It was

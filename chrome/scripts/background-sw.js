@@ -1048,12 +1048,12 @@ async function loadDate(date, dateId) {
     if (dateId > loadRange) {
         console.debug("loadDate done. dateId = " + dateId + ">" + loadRange);
         storageAdapter.setItem('calendar-storage', JSON.stringify(calendar_r));
-        chrome.action.setBadgeText({ text: "Url" });
+        setBadge("Url", true);
         loadHistory();
         return;
     }
 
-    chrome.action.setBadgeText({ text: "D" + (loadRange - dateId) });
+    setBadge("D" + (loadRange - dateId), true);
 
     let dday = "d" + (date + DAY).toString();
     let qday = "d" + date;
@@ -1708,25 +1708,28 @@ async function retentionCleanup() {
     // day's cell (whose 23:59:59.999 end is later) and drops every earlier
     // day. Do NOT subtract 1 ms here: that lands on the *previous* day's
     // 23:59:59.999 and keeps one day too many — a coloured cell for a day
-    // whose visits the sweep below has just removed. Both halves are
-    // independent; the heat map is pruned by a synchronous helper so its
-    // storage write does not sit after an await (which
-    // require-atomic-updates reads as a stale-state assignment).
+    // whose visits the sweep below has just removed. The prune and the badge
+    // write below are both synchronous, both before the first await, so
+    // require-atomic-updates sees no stale-state assignment among them.
     const heatFrom = new Date(cutoff);
     heatFrom.setHours(0, 0, 0, 0);
     pruneHeatMap(heatFrom.getTime());
+    // One toolbar line, two alarms. Yield to a crawl pass already running, and
+    // on the way out clear the line only while Del is still what we painted: a
+    // pass that starts during the purge owns its number and clears it itself.
+    if (_crawlPass === null) setBadge('Del', true);
     try {
         await dbManager.purgeExpired(cutoff);
+        // Written last, and only after the store was actually pruned: a failed
+        // sweep must not postpone the next attempt by a whole day.
+        await area.set({ [RETENTION_CLEANUP_KEY]: now }).catch(function (error) {
+            console.warn('SW: could not persist the retention cleanup marker', error);
+        });
     } catch (error) {
         console.warn('SW: retention cleanup of the database failed', error);
-        return;
+    } finally {
+        if (_badgeText === 'Del') setBadge('', true);
     }
-
-    // Written last, and only after the store was actually pruned: a failed
-    // sweep must not postpone the next attempt by a whole day.
-    await area.set({ [RETENTION_CLEANUP_KEY]: now }).catch(function (error) {
-        console.warn('SW: could not persist the retention cleanup marker', error);
-    });
 }
 
 /**

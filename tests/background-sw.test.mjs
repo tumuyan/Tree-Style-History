@@ -1471,6 +1471,156 @@ test('load-range3 = 1 keeps the cutoff day but drops the day before it', async (
         'the pruned set is persisted back for the other contexts');
 });
 
+test('retention cleanup shows a Del badge while the sweep is in flight', async () => {
+    // MV2 flashed `Del` on the toolbar icon for the whole history purge; the
+    // MV3 rewrite kept the sweep but dropped the marker. Hold the purge open
+    // so the badge is observable mid-flight, not just in the final sequence.
+    const w = loadWorker({ tabs: [] });
+    w.boot();
+    await w.settle();
+    w.state.badges.length = 0;
+    w.ctx.localStorage['load-range3'] = '30';
+
+    let release;
+    const held = new Promise((resolve) => { release = resolve; });
+    w.ctx.dbManager.purgeExpired = (cutoff) => {
+        w.state.purgedAt.push(cutoff);
+        return held;
+    };
+
+    // onStorageReady fires synchronously in the stub, so retentionCleanup()
+    // has already reached its await when fire() returns.
+    w.fire('alarms.onAlarm', { name: 'mostVisited' });
+    // retentionCleanup() awaits its marker read before painting, so let the
+    // microtask queue drain to the held purge; the badge must be up by then.
+    await w.settle(1);
+    assert.deepEqual(w.state.badges, ['Del'],
+        'the toolbar must show Del while the purge is running');
+
+    release(0);
+    await w.settle();
+    assert.equal(w.state.badges[w.state.badges.length - 1], '',
+        'the badge is cleared once the sweep finishes');
+});
+
+test('a retention sweep does not clobber an in-flight crawl badge', async () => {
+    // The two alarms overlap in one worker. A crawl pass holds a live count
+    // while the mostVisited alarm runs the retention sweep; the sweep's Del
+    // must not bury that number, and its finally must not clear a marker it
+    // does not own. The pass is held open by an unanswered getVisits(), so the
+    // yield rule is exercised against a genuinely live `_crawlPass`.
+    const pending = [];
+    let queue = []; // empty through boot(): the startup pass must finish first
+    const w = loadWorker({
+        tabs: [],
+        queryURLs: () => Promise.resolve(queue),
+        getVisits: (_state, _q, cb) => pending.push(cb),
+    });
+    w.boot();
+    await w.settle();
+    w.state.badges.length = 0;
+    w.ctx.localStorage['load-range'] = '7';
+    w.ctx.localStorage['load-range3'] = '30';
+    queue = urlList(1);
+
+    const pass = w.ctx.loadHistory(); // writes its count, then waits on getVisits
+    await w.settle();
+    assert.equal(w.state.badges[w.state.badges.length - 1], '1',
+        'the crawl must be showing its remaining-URL count');
+
+    w.fire('alarms.onAlarm', { name: 'mostVisited' });
+    await w.settle();
+    assert.deepEqual(w.state.badges, ['1'],
+        'Del and the sweep finally must leave the in-flight crawl count alone');
+
+    for (const cb of pending.splice(0)) cb([]); // the pass may now finish
+    await pass;
+    assert.equal(w.state.badges[w.state.badges.length - 1], '',
+        'the crawl still clears its own marker when the pass ends');
+});
+
+test('a leftover crawl badge never parks the Del badge for good', async () => {
+    // The yield test reads the pass's own lifetime (`_crawlPass`), not the
+    // badge text or an owner flag: a crawl number left on the line with no
+    // live pass behind it must not stop the next retention sweep from painting
+    // Del. Old owner-based yield wedged here — a suppressed clear left the
+    // owner stuck, and every later Del was returned early.
+    const w = loadWorker({ tabs: [] });
+    w.boot();
+    await w.settle();
+    w.state.badges.length = 0;
+    w.ctx.localStorage['load-range3'] = '30';
+
+    // A crawl marker left behind with no clear, as an aborted pass would do.
+    w.ctx.setBadge('7', true);
+
+    w.fire('alarms.onAlarm', { name: 'mostVisited' });
+    await w.settle();
+
+    assert.ok(w.state.badges.includes('Del'),
+        'a stale crawl badge must not keep the retention sweep from painting Del');
+});
+
+test('a crawl starting during the sweep owns the number and clears it', async () => {
+    // The reverse overlap of the previous case: Del is already up when a crawl
+    // pass starts. The pass's number takes the line, and the sweep's finally
+    // must not clear a badge that no longer reads Del — an unconditional clear
+    // there would drop the count mid-pass until the throttle let it back.
+    const pending = [];
+    let queue = [];
+    const w = loadWorker({
+        tabs: [],
+        queryURLs: () => Promise.resolve(queue),
+        getVisits: (_state, _q, cb) => pending.push(cb),
+    });
+    w.boot();
+    await w.settle();
+    w.state.badges.length = 0;
+    w.ctx.localStorage['load-range'] = '7';
+    w.ctx.localStorage['load-range3'] = '30';
+
+    let release;
+    const held = new Promise((resolve) => { release = resolve; });
+    w.ctx.dbManager.purgeExpired = () => held;
+
+    w.fire('alarms.onAlarm', { name: 'mostVisited' });
+    await w.settle(1);
+    assert.deepEqual(w.state.badges, ['Del'], 'Del is up while the sweep is held');
+
+    queue = urlList(1);
+    const pass = w.ctx.loadHistory();
+    await w.settle();
+    assert.equal(w.state.badges[w.state.badges.length - 1], '1',
+        'the crawl count takes over the shared line');
+
+    release(0); // the sweep finishes while the pass is still live
+    await w.settle();
+    assert.equal(w.state.badges[w.state.badges.length - 1], '1',
+        'the sweep finally must not clear the crawl number');
+
+    for (const cb of pending.splice(0)) cb([]); // the pass may now finish
+    await pass;
+    assert.equal(w.state.badges[w.state.badges.length - 1], '',
+        'the pass clears its own number when it ends');
+});
+
+test('a failed retention sweep still clears the Del badge', async () => {
+    const w = loadWorker({ tabs: [] });
+    w.boot();
+    await w.settle();
+    w.state.badges.length = 0;
+    w.ctx.localStorage['load-range3'] = '30';
+    w.ctx.dbManager.purgeExpired = () => Promise.reject(new Error('db is gone'));
+
+    w.fire('alarms.onAlarm', { name: 'mostVisited' });
+    await w.settle();
+
+    assert.equal(w.state.badges[w.state.badges.length - 1], '',
+        'a sweep that throws must not park Del on the toolbar');
+    assert.ok(w.state.warnings.some((m) => m.includes('retention cleanup')),
+        'and the failure is still reported');
+});
+
 test('a crawl alarm runs a pass', async () => {
     // The listener half: an alarm that is armed but never starts anything is
     // worse than no alarm, because nothing reports the difference.
