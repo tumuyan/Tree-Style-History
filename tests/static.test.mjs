@@ -2790,10 +2790,12 @@ test('popup-core.js does not export its renderer internals', () => {
 test('the e2e favicon blocklist matches the service worker patterns', () => {
     // e2e/pages.spec.mjs aborts every favicon request before it leaves the
     // browser: offline these hosts do not fail, they hang, and a pending <img>
-    // holds the document's `load` event open — which made goto(waitUntil:'load')
-    // time out at random. The blocklist is a copy of
-    // FAVICON_SERVICE_PATTERNS, so the two can drift: add a service to the
-    // worker and the e2e suite quietly goes back to hanging on it.
+    // holds the document's `load` event open — which used to make
+    // goto(waitUntil:'load') time out at random (the suite now navigates on
+    // domcontentloaded, but an unaborted request still delays real rendering).
+    // The blocklist is a copy of FAVICON_SERVICE_PATTERNS, so the two can
+    // drift: add a service to the worker and the e2e suite quietly goes back
+    // to hanging on it.
     //
     // Compared as a set, not by order — the worker's list is scanned with
     // indexOf() and order carries no meaning there.

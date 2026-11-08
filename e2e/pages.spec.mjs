@@ -32,9 +32,18 @@
 // `load` event from firing. That made `goto(waitUntil: 'load')` time out at
 // random on whichever case rendered the first external favicon. Aborting turns
 // the hang into the immediate `img` error the frontend already degrades on.
+//
+// Navigations use `domcontentloaded` rather than `load` for the same reason:
+// `load` waits on every pending subresource and still flaked once the shared
+// profile grew fat (a seed page timed out at 30s). DOMContentLoaded is enough —
+// storage-adapter.js and the `chrome.*` globals are installed by the classic
+// scripts before the module entry runs, and `settle()` is the real signal that
+// rendering finished anyway. gotoPage() also gives every navigation an explicit
+// timeout and one retry, so a single slow boot cannot fail a case on its own.
 
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const CHROME_DIR = fileURLToPath(new URL('../chrome', import.meta.url));
@@ -52,9 +61,12 @@ const PAGES = [
     'options.html',
 ];
 
-// Playwright is a devDependency that is only needed for this suite; if it is
-// absent (or its browser was never downloaded) the whole file skips instead of
-// blowing up `npm run test:e2e`.
+// Playwright is a devDependency that is only needed for this suite. Two things
+// can be missing independently: the npm package, and the Chromium binary that
+// `playwright install` downloads. `import('playwright')` only detects the first,
+// so pointing PLAYWRIGHT_BROWSERS_PATH at an empty dir used to fail in before()
+// with "Executable doesn't exist" instead of skipping. Probe the executable
+// path too, and skip with the exact command that repairs it.
 let chromium = null;
 try {
     ({ chromium } = await import('playwright'));
@@ -62,7 +74,12 @@ try {
     chromium = null;
 }
 
-const SKIP = chromium ? false : 'playwright is not installed — run: npm i -D playwright && npx playwright install chromium';
+const browserMissing = chromium && !existsSync(chromium.executablePath());
+const SKIP = !chromium
+    ? 'playwright is not installed — run: npm i -D playwright && npm run browser:install'
+    : browserMissing
+        ? `playwright's Chromium is not downloaded — run: npm run browser:install (looked for ${chromium.executablePath()})`
+        : false;
 
 // Mirrors FAVICON_SERVICE_PATTERNS in scripts/background-sw.js — the hostnames
 // getFaviconUrl() can produce. Keep the two lists in step.
@@ -76,14 +93,14 @@ const FAVICON_SERVICE_HOSTS = [
 
 const isFaviconServiceUrl = (url) => FAVICON_SERVICE_HOSTS.some((host) => url.href.includes(host));
 
-/** How long to let async rendering run after `load` fires. */
+/** How long to let async rendering run after DOMContentLoaded. */
 const SETTLE_MS = 1500;
 
 let context = null;
 let extensionId = '';
 
 before(async () => {
-    if (!chromium) return;
+    if (SKIP) return;
 
     context = await chromium.launchPersistentContext('', {
         channel: 'chromium',
@@ -108,6 +125,31 @@ before(async () => {
 after(async () => {
     if (context) await context.close();
 });
+
+/** Explicit navigation budget. `load` used to inherit Playwright's 30s
+ *  default and could still hang on a pending favicon; domcontentloaded fires
+ *  as soon as the classic scripts + module entry have run. */
+const NAV_TIMEOUT_MS = 15000;
+
+/**
+ * Navigate (or reload) with a bounded timeout and one retry.
+ *
+ * A single cold boot of the shared persistent context occasionally outruns the
+ * budget — the SW is being woken, storage.local is being read, IndexedDB is
+ * opening — and failing a whole case for that is exactly the flake we are
+ * removing. Retrying the navigation itself is safe: no assertion has run yet,
+ * and page.goto on an already-loaded extension page is idempotent.
+ */
+async function gotoPage(page, url, { reload = false } = {}) {
+    const nav = () => (reload
+        ? page.reload({ waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT_MS })
+        : page.goto(url, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT_MS }));
+    try {
+        await nav();
+    } catch {
+        await nav();
+    }
+}
 
 /**
  * Attach error collectors to a page.
@@ -143,7 +185,8 @@ function collectErrors(page) {
 /**
  * Wait until the page has actually finished its asynchronous work.
  *
- * Two things have to settle, and neither is covered by `waitUntil: 'load'`:
+ * Two things have to settle, and neither is covered by the `domcontentloaded`
+ * event `gotoPage()` waits for:
  *   1. `storage-adapter.js` fills its cache from `chrome.storage.local` in a
  *      callback. Every page entry point is wrapped in `onStorageReady()`, so
  *      nothing renders — and nothing can throw — before that resolves.
@@ -188,7 +231,7 @@ test('the service worker seeds defaultConfig into storage', { skip: SKIP }, asyn
     // `localStorage['rh-list-order'].split(',')`. Asserting the seed here
     // pins the *cause* rather than the downstream symptom.
     const page = await context.newPage();
-    await page.goto(`chrome-extension://${extensionId}/options.html`);
+    await gotoPage(page, `chrome-extension://${extensionId}/options.html`);
     await settle(page);
 
     const missing = await page.evaluate(() => {
@@ -207,7 +250,7 @@ for (const file of PAGES) {
         const page = await context.newPage();
         const { jsErrors, netErrors } = collectErrors(page);
 
-        await page.goto(`chrome-extension://${extensionId}/${file}`, { waitUntil: 'load' });
+        await gotoPage(page, `chrome-extension://${extensionId}/${file}`);
         await settle(page);
 
         // The page must also have rendered its shell, not just avoided throwing.
@@ -241,7 +284,7 @@ for (const file of ['history2.html', 'closed.html']) {
         // has to draw.
         const page = await context.newPage();
         const { jsErrors, netErrors } = collectErrors(page);
-        await page.goto(`chrome-extension://${extensionId}/${file}`, { waitUntil: 'load' });
+        await gotoPage(page, `chrome-extension://${extensionId}/${file}`);
         await settle(page);
 
         const shape = await page.evaluate(() => ({
@@ -278,7 +321,7 @@ test('bookmark.html renders a bookmark title verbatim in grouped mode', { skip: 
     {
         const seed = await context.newPage();
         const { jsErrors } = collectErrors(seed);
-        await seed.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: 'load' });
+        await gotoPage(seed, `chrome-extension://${extensionId}/options.html`);
         await settle(seed);
         bookmarkId = await seed.evaluate(async (title) => {
             localStorage['rh-group'] = 'yes';
@@ -298,7 +341,7 @@ test('bookmark.html renders a bookmark title verbatim in grouped mode', { skip: 
 
     const page = await context.newPage();
     const { jsErrors, netErrors } = collectErrors(page);
-    await page.goto(`chrome-extension://${extensionId}/bookmark.html`, { waitUntil: 'load' });
+    await gotoPage(page, `chrome-extension://${extensionId}/bookmark.html`);
     await settle(page);
     // textContent rather than innerText: a collapsed group is absent from
     // innerText, and whether the first group ends up expanded is an
@@ -320,7 +363,7 @@ test('bookmark.html renders a bookmark title verbatim in grouped mode', { skip: 
         // unguarded remove() would throw again and mask the real failure.
         if (bookmarkId) {
             const cleanup = await context.newPage();
-            await cleanup.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: 'load' });
+            await gotoPage(cleanup, `chrome-extension://${extensionId}/options.html`);
             await cleanup.evaluate((id) => chrome.bookmarks.remove(id), bookmarkId);
             await cleanup.close();
         }
@@ -345,7 +388,7 @@ test('a page still applies its saved zoom when storage answers late', { skip: SK
             const realGet = chrome.storage.local.get.bind(chrome.storage.local);
             chrome.storage.local.get = (keys, cb) => realGet(keys, (items) => setTimeout(() => cb(items), delay));
         }, ZOOM_DELAY_MS);
-        await page.goto(`chrome-extension://${extensionId}/${file}`, { waitUntil: 'load' });
+        await gotoPage(page, `chrome-extension://${extensionId}/${file}`);
         // `settle()` cannot be used here: it polls `storageAdapter.ready()`, and
         // readiness is exactly what is being delayed. Wait for the effect the
         // test is about instead, then give the rest of the boot a fixed margin
@@ -355,9 +398,18 @@ test('a page still applies its saved zoom when storage answers late', { skip: SK
         // `waitForFunction` already returns once the delayed `get()` has landed,
         // so what is left to wait for is the same render the other cases wait
         // for. Adding the delay again would just re-pay for time already spent.
+        //
+        // waitForFunction's signature is (fn, arg, options) — options in the
+        // second slot used to be swallowed as the arg, leaving Playwright's 30s
+        // default timeout in force. Give it `null` and a budget that covers the
+        // delayed storage read plus the render, so a slow boot does not cost 30s.
         let zoom = '';
         try {
-            await page.waitForFunction(() => document.body.style.zoom !== '', { timeout: ZOOM_DELAY_MS });
+            await page.waitForFunction(
+                () => document.body.style.zoom !== '',
+                null,
+                { timeout: ZOOM_DELAY_MS + SETTLE_MS },
+            );
             zoom = await page.evaluate(() => document.body.style.zoom);
         } catch {
             zoom = await page.evaluate(() => document.body.style.zoom);
@@ -374,7 +426,7 @@ test('a page still applies its saved zoom when storage answers late', { skip: SK
     // in this file renders.
     const seed = await context.newPage();
     const { jsErrors: seedErrors } = collectErrors(seed);
-    await seed.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: 'load' });
+    await gotoPage(seed, `chrome-extension://${extensionId}/options.html`);
     await settle(seed);
 
     try {
@@ -409,7 +461,7 @@ test('popup.html renders its tab block from a seeded snapshot', { skip: SKIP }, 
     // version field is what makes the snapshot acceptable at all.
     const seed = await context.newPage();
     const { jsErrors: seedErrors } = collectErrors(seed);
-    await seed.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: 'load' });
+    await gotoPage(seed, `chrome-extension://${extensionId}/options.html`);
     await settle(seed);
 
     try {
@@ -431,7 +483,7 @@ test('popup.html renders its tab block from a seeded snapshot', { skip: SKIP }, 
 
         const page = await context.newPage();
         const { jsErrors, netErrors } = collectErrors(page);
-        await page.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil: 'load' });
+        await gotoPage(page, `chrome-extension://${extensionId}/popup.html`);
         await settle(page);
 
         const shape = await page.evaluate(() => ({
@@ -469,7 +521,7 @@ test('popup.html renders the most-visited block from a short cache', { skip: SKI
     // three rows against a configured 8 is the shape that used to throw.
     const seed = await context.newPage();
     const { jsErrors: seedErrors } = collectErrors(seed);
-    await seed.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: 'load' });
+    await gotoPage(seed, `chrome-extension://${extensionId}/options.html`);
     await settle(seed);
 
     try {
@@ -492,7 +544,7 @@ test('popup.html renders the most-visited block from a short cache', { skip: SKI
 
         const page = await context.newPage();
         const { jsErrors, netErrors } = collectErrors(page);
-        await page.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil: 'load' });
+        await gotoPage(page, `chrome-extension://${extensionId}/popup.html`);
         await settle(page);
 
         const shape = await page.evaluate(() => ({
@@ -677,7 +729,7 @@ async function seedBackfillableVisit() {
 /* eslint-disable no-undef -- inside page.evaluate(); see above */
 async function probeWorkerWithPlantedDay(dayKey, clearMap = false) {
     const page = await context.newPage();
-    await page.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: 'load' });
+    await gotoPage(page, `chrome-extension://${extensionId}/options.html`);
     await settle(page);
 
     // Everything the bank of cases wants, arranged before the worker boots: the
@@ -863,7 +915,7 @@ test('history2.html paints a day the worker back-filled, without counting it its
 
     const page = await context.newPage();
     const { jsErrors, netErrors } = collectErrors(page);
-    await page.goto(`chrome-extension://${extensionId}/history2.html`, { waitUntil: 'load' });
+    await gotoPage(page, `chrome-extension://${extensionId}/history2.html`);
     await settle(page);
 
     const painted = await page.evaluate(async (key) => {
@@ -915,7 +967,7 @@ test('history.html drops a day from the heat map once its history is gone', { sk
     // change, so a crawl can no longer flush a stale copy over these writes.
     const page = await context.newPage();
     const { jsErrors } = collectErrors(page);
-    await page.goto(`chrome-extension://${extensionId}/history.html`, { waitUntil: 'load' });
+    await gotoPage(page, `chrome-extension://${extensionId}/history.html`);
     await settle(page);
 
     // Planted from the page that is about to read it, through the API rather
@@ -947,7 +999,7 @@ test('history.html drops a day from the heat map once its history is gone', { sk
 
     // Reloaded so the page's own map hydrates from the plant — that object is
     // read once, at load, and a delete with nothing to remove is not a delete.
-    await page.reload({ waitUntil: 'load' });
+    await gotoPage(page, undefined, { reload: true });
     await settle(page);
 
     const hydrated = await page.evaluate(async (key) => {
@@ -1038,7 +1090,7 @@ test('a page write reaches the live worker map before its next crawl', { skip: S
 
     const witness = await context.newPage();
     const { jsErrors } = collectErrors(witness);
-    await witness.goto(`chrome-extension://${extensionId}/history2.html`, { waitUntil: 'load' });
+    await gotoPage(witness, `chrome-extension://${extensionId}/history2.html`);
     await settle(witness);
 
     try {
@@ -1105,7 +1157,7 @@ test('history2.html shows its node count under a label that says so', { skip: SK
     // `data-lang-string` into words and a missing key renders as the key name.
     const page = await context.newPage();
     const { jsErrors } = collectErrors(page);
-    await page.goto(`chrome-extension://${extensionId}/history2.html`, { waitUntil: 'load' });
+    await gotoPage(page, `chrome-extension://${extensionId}/history2.html`);
     await settle(page);
 
     const label = await page.evaluate(async () => {
@@ -1135,7 +1187,7 @@ test('history2.html shows its node count under a label that says so', { skip: SK
 async function openOptionsPage() {
     const page = await context.newPage();
     const errors = collectErrors(page);
-    await page.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: 'load' });
+    await gotoPage(page, `chrome-extension://${extensionId}/options.html`);
     await settle(page);
     const ready = await page
         .waitForFunction(() => /^\d+$/.test(document.getElementById('rhitemsno').value), null, { timeout: 10000 })
@@ -1319,7 +1371,7 @@ test('options.html?p=<unknown tab> falls back instead of killing the page', { sk
     for (const p of ['bogus', 'translations']) {
         const page = await context.newPage();
         const { jsErrors } = collectErrors(page);
-        await page.goto(`chrome-extension://${extensionId}/options.html?p=${p}`, { waitUntil: 'load' });
+        await gotoPage(page, `chrome-extension://${extensionId}/options.html?p=${p}`);
         await settle(page);
 
         // #rhitemsno only holds a number once loadOptions() has run, so it is
@@ -1347,7 +1399,7 @@ test('the linear pages drive their sort toolbar through data-state', { skip: SKI
     // enough to pin the wiring and the other is covered by the static guard.
     const page = await context.newPage();
     const { jsErrors, netErrors } = collectErrors(page);
-    await page.goto(`chrome-extension://${extensionId}/history.html`, { waitUntil: 'load' });
+    await gotoPage(page, `chrome-extension://${extensionId}/history.html`);
     await settle(page);
 
     const before = await page.evaluate(() => {
@@ -1401,7 +1453,7 @@ test('a toolbar click flips the icon in one frame instead of sliding it', { skip
     // either way — only an intermediate frame can tell an animation apart.
     const page = await context.newPage();
     const { jsErrors, netErrors } = collectErrors(page);
-    await page.goto(`chrome-extension://${extensionId}/history.html`, { waitUntil: 'load' });
+    await gotoPage(page, `chrome-extension://${extensionId}/history.html`);
     await settle(page);
 
     const results = await page.evaluate(async (ids) => {
@@ -1508,7 +1560,7 @@ test('bookmark.html re-renders its list when the toolbar is clicked on the initi
     let bookmarkId;
     {
         const seed = await context.newPage();
-        await seed.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: 'load' });
+        await gotoPage(seed, `chrome-extension://${extensionId}/options.html`);
         await settle(seed);
         bookmarkId = await seed.evaluate(async (title) => {
             localStorage['rh-group'] = 'yes';
@@ -1525,7 +1577,7 @@ test('bookmark.html re-renders its list when the toolbar is clicked on the initi
     const page = await context.newPage();
     const { jsErrors, netErrors } = collectErrors(page);
     try {
-        await page.goto(`chrome-extension://${extensionId}/bookmark.html`, { waitUntil: 'load' });
+        await gotoPage(page, `chrome-extension://${extensionId}/bookmark.html`);
         await settle(page);
 
         const before = await page.evaluate(() => {
@@ -1565,7 +1617,7 @@ test('bookmark.html re-renders its list when the toolbar is clicked on the initi
         await page.close();
         if (bookmarkId) {
             const cleanup = await context.newPage();
-            await cleanup.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: 'load' });
+            await gotoPage(cleanup, `chrome-extension://${extensionId}/options.html`);
             await cleanup.evaluate((id) => chrome.bookmarks.remove(id), bookmarkId);
             await cleanup.close();
         }
@@ -1573,7 +1625,7 @@ test('bookmark.html re-renders its list when the toolbar is clicked on the initi
         // layout cases below rely on grouped rows and should not have to
         // re-seed history just to undo this case's side effect.
         const restore = await context.newPage();
-        await restore.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: 'load' });
+        await gotoPage(restore, `chrome-extension://${extensionId}/options.html`);
         await restore.evaluate(async () => {
             localStorage['rh-group'] = 'yes';
             await window.storageAdapter?.ready();
@@ -1589,7 +1641,7 @@ test('the linear pages localise both placeholder and aria-label on the search bo
     for (const file of ['history.html', 'bookmark.html']) {
         const page = await context.newPage();
         const { jsErrors, netErrors } = collectErrors(page);
-        await page.goto(`chrome-extension://${extensionId}/${file}`, { waitUntil: 'load' });
+        await gotoPage(page, `chrome-extension://${extensionId}/${file}`);
         await settle(page);
         const attrs = await page.evaluate(() => {
             const el = document.getElementById('rh-search');
@@ -1625,23 +1677,44 @@ test('the linear pages localise both placeholder and aria-label on the search bo
 async function openForLayout(ctx, extId, file) {
     const page = await ctx.newPage();
     const errors = collectErrors(page);
-    await page.goto(`chrome-extension://${extId}/${file}`, { waitUntil: 'load' });
+    await gotoPage(page, `chrome-extension://${extId}/${file}`);
     await settle(page);
     return { page, ...errors };
 }
 
-/** Seed a handful of visits so the linear render loop actually draws rows. */
+/** URL prefix for the synthetic visits seedLinearHistory() writes. */
+const PROBE_URL_PREFIX = 'https://layout-probe-';
+
+/**
+ * Seed a handful of visits so the linear render loop actually draws rows.
+ *
+ * Idempotent on purpose. The shared persistent context runs ten of these, and
+ * each one used to append 8..60 URLs to real chrome.history, so by the tail of
+ * the file the list carried 200+ rows — that growth is what made a late
+ * options.html navigation time out at 30s. Clearing the previous probe set
+ * first keeps the history at exactly `count` rows for the whole run.
+ *
+ * The rows are left in place afterwards (not deleted in a finally): several
+ * later cases deliberately read the rows an earlier case seeded — the column
+ * probe says so in its comment — so per-case teardown would break them. What
+ * matters is that no case can add to an ever-growing pile.
+ */
 async function seedLinearHistory(ctx, extId, count = 24) {
     const seed = await ctx.newPage();
-    await seed.goto(`chrome-extension://${extId}/options.html`, { waitUntil: 'load' });
+    await gotoPage(seed, `chrome-extension://${extId}/options.html`);
     await settle(seed);
-    await seed.evaluate(async (n) => {
+    await seed.evaluate(async ({ n, prefix, suffix }) => {
         localStorage['rh-group'] = 'yes';
         await window.storageAdapter?.ready();
+        // Drop every probe visit from an earlier case, whatever that case's
+        // count was. deleteUrl() on a URL that is not there is a no-op, and
+        // searching by the shared prefix finds them all.
+        const old = await new Promise((resolve) => chrome.history.search({ text: prefix, maxResults: 500 }, resolve));
+        await Promise.all(old.map((item) => chrome.history.deleteUrl({ url: item.url })));
         for (let i = 0; i < n; i++) {
-            await chrome.history.addUrl({ url: `https://layout-probe-${i}.test/a/long/path/segment` });
+            await chrome.history.addUrl({ url: `${prefix}${i}${suffix}` });
         }
-    }, count);
+    }, { n: count, prefix: PROBE_URL_PREFIX, suffix: '.test/a/long/path/segment' });
     await seed.close();
 }
 
@@ -1657,7 +1730,7 @@ test('the linear rows are a flex line and the group title is a grid, with no cle
             url: 'https://layout-flex-probe.test/a/long/path/segment',
         });
     });
-    await page.reload({ waitUntil: 'load' });
+    await gotoPage(page, undefined, { reload: true });
     await settle(page);
 
     const shape = await page.evaluate(() => {
@@ -1764,7 +1837,7 @@ test('dark mode swaps the linear theme tokens, not per-selector overrides', { sk
         await page.evaluate(async () => {
             await chrome.bookmarks.create({ title: 'Dark theme probe', url: 'https://dark-theme-probe.test/x' });
         });
-        await page.reload({ waitUntil: 'load' });
+        await gotoPage(page, undefined, { reload: true });
         await settle(page);
         const colors = await page.evaluate(() => {
             const title = document.querySelector('.title');
@@ -1819,7 +1892,7 @@ test('the narrow layout puts the calendar back over the list, not below it', { s
     const page = await context.newPage();
     await page.setViewportSize({ width: 480, height: 800 });
     const errors = collectErrors(page);
-    await page.goto(`chrome-extension://${extensionId}/history.html`, { waitUntil: 'load' });
+    await gotoPage(page, `chrome-extension://${extensionId}/history.html`);
     await settle(page);
     const shape = await page.evaluate(() => {
         const cal = document.getElementById('calendar');
@@ -1865,7 +1938,7 @@ test('group columns are pinned explicitly on both list pages', { skip: SKIP }, a
     });
 
     const hp = await context.newPage();
-    await hp.goto(`chrome-extension://${extensionId}/history.html`, { waitUntil: 'load' });
+    await gotoPage(hp, `chrome-extension://${extensionId}/history.html`);
     await settle(hp);
     const history = await read(hp);
     await hp.close();
@@ -1876,12 +1949,12 @@ test('group columns are pinned explicitly on both list pages', { skip: SKIP }, a
     assert.equal(history.host, '4', 'history host lost column 4');
 
     const bp = await context.newPage();
-    await bp.goto(`chrome-extension://${extensionId}/bookmark.html`, { waitUntil: 'load' });
+    await gotoPage(bp, `chrome-extension://${extensionId}/bookmark.html`);
     await bp.evaluate(async () => {
         await chrome.bookmarks.create({ title: 'Column probe A', url: 'https://column-probe-a.test/x' });
         await chrome.bookmarks.create({ title: 'Column probe B', url: 'https://column-probe-b.test/x' });
     });
-    await bp.reload({ waitUntil: 'load' });
+    await gotoPage(bp, undefined, { reload: true });
     await settle(bp);
     const bookmark = await read(bp);
     await bp.close();
@@ -1940,7 +2013,7 @@ test('the linear pages render their loading and empty states through one compone
             window.__searchPending.push(() => cb(items));
         });
     });
-    await page.goto(`chrome-extension://${extensionId}/history.html`, { waitUntil: 'load' });
+    await gotoPage(page, `chrome-extension://${extensionId}/history.html`);
     await settle(page);
     const loading = await page.evaluate(() => {
         const el = document.querySelector('#rh-views-insert .list-status-loading');
@@ -1980,7 +2053,7 @@ test('the linear pages render their loading and empty states through one compone
     // Force an empty result through the search view and assert the empty state.
     const searchPage = await context.newPage();
     const errs = collectErrors(searchPage);
-    await searchPage.goto(`chrome-extension://${extensionId}/history.html`, { waitUntil: 'load' });
+    await gotoPage(searchPage, `chrome-extension://${extensionId}/history.html`);
     await settle(searchPage);
     await searchPage.evaluate(() => {
         document.getElementById('rh-what').value = 'all';
@@ -2042,7 +2115,7 @@ test('bookmark editing uses an inline panel and really writes the bookmark', { s
     try {
         {
             const seed = await context.newPage();
-            await seed.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: 'load' });
+            await gotoPage(seed, `chrome-extension://${extensionId}/options.html`);
             await settle(seed);
             bookmarkId = await seed.evaluate(async ({ title, url }) => {
                 localStorage['rh-group'] = 'no';
@@ -2133,12 +2206,12 @@ test('bookmark editing uses an inline panel and really writes the bookmark', { s
     } finally {
         if (bookmarkId) {
             const cleanup = await context.newPage();
-            await cleanup.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: 'load' });
+            await gotoPage(cleanup, `chrome-extension://${extensionId}/options.html`);
             await cleanup.evaluate((id) => chrome.bookmarks.remove(id), bookmarkId);
             await cleanup.close();
             // rh-group was flipped by this case; restore it for the cases below.
             const restore = await context.newPage();
-            await restore.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: 'load' });
+            await gotoPage(restore, `chrome-extension://${extensionId}/options.html`);
             await restore.evaluate(async () => {
                 localStorage['rh-group'] = 'yes';
                 await window.storageAdapter?.ready();
@@ -2160,7 +2233,7 @@ test('bookmark editor fields come from local helpers and Enter is consumed insid
     try {
         {
             const seed = await context.newPage();
-            await seed.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: 'load' });
+            await gotoPage(seed, `chrome-extension://${extensionId}/options.html`);
             await settle(seed);
             bookmarkId = await seed.evaluate(async ({ title, url }) => {
                 localStorage['rh-group'] = 'no';
@@ -2263,11 +2336,11 @@ test('bookmark editor fields come from local helpers and Enter is consumed insid
     } finally {
         if (bookmarkId) {
             const cleanup = await context.newPage();
-            await cleanup.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: 'load' });
+            await gotoPage(cleanup, `chrome-extension://${extensionId}/options.html`);
             await cleanup.evaluate((id) => chrome.bookmarks.remove(id), bookmarkId);
             await cleanup.close();
             const restore = await context.newPage();
-            await restore.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: 'load' });
+            await gotoPage(restore, `chrome-extension://${extensionId}/options.html`);
             await restore.evaluate(async () => {
                 localStorage['rh-group'] = 'yes';
                 await window.storageAdapter?.ready();
@@ -2314,7 +2387,7 @@ function treeRows(page) {
 // list drops both rows. Returns the seeded rows' URLs, ids and a cleanup().
 // `withUnrelated` adds a third root so a filter that never ran is detectable.
 async function seedTreeVisits(page, tag, withUnrelated = false) {
-    await page.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: 'load' });
+    await gotoPage(page, `chrome-extension://${extensionId}/options.html`);
     await settle(page);
     const [parentId, childId, unrelatedId] = seedKeys(withUnrelated ? 3 : 2);
     const seeded = await page.evaluate(async ({ t, withUnrelated, parentId, childId, unrelatedId }) => {
@@ -2350,7 +2423,7 @@ async function seedTreeVisits(page, tag, withUnrelated = false) {
 // two page children. dbManager has no deleteClosedTab(), so cleanup uses a
 // readwrite transaction on the same store (see putClosedTab).
 async function seedClosedGroup(page, tag) {
-    await page.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: 'load' });
+    await gotoPage(page, `chrome-extension://${extensionId}/options.html`);
     await settle(page);
     const [aId, bId, groupOid] = seedKeys(3);
     const seeded = await page.evaluate(async ({ t, aId, bId, groupOid }) => {
@@ -2407,7 +2480,7 @@ test('clicking a tree row opens its URL, and the switch folds and unfolds the br
     const { jsErrors, netErrors } = collectErrors(page);
     let open;
     try {
-        await page.goto(`chrome-extension://${extensionId}/history2.html`, { waitUntil: 'load' });
+        await gotoPage(page, `chrome-extension://${extensionId}/history2.html`);
         await settle(page);
         open = await recordWindowOpen(page);
 
@@ -2471,7 +2544,7 @@ test('the tree is keyboard-navigable and announces its branch state', { skip: SK
     const { jsErrors, netErrors } = collectErrors(page);
     let open;
     try {
-        await page.goto(`chrome-extension://${extensionId}/history2.html`, { waitUntil: 'load' });
+        await gotoPage(page, `chrome-extension://${extensionId}/history2.html`);
         await settle(page);
         open = await recordWindowOpen(page);
 
@@ -2617,7 +2690,7 @@ test('the tree filter keeps the ancestor chain and highlights only the match', {
     const page = await context.newPage();
     const { jsErrors, netErrors } = collectErrors(page);
     try {
-        await page.goto(`chrome-extension://${extensionId}/history2.html`, { waitUntil: 'load' });
+        await gotoPage(page, `chrome-extension://${extensionId}/history2.html`);
         await settle(page);
 
         // Scope every assertion to this case's tag: the shared context holds
@@ -2686,7 +2759,7 @@ test('clicking a closed-tab group reopens every page under it', { skip: SKIP }, 
     const { jsErrors, netErrors } = collectErrors(page);
     let open;
     try {
-        await page.goto(`chrome-extension://${extensionId}/closed.html`, { waitUntil: 'load' });
+        await gotoPage(page, `chrome-extension://${extensionId}/closed.html`);
         await settle(page);
         open = await recordWindowOpen(page);
 
@@ -2877,7 +2950,7 @@ test('a toolbar click does not shift the layout or reset the scroll position', {
 test('the same holds on the linear bookmark page', { skip: SKIP }, async () => {
     // bookmark.html renders from chrome.bookmarks, so it needs its own seed.
     const seed = await context.newPage();
-    await seed.goto(`chrome-extension://${extensionId}/bookmark.html`, { waitUntil: 'load' });
+    await gotoPage(seed, `chrome-extension://${extensionId}/bookmark.html`);
     await settle(seed);
     await seed.evaluate(async () => {
         const tree = await chrome.bookmarks.getTree();
@@ -2934,7 +3007,7 @@ test('the loading state holds the height the list already had', { skip: SKIP }, 
             window.__held.push(() => cb(items));
         });
     });
-    await page.goto(`chrome-extension://${extensionId}/history.html`, { waitUntil: 'load' });
+    await gotoPage(page, `chrome-extension://${extensionId}/history.html`);
     await settle(page);
     const before = await page.evaluate(() => ({
         height: Math.round(document.getElementById('rh-views-insert').getBoundingClientRect().height),
@@ -3130,7 +3203,7 @@ test('an empty result keeps the height the loading state reserved', { skip: SKIP
                 window.__held.push((replaceWith) => cb(replaceWith ?? items));
             });
         });
-        await page.goto(`chrome-extension://${holdId}/history.html`, { waitUntil: 'load' });
+        await gotoPage(page, `chrome-extension://${holdId}/history.html`);
         await settle(page);
 
         const before = await page.evaluate(() => {
