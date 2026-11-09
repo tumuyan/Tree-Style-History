@@ -339,3 +339,38 @@ input[type="text"] {
       }
       
     }
+
+/* Cold-start feedback: popup-insert is empty until onStorageReady() runs.
+   The markup for this lives in popup.html (not in JS) so it is on screen before
+   the module graph and chrome.storage.local.get(null) have even started. */
+.popup-loading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 3px;
+    color: #5C6166;
+}
+
+.popup-loading-spinner {
+    -webkit-animation: popup-loading-spin 0.8s linear infinite;
+    animation: popup-loading-spin 0.8s linear infinite;
+    border: 2px solid #ddd;
+    border-top-color: rgb(17, 85, 204);
+    border-radius: 50%;
+    box-sizing: border-box;
+    flex: 0 0 auto;
+    height: 16px;
+    width: 16px;
+}
+
+@-webkit-keyframes popup-loading-spin { to { -webkit-transform: rotate(360deg); } }
+@keyframes popup-loading-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+    .popup-loading-spinner { -webkit-animation: none; animation: none; }
+}
+
+@media (prefers-color-scheme: dark) {
+    .popup-loading { color: #fafafa; }
+    .popup-loading-spinner { border-color: #888; border-top-color: burlywood; }
+}

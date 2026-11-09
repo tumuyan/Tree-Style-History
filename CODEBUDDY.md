@@ -265,7 +265,7 @@ MV3 取消了后台页面，因此代码分成两套互不相通的运行时：
 
 ### 5. favicon 子系统（跨三层，改动需通盘考虑）
 
-1. `modules/helpers.js` 的 `getFaviconUrl(url, opts)` 按 `localStorage['favicon-service']` 选择服务（chrome / google / duckduckgo / favicon_im / faviconkit / faviconsnap），`setupFaviconElement` 挂 error/load 监听做一次降级（Google 的 404 会返回 16×16 默认图，靠 `naturalWidth <= 16` 判定失败）。
+1. `modules/helpers.js` 的 `getFaviconUrl(url, opts)` 按 `localStorage['favicon-service']` 选择服务（chrome / google / duckduckgo / favicon_im / faviconkit / faviconsnap），`setupFaviconElement` 挂 error/load 监听做一次降级（Google 的 404 会返回 16×16 默认图，靠 `naturalWidth <= 16` 判定失败）。**远程 `src` 必须等文档的 `load` 事件之后再赋**（`beginLoad()`）：服务不可达而非返回错误时 `<img>` 请求会一直挂起，而在 `load` 之前挂起的请求会把文档卡在 `interactive`——Chrome 是在 `load` 上给 popup 气泡定尺寸、收打开动画的，于是行早就画好了（<100ms），气泡却要等满 `FAVICON_TIMEOUT_MS`（4s）才弹完，就是 issue #64 的「数秒」。`load` 之后再发请求，气泡与这次网络等待彻底脱钩；本地图标（`images/…`、`data:`、`chrome://favicon/`）和 `load` 之后才渲染的行走同步路径。`tests/static.test.mjs` 有守卫、`e2e/pages.spec.mjs` 有真实浏览器用例（把 `src` 改回立即赋值即变红：4252ms → 263ms），别把这层 defer 删回原样。
 2. **Service Worker 的 `fetch` 拦截**：命中 `FAVICON_SERVICE_PATTERNS` 的请求走 Cache API。除按完整 URL 缓存外，还会从服务 URL 里 `extractHostnameFromFaviconUrl` 抽主机名，用 `https://favicon-cache.internal/shared/<host>` 做**跨服务共享缓存**（受 `share-favicon-cache` 开关控制）。只有 `response.ok` 的响应才写入共享缓存，避免 opaque 响应污染降级链——**主路径与 `fetchFaviconFallback()` 两条写方必须用同一个判定**，opaque 只在 `response.ok` 为真时才进共享键（精确 URL 缓存不受限，两条路径都可写）。
 3. **负缓存**：请求失败（`!ok` 或 opaque）的 URL 写入 `localStorage['favicon-negative-cache']`，TTL 1 小时，期间直接跳过网络并尝试 `favicon-service-fallback` 备用服务。
 

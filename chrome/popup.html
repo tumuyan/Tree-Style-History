@@ -42,7 +42,18 @@
 
 
         </div>
-        <div id="popup-insert"></div>
+        <div id="popup-insert">
+            <!-- Painted by the HTML itself, before storage-adapter.js, the ES
+                 module graph or chrome.storage.local.get(null) have run. Every
+                 row is built inside onStorageReady(), so without this the popup
+                 is an empty box for the whole cold start — indistinguishable
+                 from a frozen extension. popup.js removes it once the cache is
+                 ready and the block titles take over. -->
+            <div id="popup-loading" class="popup-loading" role="status" aria-live="polite">
+                <span class="popup-loading-spinner" aria-hidden="true"></span>
+                <span class="lang" data-lang-string="loading"></span>
+            </div>
+        </div>
         <div id="popup-search-insert"></div>
 
 <!--         

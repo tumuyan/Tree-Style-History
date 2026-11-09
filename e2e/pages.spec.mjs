@@ -3258,3 +3258,170 @@ test('an empty result keeps the height the loading state reserved', { skip: SKIP
         await holdContext.close();
     }
 });
+
+// ---------------------------------------------------------------------------
+// issue #64: the popup must give feedback during its cold start
+// ---------------------------------------------------------------------------
+
+test('the popup shows a loading state while storage is slow, then renders', { skip: SKIP }, async () => {
+    // The popup's whole boot is gated on onStorageReady(): module graph, then
+    // chrome.storage.local.get(null), then the block titles. With a slow read
+    // #popup-insert used to be an empty box for seconds, which reads as a dead
+    // extension. The placeholder is in the HTML so it is on the first paint.
+    //
+    // addInitScript delays storage.local.get on THIS page only. A separate
+    // browser context would lose the extension; a page-level stub is the same
+    // technique the "saved zoom when storage answers late" case uses.
+    const DELAY_MS = 1500;
+    const page = await context.newPage();
+    const { jsErrors, netErrors } = collectErrors(page);
+    await page.addInitScript((delay) => {
+        const realGet = chrome.storage.local.get.bind(chrome.storage.local);
+        chrome.storage.local.get = (keys, cb) => realGet(keys, (items) => setTimeout(() => cb(items), delay));
+    }, DELAY_MS);
+
+    try {
+        await gotoPage(page, `chrome-extension://${extensionId}/popup.html`);
+
+        // domcontentloaded fires before the delayed get() answers. Do not call
+        // settle() here: it waits on storageAdapter.ready(), which is exactly
+        // the thing being held.
+        const during = await page.evaluate(() => {
+            const el = document.getElementById('popup-loading');
+            return el ? {
+                shown: true,
+                text: el.textContent.trim(),
+                live: el.getAttribute('aria-live'),
+                spinner: !!el.querySelector('.popup-loading-spinner'),
+                spinning: el.querySelector('.popup-loading-spinner')
+                    ? getComputedStyle(el.querySelector('.popup-loading-spinner')).animationName
+                    : '',
+            } : { shown: false };
+        });
+
+        // Release is automatic once the delayed callback lands. Wait on the
+        // effect (placeholder gone) rather than on a fixed sleep, then settle
+        // so the async row queries have their usual budget.
+        await page.waitForFunction(
+            () => !document.getElementById('popup-loading'),
+            null,
+            { timeout: DELAY_MS + SETTLE_MS + 2000 },
+        );
+        await settle(page);
+        const after = await page.evaluate(() => ({
+            loading: !!document.getElementById('popup-loading'),
+            titles: document.querySelectorAll('#popup-insert .popup-title').length,
+        }));
+
+        assert.deepEqual(jsErrors, [], `the popup threw (${netErrors.length} network error(s) ignored)`);
+        assert.ok(during.shown, 'no loading feedback was painted during the cold start');
+        assert.equal(during.live, 'polite', 'the loading state is not announced');
+        assert.ok(during.spinner, 'the spinner is missing');
+        assert.match(during.spinning, /spin/, 'the spinner is not animating');
+        assert.ok(during.text.length > 0, 'the loading state has no text');
+        assert.equal(after.loading, false, 'the placeholder was never removed after storage became ready');
+        assert.ok(after.titles > 0, 'the block titles were never rendered after the placeholder went away');
+    } finally {
+        await page.close();
+    }
+});
+
+// ---------------------------------------------------------------------------
+// issue #64: remote favicons must not delay the popup bubble
+// ---------------------------------------------------------------------------
+
+test('a hanging favicon service does not hold the popup load event', { skip: SKIP }, async () => {
+    // The default favicon-service is DuckDuckGo, and on networks that block or
+    // blackhole it an <img> request never fires `error` — it just stays open.
+    // A pending <img> assigned BEFORE the document's `load` event keeps the
+    // document `interactive`, and Chrome sizes the popup bubble and finishes
+    // its open animation on `load`. Measured on a blackholed host: the rows
+    // painted in <100ms but loadEventEnd was 4256ms — the "several seconds"
+    // from issue #64, invisible to the popup's own timing lines because they
+    // run INSIDE the document. setupFaviconElement() now defers remote `src`s
+    // past `load` (263ms in the same setup).
+    //
+    // A dedicated persistent context: the shared one aborts favicon requests
+    // at the context level, and here they must hang instead. Synchronous
+    // storage/history stubs put the rows (and their <img>s) in the DOM before
+    // `load`, which is the exact racing window; without them the async
+    // callbacks sometimes land after `load` and the test would pass by luck.
+    const faviconContext = await chromium.launchPersistentContext('', {
+        channel: 'chromium',
+        args: [
+            `--disable-extensions-except=${CHROME_DIR}`,
+            `--load-extension=${CHROME_DIR}`,
+        ],
+    });
+    // HANG, not abort: an unresolved route is what a blackholed host looks
+    // like to the page. Aborting would fire `error`, which is the fast path.
+    await faviconContext.route(
+        (url) => FAVICON_SERVICE_HOSTS.some((host) => url.href.includes(host)),
+        () => {},
+    );
+
+    try {
+        let [sw] = faviconContext.serviceWorkers();
+        if (!sw) sw = await faviconContext.waitForEvent('serviceworker');
+        const holdId = sw.url().split('/')[2];
+
+        const page = await faviconContext.newPage();
+        const { jsErrors, netErrors } = collectErrors(page);
+        await page.addInitScript(() => {
+            const cfg = {
+                'rh-list-order': 'rh-order',
+                'rh-itemsno': '8',
+                'rh-width': '275px',
+                'rh-search': 'no',
+                'favicon-service': 'duckduckgo',
+            };
+            // Resolve storage synchronously so onStorageReady() runs at DCL and
+            // every row is in the DOM before the document's load event.
+            const realGet = chrome.storage.local.get.bind(chrome.storage.local);
+            chrome.storage.local.get = (keys, cb) => {
+                if (typeof cb === 'function') { cb(cfg); return Promise.resolve(cfg); }
+                return realGet(keys);
+            };
+            const rows = [];
+            for (let i = 0; i < 8; i++) {
+                rows.push({
+                    id: 'hang-' + i,
+                    url: 'https://favicon-hang.example.com/' + i,
+                    title: 'Hang ' + i,
+                    lastVisitTime: Date.now(),
+                    visitCount: 1,
+                });
+            }
+            chrome.history.search = (_query, cb) => {
+                if (cb) cb(rows);
+                return Promise.resolve(rows);
+            };
+            window.__remoteSrcAtLoad = -1;
+            window.addEventListener('load', () => {
+                window.__remoteSrcAtLoad = Array.from(document.querySelectorAll('img.favicon'))
+                    .map((img) => img.getAttribute('src') || '')
+                    .filter((src) => /^https?:\/\//.test(src)).length;
+            });
+        });
+
+        await gotoPage(page, `chrome-extension://${holdId}/popup.html`);
+        // Deterministic: wait on the effect. A regression here means the load
+        // listener never fires within the favicon deadline (4s) + slack.
+        await page.waitForFunction(() => document.readyState === 'complete', null, { timeout: 9000 });
+
+        const result = await page.evaluate(() => ({
+            loadEventEnd: Math.round(performance.getEntriesByType('navigation')[0].loadEventEnd),
+            rows: document.querySelectorAll('#popup-insert .item').length,
+            remoteSrcAtLoad: window.__remoteSrcAtLoad,
+        }));
+
+        assert.deepEqual(jsErrors, [], `the popup threw (${netErrors.length} network error(s) ignored)`);
+        assert.ok(result.rows > 0, 'no rows rendered, so the hanging favicon case never ran');
+        assert.equal(result.remoteSrcAtLoad, 0,
+            'a remote favicon src was assigned before load, so it can pin the bubble');
+        assert.ok(result.loadEventEnd < 2000,
+            `the popup load event took ${result.loadEventEnd}ms — a hanging favicon is holding the bubble`);
+    } finally {
+        await faviconContext.close();
+    }
+});

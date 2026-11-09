@@ -22,6 +22,15 @@ document.addEventListener('DOMContentLoaded', function () {
         const storageReadyTime = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
         console.info('[Popup] Storage ready at', (storageReadyTime - _popupStartTime).toFixed(1) + 'ms');
 
+        // The placeholder lives in popup.html, so it is painted before the
+        // module graph and the full chrome.storage.local.get(null) resolve.
+        // Drop it as soon as the cache is ready: the synchronous block-title
+        // pass below immediately gives the user something to look at, and the
+        // async queries keep filling rows in afterwards. Until this callback
+        // runs, an empty #popup-insert looks exactly like a frozen extension.
+        const loading = $('popup-loading');
+        if (loading) loading.remove();
+
         // Updated/Installed
         //
         // The banner is shown now, but the flag is written at the end of this
@@ -237,8 +246,14 @@ document.addEventListener('DOMContentLoaded', function () {
         storageAdapter.setItem(versionKey, 'true');
     }
 
-    });
-
+    // Measured inside the storage callback, not at the end of the DOMContentLoaded
+    // handler: that handler only *registers* this callback and returns at once,
+    // so a timer placed there reported a few ms while the user was still staring
+    // at the loading placeholder. This value is the real "popup is usable" mark.
+    // The rows themselves arrive later, in each query's own callback; see
+    // popup-core.js's "Data ready" line for the tab-list half.
     const popupEndTime = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
     console.info('[Popup] Total popup load time:', (popupEndTime - _popupStartTime).toFixed(1) + 'ms');
+
+    });
 });

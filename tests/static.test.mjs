@@ -1072,14 +1072,15 @@ test('no module calls a function through window.* any more', () => {
     // in history-core.js was exactly that — it threw in the deleteRange
     // callback, where the only symptom was "the calendar does not refresh".
     //
-    // window.close()/open()/location/event/getComputedStyle are the real
+    // window.close()/open()/addEventListener()/location/event/... are the real
     // browser API. onStorageReady is installed by storage-adapter.js, a
     // classic script, which is the one way a global can legitimately appear
-    // here at all.
+    // here at all. `addEventListener` is how setupFaviconElement() defers a
+    // remote icon past the document's load event (see the favicon guard).
     const ALLOWED = new Set([
-        'close', 'open', 'location', 'event', 'getComputedStyle', 'scrollY', 'pageYOffset',
-        'getSelection', 'matchMedia', 'print', 'focus', 'blur', 'alert',
-        'onStorageReady',
+        'close', 'open', 'addEventListener', 'location', 'event', 'getComputedStyle',
+        'scrollY', 'pageYOffset', 'getSelection', 'matchMedia', 'print', 'focus',
+        'blur', 'alert', 'onStorageReady',
     ]);
 
     const offenders = [];
@@ -4121,4 +4122,148 @@ test('the e2e loading stub verifies a loading-to-rows round trip', () => {
         else cb(items);
     });`;
     assert.match(probe, /__releaseSearch/, 'the regression probe is invisible');
+});
+
+// ---------------------------------------------------------------------------
+// issue #64 follow-up: the popup must not look frozen during its cold start
+// ---------------------------------------------------------------------------
+
+/**
+ * Body of the first onStorageReady(function () { ... }) callback, braces
+ * balanced. A non-greedy regex stops at the first `});` inside a nested
+ * handler, which would truncate the body halfway down popup.js.
+ */
+function storageCallbackBody(src) {
+    const head = /onStorageReady\s*\(\s*function\s*\(\s*\)\s*\{/.exec(src);
+    if (!head) return null;
+    const open = src.indexOf('{', head.index);
+    let depth = 0;
+    for (let i = open; i < src.length; i++) {
+        if (src[i] === '{') depth++;
+        else if (src[i] === '}' && --depth === 0) return src.slice(open, i + 1);
+    }
+    return null;
+}
+
+/**
+ * The shared verdict for the guard below and its mutation probes. Kept as a
+ * pure function so a probe cannot pass by restating a different regex.
+ */
+function popupLoadingGuard({ html, popup, css }) {
+    const check = (condition, message) => { if (!condition) throw new Error(message); };
+    check(/id="popup-loading"/.test(html), 'no placeholder in HTML');
+    check(/class="lang"\s+data-lang-string="loading"/.test(html), 'no i18n label');
+    check(/id="popup-insert"[^>]*>[\s\S]*?id="popup-loading"/.test(html), 'not inside the list area');
+    check(/aria-live="polite"/.test(html), 'not a live status');
+    check(/popup-loading-spinner/.test(html), 'no spinner markup');
+    check(/\.popup-loading-spinner\s*\{/.test(css), 'no spinner CSS');
+    check(/@keyframes\s+popup-loading-spin/.test(css), 'no spin animation');
+    check(/prefers-reduced-motion:\s*reduce[\s\S]*?popup-loading-spinner/.test(css), 'no reduced-motion opt-out');
+    const body = storageCallbackBody(popup);
+    check(body, 'no storage callback');
+    check(/\$\('popup-loading'\)/.test(body), 'no removal in the callback');
+    check(!/popup-loading/.test(popup.replace(body, '')), 'referenced outside the callback');
+    check(/\[Popup\] Total popup load time/.test(body), 'timer outside the callback');
+    check(/\[Popup\] Storage ready at/.test(body), 'no storage-ready mark');
+    check(body.indexOf('Total popup load time') > body.indexOf('Storage ready at'),
+        'total logged before readiness');
+}
+
+test('the popup paints its loading state from HTML and drops it on storage ready', () => {
+    // The whole boot is gated on onStorageReady(): the module graph evaluates,
+    // then chrome.storage.local.get(null) answers, and only then does popup.js
+    // build the block titles. Before that, #popup-insert is an empty box — the
+    // user's "图标卡死" report. The feedback therefore cannot be created by
+    // popup.js itself; it has to be in the HTML so it is on the first paint.
+    const sources = {
+        html: stripComments(fs.readFileSync(path.join(CHROME_DIR, 'popup.html'), 'utf8')),
+        popup: stripJsComments(fs.readFileSync(path.join(CHROME_DIR, 'scripts/popup.js'), 'utf8')),
+        css: fs.readFileSync(path.join(CHROME_DIR, 'css/popup.css'), 'utf8'),
+    };
+    assert.doesNotThrow(() => popupLoadingGuard(sources));
+
+    // The timing line has to measure the wait, not the handler registration.
+    // It used to sit after onStorageReady(...) in the DOMContentLoaded handler,
+    // i.e. it fired a few ms in while the user was still looking at the box.
+    const body = storageCallbackBody(sources.popup);
+    assert.ok(body.indexOf('Total popup load time') > body.indexOf('Storage ready at'),
+        'the total is logged before storage was even ready');
+
+    // Mutation probes: each must turn the real guard red.
+    const probes = [
+        { what: 'placeholder moved out of the HTML',
+            sources: { html: sources.html.replace(/id="popup-loading"/, 'id="popup-loading-GONE"') } },
+        { what: 'removal dropped from the storage callback',
+            sources: { popup: sources.popup.replace(/\$\('popup-loading'\)/, "$('nonexistent')") } },
+        { what: 'load timer moved back outside the storage callback',
+            sources: { popup: sources.popup.replace(/\s*console\.info\('\[Popup\] Total popup load time:'[^\n]*\n/, '\n') } },
+        { what: 'spinner animation removed',
+            sources: { css: sources.css.replace(/@keyframes\s+popup-loading-spin[^}]*\}/, '') } },
+        { what: 'placeholder created from JS instead of HTML',
+            sources: { popup: sources.popup.replace("const loading = $('popup-loading');",
+                "const loading = createElement('div', { id: 'popup-loading' });") } },
+    ];
+    for (const probe of probes) {
+        const mutated = { ...sources, ...probe.sources };
+        assert.notDeepEqual(mutated, sources, `the ${probe.what} probe changes nothing`);
+        assert.throws(() => popupLoadingGuard(mutated),
+            `the ${probe.what} probe must turn the real guard red`);
+    }
+});
+
+// ---------------------------------------------------------------------------
+// issue #64 follow-up: remote favicons must not hold the popup's load event
+// ---------------------------------------------------------------------------
+
+/**
+ * Shape of the deferral, shared by the guard and its mutation probes.
+ *
+ * A favicon service that blackholes the connection (the default DuckDuckGo
+ * host is blocked on some networks) never fires `error`, so an <img> whose
+ * remote `src` is assigned before the document's `load` event keeps the
+ * document `interactive`. Chrome sizes the popup bubble and finishes its open
+ * animation on `load`, so the bubble sits for the full FAVICON_TIMEOUT_MS
+ * (4s) even though the rows rendered in <100ms — the "several seconds" in
+ * issue #64, which the popup's own timing lines cannot see because they run
+ * inside the document. Deferring remote `src`s behind `load` removes the
+ * request from that wait entirely (measured: loadEventEnd 4256ms -> 263ms).
+ */
+function faviconDeferGuard(helpersSrc) {
+    const check = (condition, message) => { if (!condition) throw new Error(message); };
+    const setup = /function setupFaviconElement[\s\S]*?\n\}/.exec(helpersSrc);
+    check(setup, 'setupFaviconElement is gone');
+    const body = setup[0];
+    check(/function beginLoad\(img, url\)/.test(body), 'no beginLoad() wrapper');
+    check(/window\.addEventListener\(\s*'load',\s*start,\s*\{\s*once:\s*true\s*\}\s*\)/.test(body),
+        'remote src is not deferred to the load event');
+    check(/faviconLoadPending\(\)/.test(body), 'no "load is still pending" guard');
+    check(/document\.readyState\s*!==\s*'complete'/.test(helpersSrc),
+        'the guard does not check the document is still loading');
+    // Both assignments must go through beginLoad, not a bare `img.src =`.
+    check(/beginLoad\(imgEl, primaryUrl\)/.test(body), 'primary src bypasses beginLoad()');
+    check(/beginLoad\(img, fallbackUrl\)/.test(body), 'fallback src bypasses beginLoad()');
+    check(!/img\.src\s*=\s*primaryUrl/.test(body), 'primary src assigned directly');
+    check(!/img\.src\s*=\s*fallbackUrl/.test(body), 'fallback src assigned directly');
+}
+
+test('remote favicon srcs are deferred past the popup load event', () => {
+    const src = stripJsComments(fs.readFileSync(path.join(CHROME_DIR, 'scripts/modules/helpers.js'), 'utf8'));
+    assert.doesNotThrow(() => faviconDeferGuard(src));
+
+    const probes = [
+        { what: 'primary src assigned immediately again',
+            src: src.replace('beginLoad(imgEl, primaryUrl);', 'arm(imgEl); imgEl.src = primaryUrl;') },
+        { what: 'fallback src assigned immediately again',
+            src: src.replace('beginLoad(img, fallbackUrl);', 'img.src = fallbackUrl; arm(img);') },
+        { what: 'load listener removed',
+            src: src.replace(/window\.addEventListener\(\s*'load',\s*start,\s*\{\s*once:\s*true\s*\}\s*\)/,
+                'start();') },
+        { what: 'readyState check dropped',
+            src: src.replace("document.readyState !== 'complete' &&", '') },
+    ];
+    for (const probe of probes) {
+        assert.notEqual(probe.src, src, `the ${probe.what} probe changes nothing`);
+        assert.throws(() => faviconDeferGuard(probe.src),
+            `the ${probe.what} probe must turn the real guard red`);
+    }
 });

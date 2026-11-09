@@ -401,6 +401,84 @@ const FAVICON_TIMEOUT = Number(
     )[1],
 );
 
+// A document whose `load` event has not fired yet is the cold-popup case: an
+// <img> whose request is blackholed keeps the document `interactive`, and the
+// browser sizes / finishes the popup bubble on `load`. A remote favicon src
+// assigned before then makes the whole bubble wait for the request. These two
+// cases pin the deferral itself (and the fact that local icons are not held).
+function withLoadingDocument(fn) {
+    const savedDoc = globalThis.document;
+    const savedWin = globalThis.window;
+    const listeners = {};
+    globalThis.document = { readyState: 'loading', addEventListener() {} };
+    globalThis.window = {
+        addEventListener: (type, cb) => { (listeners[type] ||= []).push(cb); },
+    };
+    try {
+        return fn(() => {
+            const cbs = listeners.load || [];
+            listeners.load = [];
+            for (const cb of cbs) cb();
+        });
+    } finally {
+        globalThis.document = savedDoc;
+        globalThis.window = savedWin;
+    }
+}
+
+test('a remote favicon waits for the document load event before starting', () => {
+    withLoadingDocument((fireLoad) => {
+        const img = countingImg();
+        helpers.setupFaviconElement(img, 'https://icons.example.com/x.ico', '');
+        assert.deepEqual(img.writes, [], 'the src must not be set while load is pending');
+        fireLoad();
+        assert.deepEqual(img.writes, ['https://icons.example.com/x.ico'],
+            'the remote icon starts as soon as load fires');
+    });
+});
+
+test('a bundled favicon is not held back by the document load event', () => {
+    withLoadingDocument(() => {
+        const img = countingImg();
+        helpers.setupFaviconElement(img, 'images/tree-38.png', '');
+        assert.deepEqual(img.writes, ['images/tree-38.png'],
+            'local icons have no pending request to pin the load event');
+    });
+});
+
+test('a deferred remote icon that blackholes stays observable through its timeout', (t) => {
+    // The whole chain in one cold-popup shape: remote src deferred past `load`,
+    // no fallback service configured, the host never answers, so the deadline
+    // gives up on it. The end state must still be an observable value — not an
+    // empty `src` — so a reader (and the e2e assertion) can tell the icon was
+    // abandoned rather than left hanging on a live request. See the arm()
+    // note: the clock starts at the `load` callback, i.e. when `src` is set.
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    try {
+        withLoadingDocument((fireLoad) => {
+            const img = countingImg();
+            helpers.setupFaviconElement(img, 'https://blackhole.example/x.ico', '');
+            assert.deepEqual(img.writes, [], 'no src while load is pending');
+
+            fireLoad();
+            assert.deepEqual(img.writes, ['https://blackhole.example/x.ico'],
+                'the request starts only at load, and the deadline starts with it');
+
+            t.mock.timers.tick(FAVICON_TIMEOUT + 1);
+            assert.deepEqual(img.writes, ['https://blackhole.example/x.ico', 'images/blank.png'],
+                'the abandoned remote icon ends on the blank icon, not an empty src');
+            assert.notEqual(img.src, '', 'the end state must stay observable');
+
+            // The blank icon is terminal: no deadline survives to write again.
+            img.writes.length = 0;
+            t.mock.timers.tick(FAVICON_TIMEOUT * 3);
+            assert.deepEqual(img.writes, [], 'nothing may fire after the blank icon');
+        });
+    } finally {
+        t.mock.timers.reset();
+    }
+});
+
 test('a favicon that never answers is given up on, so the page can finish loading', (t) => {
     // A favicon service that is blocked rather than broken — firewalled, or on
     // a network that blackholes the connection — never fires `error`: the

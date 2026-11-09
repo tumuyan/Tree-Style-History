@@ -323,17 +323,26 @@ Clipboard.copy = function (data) {
 // firewalled, or on a network that blackholes the connection — never fires
 // `error`: the request simply stays open. Chrome's own connect timeout is
 // minutes, so the image sits incomplete for as long as the popup is open.
-// That does not block rendering (the rows are visible in well under 100ms),
-// but it does hold the document's `load` event open, and Chrome sizes the
-// popup — and finishes its open animation — on that event. Measured on a
-// blocked host: `loadEventEnd` stayed 0 and `readyState` stayed
-// `interactive` while the popup was plainly usable on screen.
 //
-// So the image is cut loose on a timer: fall back, then blank, exactly as a
-// real error would. The in-flight request is abandoned rather than cancelled
-// — `img.src = ''` would release it, but it also fires another `error` and
-// Chrome keeps the connection until it times out anyway.
+// That is why remote favicon `src`s are assigned only *after* the document's
+// `load` event (see beginLoad() below): the popup bubble is sized and its open
+// animation finished on `load`, so a request started before it makes the whole
+// bubble wait even though the rows painted in well under 100ms. Deferring takes
+// the bubble off that request entirely. The deadline below is the second line
+// of defence — a real `error`/`load` never arrives for a blackholed host, so
+// once the bubble is open the icon is cut loose on a timer: fall back, then
+// blank, exactly as a real error would. The in-flight request is abandoned
+// rather than cancelled — `img.src = ''` would release it, but it also fires
+// another `error` and Chrome keeps the connection until it times out anyway.
 const FAVICON_TIMEOUT_MS = 4000;
+
+// True while a `load` event is still coming. Module tests have no load event,
+// and a row rendered after `load` has nothing left to hold open; both take the
+// synchronous path in beginLoad().
+function faviconLoadPending() {
+    return typeof document !== 'undefined' && document.readyState !== 'complete' &&
+        typeof window !== 'undefined' && typeof window.addEventListener === 'function';
+}
 
 // Setup favicon image element with error and load-based fallback detection
 // Some services (e.g. Google) return a default 16x16 icon with HTTP 404 status.
@@ -360,20 +369,52 @@ function setupFaviconElement(imgEl, primaryUrl, fallbackUrl) {
         // No `complete` check inside: a finished image has already cleared
         // this timer through `settle()`, so by the time it fires the image is
         // still pending by construction.
+        //
+        // Called from beginLoad()'s start() together with the `src` write, so
+        // the clock starts when the request actually starts — not when the
+        // row is built. For a deferred remote icon that is the document's
+        // `load` callback, which is exactly when its request leaves; the
+        // popup bubble is already open by then. There is deliberately no
+        // `arm()` before `src` is set: the old code did that to beat a cached
+        // image's early `load`, but a pending request must not be timed while
+        // it does not exist yet.
         _timer = setTimeout(function () {
             _timer = null;
             failed(img);
         }, FAVICON_TIMEOUT_MS);
     }
 
+    /**
+     * Start (or restart) a favicon load. A REMOTE service that blackholes the
+     * connection keeps the document's `load` event pending, and the popup
+     * bubble waits on that event to size / finish opening — the "several
+     * seconds to open" report. Assigning those `src`s after `load` puts the
+     * request behind the bubble, so it can hang for the full deadline without
+     * delaying anything the user is waiting for. Local resources (images/…,
+     * data:, chrome://favicon/) and any row created after `load` are assigned
+     * at once. start() arms the deadline and writes `src` back-to-back, so the
+     * clock begins at the real start of the request (see arm()).
+     */
+    function beginLoad(img, url) {
+        const start = function () {
+            arm(img);
+            img.src = url;
+        };
+        if (/^https?:\/\//.test(url) && faviconLoadPending()) {
+            window.addEventListener('load', start, { once: true });
+        } else {
+            start();
+        }
+    }
+
     function failed(img) {
         _retryCount++;
         // Only attempt fallback once; subsequent failures just show blank
         if (_retryCount === 1 && fallbackUrl) {
-            img.src = fallbackUrl;
             // The fallback is another remote request and can hang the same
-            // way, so it gets a deadline of its own.
-            arm(img);
+            // way, so it goes through the same deferral and gets its own
+            // deadline. A fallback reached after `load` needs no deferral.
+            beginLoad(img, fallbackUrl);
         } else {
             settle();
             img.src = 'images/blank.png';
@@ -401,11 +442,7 @@ function setupFaviconElement(imgEl, primaryUrl, fallbackUrl) {
     });
 
     if (primaryUrl) {
-        // Armed before `src` is set: a cached icon can fire `load` early
-        // enough that the timer would otherwise be started against an image
-        // that has already finished.
-        arm(imgEl);
-        imgEl.src = primaryUrl;
+        beginLoad(imgEl, primaryUrl);
     }
 }
 
